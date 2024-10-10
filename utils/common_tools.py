@@ -9,6 +9,7 @@ except ImportError:
     from urllib.request import urlretrieve
 
 __all__ = [
+    "mkdir_if_not_exist",
     "sort_dict",
     "get_same_padding",
     "get_split_list",
@@ -23,9 +24,18 @@ __all__ = [
     "write_log",
     "pairwise_accuracy",
     "accuracy",
+    "ProgressMeter",
     "AverageMeter",
     "MultiClassAverageMeter",
 ]
+
+
+def mkdir_if_not_exist(x):
+    if not x or os.path.isdir(x):
+        return
+    os.mkdir(x)
+    if not os.path.isdir(x):
+        raise RuntimeError("Failed to create dir %r" % x)
 
 
 def sort_dict(src_dict, reverse=False, return_dict=True):
@@ -173,6 +183,24 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+
+
+class ProgressMeter(object):
+
+    def __init__(self, num_batches, meters, prefix=""):
+        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
+        self.meters = meters
+        self.prefix = prefix
+
+    def display(self, batch):
+        entries = [self.prefix + self.batch_fmtstr.format(batch)]
+        entries += [str(meter) for meter in self.meters]
+        print('\t'.join(entries))
+
+    def _get_batch_fmtstr(self, num_batches):
+        num_digits = len(str(num_batches // 1))
+        fmt = '{:' + str(num_digits) + 'd}'
+        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
 class AverageMeter(object):

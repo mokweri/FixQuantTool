@@ -2,7 +2,11 @@ import math
 import copy
 import time
 import torch
+import os
+import shutil
+
 import torch.nn as nn
+from utils.common_tools import *
 
 __all__ = [
     "mix_images",
@@ -17,6 +21,7 @@ __all__ = [
     "measure_net_latency",
     "build_optimizer",
     "calc_learning_rate",
+    "save_checkpoint",
 ]
 
 """ Mixup """
@@ -154,12 +159,8 @@ def build_optimizer(net_params, opt_type, opt_param, init_lr, weight_decay, no_d
 
     if opt_type == "sgd":
         opt_param = {} if opt_param is None else opt_param
-        momentum, nesterov = opt_param.get("momentum", 0.9), opt_param.get(
-            "nesterov", True
-        )
-        optimizer = torch.optim.SGD(
-            net_params, init_lr, momentum=momentum, nesterov=nesterov
-        )
+        momentum, nesterov = opt_param.get("momentum", 0.9), opt_param.get("nesterov", True)
+        optimizer = torch.optim.SGD(net_params, init_lr, momentum=momentum, nesterov=nesterov)
     elif opt_type == "adam":
         optimizer = torch.optim.Adam(net_params, init_lr)
     else:
@@ -180,3 +181,16 @@ def calc_learning_rate(epoch, init_lr, n_epochs, batch=0, nBatch=None, lr_schedu
     else:
         raise ValueError("do not support: %s" % lr_schedule_type)
     return lr
+
+
+def save_checkpoint(state, is_best, directory):
+    mkdir_if_not_exist(directory)
+
+    filepath = os.path.join(directory, 'model.pth')
+    torch.save(state, filepath)
+    if is_best:
+        best_acc1 = state['best_acc1'].item()
+        best_filepath = os.path.join(directory, 'model_best_%5.3f.pth' % best_acc1)
+        shutil.copyfile(filepath, best_filepath)
+        print('Saving best ckpt to {}, acc1: {}'.format(best_filepath, best_acc1))
+    return best_filepath if is_best else filepath

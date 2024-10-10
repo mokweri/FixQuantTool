@@ -1,4 +1,3 @@
-from typing import Dict, Any, Tuple
 import torch.fx as fx
 import torch
 import torch.nn as nn
@@ -162,7 +161,6 @@ def create_quantizable_model1(model):
                 print('Replacing a Conv2d layer with QuantizedConv2d')
                 quantizer = FixedPointQuantizer(bitwidth=8)
                 newConv = QuantizedConv2d.from_float(target_module, quantizer)
-                # @TODO newConv.module_name()
                 replace_node_module(node, modules, newConv)
             elif isinstance(target_module, nn.Linear):
                 print('Replacing a linear layer with QLinear')

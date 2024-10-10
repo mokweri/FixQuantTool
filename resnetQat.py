@@ -1,8 +1,8 @@
 import argparse
 import os
-import shutil
 import time
 import json
+import math
 
 import torch
 import torch.nn as nn
@@ -12,88 +12,65 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 from model_transforms import create_quantizable_model, create_qconfig, standardize_qconfig
 
-from utils.pytorch_utils2 import build_optimizer
+from utils.pytorch_utils import build_optimizer, save_checkpoint
+from utils.common_tools import *
+
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import ClassificationRunConfig, RunManager
 
+# Parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument(
-    '--data_dir',
-    default=r"C:\Users\oma02\Downloads\ILSVRC\Data\CLS-LOC",
-    help='Data set directory.')
-parser.add_argument(
-    '--workers',
-    default=4,
-    type=int,
-    help='Number of data loading workers to be used.')
-parser.add_argument('--epochs', default=3, type=int, help='Training epochs.')
-parser.add_argument(
-    '--weight_lr',
-    default=1e-5,
-    type=float,
-    help='Initial learning rate of network weights.')
-parser.add_argument(
-    '--weight_lr_decay',
-    default=0.94,
-    type=int,
-    help='Learning rate decay ratio of network weights.')
-parser.add_argument(
-    '--train_batch_size', default=24, type=int, help='Batch size for training.')
-parser.add_argument(
-    '--val_batch_size',
-    default=100,
-    type=int,
-    help='Batch size for validation.')
-parser.add_argument(
-    '--weight_decay', default=1e-4, type=float, help='Weight decay.')
-parser.add_argument(
-    '--display_freq',
-    default=100,
-    type=int,
-    help='Display training metrics every n steps.')
-parser.add_argument(
-    '--val_freq', default=1000, type=int, help='Validate model every n steps.')
-parser.add_argument(
-    '--mode',
-    default='train',
-    choices=['train', 'deploy'],
-    help='Running mode.')
-parser.add_argument(
-    '--save_dir',
-    default='./qat_models',
-    help='Directory to save trained models.')
-parser.add_argument(
-    '--output_dir', default='qat_result', help='Directory to save qat result.')
-parser.add_argument(
-    '--gpus',
-    type=str,
-    default='0',
-    help='gpu ids to be used for training, seperated by commas')
+
+# Datasets
+parser.add_argument('-d', '--data_dir',
+                    default=r"C:\Users\oma02\Downloads\ILSVRC\Data\CLS-LOC", help='Data set directory.')
+parser.add_argument('-j', '--workers',
+                    default=4, type=int, help='Number of data loading workers to be used.')
+
+# Optimization options
+parser.add_argument('--epochs',
+                    default=100, type=int, help='No. of training epochs.')
+parser.add_argument('--start_epoch',
+                    default=0, type=int, metavar='N', help='manual epoch number (useful on restarts)')
+parser.add_argument('--warmup_epoch',
+                    default=0, type=int, metavar='N', help='manual warmup epoch number (useful on restarts)')
+parser.add_argument('--train_batch',
+                    default=32, type=int, metavar='N', help='train batchsize (default: 32)')
+parser.add_argument('--val_batch',
+                    default=32, type=int, metavar='N', help='validation batchsize (default: 32)')
+parser.add_argument('--lr', '--learning-rate',
+                    default=0.1, type=float, metavar='LR', help='initial learning rate')
+parser.add_argument('--lr_type',
+                    default='cos', type=str, help='lr scheduler (exp/cos/step3/fixed)')
+parser.add_argument('--schedule',
+                    type=int, nargs='+', default=[31, 61, 91], help='Decrease learning rate at these epochs.')
+parser.add_argument('--gamma',
+                    type=float, default=0.1, help='LR is multiplied by gamma on schedule.')
+parser.add_argument('--momentum',
+                    default=0.9, type=float, metavar='M', help='momentum')
+parser.add_argument('--weight_decay', '--wd', default=1e-4, type=float,
+                    metavar='W', help='weight decay (default: 1e-4)')
+# Quantization
+parser.add_argument('--mode',
+                    default='train', choices=['train', 'deploy'], help='Running mode.')
+# Miscs
+parser.add_argument('--display_freq',
+                    default=100, type=int, help='Display training metrics every n steps.')
+parser.add_argument('--val_freq',
+                    default=1000, type=int, help='Validate model every n steps.')
+parser.add_argument('--save_dir',
+                    default='./qat_models', help='Directory to save trained models.')
+parser.add_argument('--output_dir',
+                    default='qat_result', help='Directory to save qat result.')
+# Device options
+parser.add_argument('--gpus',
+                    type=str, default='0', help='gpu ids to be used for training, seperated by commas')
+
 args, _ = parser.parse_known_args()
 
-
-def train_one_step(model, inputs, criterion, optimizer, step, device):
-    # switch to train mode
-    model.train()
-
-    images, target = inputs
-    if not isinstance(model, nn.DataParallel):
-        model = model.to(device)
-    images = images.to(device, non_blocking=True)
-    target = target.to(device, non_blocking=True)
-
-    # compute output
-    output = model(images)
-    loss = criterion(output, target)
-
-    # measure accuracy and record loss
-    acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-    # compute gradient and do SGD step
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    return loss, acc1, acc5
+# Global variables for tracking the learning rate and accuracy
+lr_current = None
+best_acc = 0
 
 
 def validate(val_loader, model, criterion, device):
@@ -139,101 +116,71 @@ def validate(val_loader, model, criterion, device):
     return top1.avg
 
 
-def mkdir_if_not_exist(x):
-    if not x or os.path.isdir(x):
-        return
-    os.mkdir(x)
-    if not os.path.isdir(x):
-        raise RuntimeError("Failed to create dir %r" % x)
-
-
-def save_checkpoint(state, is_best, directory):
-    mkdir_if_not_exist(directory)
-
-    filepath = os.path.join(directory, 'model.pth')
-    torch.save(state, filepath)
-    if is_best:
-        best_acc1 = state['best_acc1'].item()
-        best_filepath = os.path.join(directory, 'model_best_%5.3f.pth' % best_acc1)
-        shutil.copyfile(filepath, best_filepath)
-        print('Saving best ckpt to {}, acc1: {}'.format(best_filepath, best_acc1))
-    return best_filepath if is_best else filepath
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-
-class ProgressMeter(object):
-
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
-
 def adjust_learning_rate(optimizer, epoch, step):
-    """Sets the learning rate to the initial LR decayed by decay ratios"""
-    weight_lr_decay_steps = 3000 * (24 / args.train_batch_size)
+
+    # Define the initial learning rate and set global variables for tracking
+    global lr_current, best_acc
+
+    initial_lr = args.lr if hasattr(args, 'lr') else 0.1  # Set default initial LR if not specified
+    gamma = args.gamma if hasattr(args, 'gamma') else 0.1  # Set default gamma if not specified
+    lr_type = args.lr_type if hasattr(args, 'lr_type') else 'cos'  # Default to cosine annealing if not specified
+
+    if epoch < args.warmup_epoch:
+        lr_current = initial_lr * (epoch + 1) / args.warmup_epoch
+    else:
+        if lr_type == 'cos':
+            lr_current = 0.5 * initial_lr * (1 + math.cos(math.pi * epoch / args.epochs))
+
+        elif lr_type == 'exp':
+            step = 1  # Change step size if needed
+            lr_current = initial_lr * (gamma ** (epoch // step))
+
+        elif lr_type == 'step':
+            # Step decay: LR is reduced by gamma at specific epoch intervals defined in args.schedule
+            lr_current = initial_lr
+            if epoch in args.schedule:
+                lr_current *= gamma
+
+        elif lr_type == 'linear':
+            lr_current = initial_lr * (1 - epoch / args.epochs)
+
+        else:
+            # Default: Use cosine annealing if no lr_type matches
+            lr_current = 0.5 * initial_lr * (1 + math.cos(math.pi * epoch / args.epochs))
 
     for param_group in optimizer.param_groups:
-        new_lr = args.weight_lr * (args.weight_lr_decay ** (step / weight_lr_decay_steps))
-        param_group['lr'] = new_lr
+        param_group['lr'] = lr_current
 
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
+def train_one_step(model, inputs, criterion, optimizer, step, device):
+    # switch to train mode
+    model.train()
 
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
+    images, target = inputs
+    if not isinstance(model, nn.DataParallel):
+        model = model.to(device)
+    images = images.to(device, non_blocking=True)
+    target = target.to(device, non_blocking=True)
 
-        res = []
-        for k in topk:
-            correct_k = correct[:k].flatten().float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
+    # compute output
+    output = model(images)
+    loss = criterion(output, target)
+
+    # measure accuracy and record loss
+    acc1, acc5 = accuracy(output, target, topk=(1, 5))
+
+    # compute gradient and do SGD step
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return loss, acc1, acc5
 
 
 def train(model, train_loader, val_loader, criterion, device_ids):
     best_acc1 = 0
     best_filepath = None
 
-    num_train_batches_per_epoch = int(len(train_loader) / args.train_batch_size)
+    num_train_batches_per_epoch = int(len(train_loader) / args.train_batch)
     if device_ids is not None and len(device_ids) > 0:
         device = f"cuda:{device_ids[0]}"
         model = model.to(device)
@@ -252,7 +199,7 @@ def train(model, train_loader, val_loader, criterion, device_ids):
         if param.requires_grad:
             net_params.append(param)
 
-    optimizer = build_optimizer(net_params, "adam", opt_param=None, init_lr=args.weight_lr,
+    optimizer = build_optimizer(net_params, "sgd", opt_param=None, init_lr=args.lr,
                                 weight_decay=args.weight_decay, no_decay_keys=None)
 
     for epoch in range(args.epochs):
@@ -363,7 +310,7 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss()
 
-    inputs = torch.randn([args.train_batch_size, 3, 224, 224], dtype=torch.float32, device=device)
+    inputs = torch.randn([args.batch_size, 3, 224, 224], dtype=torch.float32, device=device)
 
     if args.mode == 'train':
         # Step 1: Get quantized model and train it.
