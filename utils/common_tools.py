@@ -204,16 +204,12 @@ class ProgressMeter(object):
 
 
 class AverageMeter(object):
-    """
-    Computes and stores the average and current value
-    Copied from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    """
+    """Computes and stores the average and current value"""
 
-    def __init__(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
+    def __init__(self, name, fmt=':f'):
+        self.name = name
+        self.fmt = fmt
+        self.reset()
 
     def reset(self):
         self.val = 0
@@ -227,9 +223,12 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+    def __str__(self):
+        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        return fmtstr.format(**self.__dict__)
+
 
 class MultiClassAverageMeter:
-
     """Multi Binary Classification Tasks"""
 
     def __init__(self, num_classes, balanced=False, **kwargs):
@@ -267,8 +266,8 @@ class MultiClassAverageMeter:
             if self.balanced:
                 value = np.mean(
                     (
-                        self.counts[k]
-                        / np.maximum(np.sum(self.counts[k], axis=1), 1)[:, None]
+                            self.counts[k]
+                            / np.maximum(np.sum(self.counts[k], axis=1), 1)[:, None]
                     ).diagonal()
                 )
             else:

@@ -33,3 +33,4 @@ ENV/
 
 # idea folder
 .idea
+/models/saved_models/

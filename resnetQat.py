@@ -14,6 +14,7 @@ from model_transforms import create_quantizable_model, create_qconfig, standardi
 
 from utils.pytorch_utils import build_optimizer, save_checkpoint
 from utils.common_tools import *
+from utils.data_utils import getTrainData, getValData
 
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import ClassificationRunConfig, RunManager
@@ -25,7 +26,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--data_dir',
                     default=r"C:\Users\oma02\Downloads\ILSVRC\Data\CLS-LOC", help='Data set directory.')
 parser.add_argument('-j', '--workers',
-                    default=4, type=int, help='Number of data loading workers to be used.')
+                    default=8, type=int, help='Number of data loading workers to be used.')
 
 # Optimization options
 parser.add_argument('--epochs',
@@ -52,12 +53,12 @@ parser.add_argument('--weight_decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 # Quantization
 parser.add_argument('--mode',
-                    default='train', choices=['train', 'deploy'], help='Running mode.')
+                    default='QAT', choices=['train', 'QAT', 'deploy'], help='Running mode.')
 # Miscs
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
 parser.add_argument('--val_freq',
-                    default=1000, type=int, help='Validate model every n steps.')
+                    default=100000, type=int, help='Validate model every n steps.')  # for imagenet increase it
 parser.add_argument('--save_dir',
                     default='./qat_models', help='Directory to save trained models.')
 parser.add_argument('--output_dir',
@@ -176,7 +177,7 @@ def train_one_step(model, inputs, criterion, optimizer, step, device):
     return loss, acc1, acc5
 
 
-def train(model, train_loader, val_loader, criterion, device_ids):
+def train(model, train_loader, val_loader, optimizer, criterion, device_ids, start_epoch):
     best_acc1 = 0
     best_filepath = None
 
@@ -193,16 +194,7 @@ def train(model, train_loader, val_loader, criterion, device_ids):
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
 
-    # optimizer
-    net_params = []
-    for param in model.parameters():
-        if param.requires_grad:
-            net_params.append(param)
-
-    optimizer = build_optimizer(net_params, "sgd", opt_param=None, init_lr=args.lr,
-                                weight_decay=args.weight_decay, no_decay_keys=None)
-
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         progress = ProgressMeter(len(train_loader) * args.epochs, [batch_time, data_time, losses, top1, top5],
                                  prefix="Epoch[{}], Step: ".format(epoch))
 
@@ -230,18 +222,19 @@ def train(model, train_loader, val_loader, criterion, device_ids):
             if step % args.val_freq == 0:
                 # evaluate on validation set
                 acc1 = validate(val_loader, model, criterion, device)
-
-                # remember best acc@1 and save checkpoint
                 is_best = acc1 > best_acc1
-                best_acc1 = max(acc1, best_acc1)
+                if is_best:
+                    print('Saving..')
+                    best_acc1 = acc1
 
-                filepath = save_checkpoint(
-                    {
-                        'epoch': epoch + 1,
-                        'state_dict': model.state_dict() if not isinstance(model, nn.DataParallel) \
+                    filepath = save_checkpoint(
+                        {
+                            'epoch': epoch + 1,
+                            'state_dict': model.state_dict() if not isinstance(model, nn.DataParallel)
                             else model.module.state_dict(),
-                        'best_acc1': best_acc1
-                    }, is_best, args.save_dir)
+                            'best_acc1': best_acc1,
+                            'optimizer': optimizer.state_dict(),
+                        }, True, args.save_dir)
                 if is_best:
                     best_filepath = filepath
 
@@ -251,48 +244,14 @@ def train(model, train_loader, val_loader, criterion, device_ids):
 def main():
     print('Used arguments:', args)
 
-    traindir = os.path.join(args.data_dir, 'train')
-    valdir = os.path.join(args.data_dir, 'val')
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=args.train_batch_size,
-        shuffle=True,
-        num_workers=args.workers,
-        pin_memory=True)
-
-    val_dataset = datasets.ImageFolder(
-        valdir,
-        transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-
-    val_loader = torch.utils.data.DataLoader(
-        val_dataset,
-        batch_size=args.val_batch_size,
-        shuffle=False,
-        num_workers=args.workers,
-        pin_memory=True)
+    train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
+    val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
 
     model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     # qconfig = create_qconfig(model, run_config.valid_loader, bitwidth=8)
     # qconfig = standardize_qconfig(qconfig)
@@ -307,23 +266,28 @@ def main():
     # for key, value in qconfig.items():
     #     print(f"{key}: {value}")
 
+    quantized_model = create_quantizable_model(model, qconfig)
+
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().to(device)
 
-    inputs = torch.randn([args.batch_size, 3, 224, 224], dtype=torch.float32, device=device)
+    # optimizer
+    net_params = []
+    for param in model.parameters():
+        if param.requires_grad:
+            net_params.append(param)
+    optimizer = build_optimizer(net_params, "sgd", opt_param=None, init_lr=args.lr,
+                                weight_decay=args.weight_decay, no_decay_keys=None)
 
-    if args.mode == 'train':
-        # Step 1: Get quantized model and train it.
-        quantized_model = create_quantizable_model(model, qconfig)
-        criterion = criterion.to(device)
-        best_ckpt = train(quantized_model, train_loader, val_loader, criterion, device_ids)
+    # inputs = torch.randn([args.train_batch, 3, 224, 224], dtype=torch.float32, device=device)
 
+    if args.mode == 'QAT':
+        best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids)
         validate(val_loader, quantized_model, criterion, device)
-
     elif args.mode == 'deploy':
         pass
     else:
-        raise ValueError('mode must be one of ["train", "deploy"]')
+        raise ValueError('mode must be one of ["train", "QAT", "deploy"]')
 
 
 if __name__ == '__main__':
