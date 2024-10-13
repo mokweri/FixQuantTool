@@ -11,6 +11,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torchvision.models as models
 from model_transforms import create_quantizable_model, create_qconfig, standardize_qconfig
+from models.resnet_cifar import *
 
 from utils.pytorch_utils import build_optimizer, save_checkpoint
 from utils.common_tools import *
@@ -250,18 +251,24 @@ def main():
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
 
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    # qconfig = create_qconfig(model, run_config.valid_loader, bitwidth=8)
-    # qconfig = standardize_qconfig(qconfig)
+    model = resnet18_cifar10()
+    saved_filepath = './models/saved_models/resnet18_best_94.510.pth'
+    checkpoint = torch.load(saved_filepath)
+    model.load_state_dict(checkpoint['state_dict'])
+
+    qconfig = create_qconfig(model, val_loader, bitwidth=8)
+    qconfig = standardize_qconfig(qconfig)
+
     # # save the dict for ease of future use
     # with open('qconfig_vgg.json', 'w') as json_file:
     #     json.dump(qconfig, json_file)
 
     # load qconfig
-    with open('qconfig.json', 'r') as json_file:
-        qconfig = json.load(json_file)
+    # with open('qconfig.json', 'r') as json_file:
+    #     qconfig = json.load(json_file)
 
     # for key, value in qconfig.items():
     #     print(f"{key}: {value}")
@@ -282,7 +289,7 @@ def main():
     # inputs = torch.randn([args.train_batch, 3, 224, 224], dtype=torch.float32, device=device)
 
     if args.mode == 'QAT':
-        best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids)
+        #best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids)
         validate(val_loader, quantized_model, criterion, device)
     elif args.mode == 'deploy':
         pass
