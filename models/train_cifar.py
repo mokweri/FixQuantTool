@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from utils.data_utils import getTrainData, getValData
-import models.resnet as cifar_resnet
+import models.resnet_cifar as cifar_models
 from utils.common_tools import *
 from utils.pytorch_utils import save_checkpoint
 
@@ -175,7 +175,7 @@ if __name__ == '__main__':
     val_loader = getValData("cifar10", batch_size=args.train_batch, num_workers=8, path=data_dir)
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-    model = cifar_resnet.ResNet50()
+    model = cifar_models.resnet18_cifar10()
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)

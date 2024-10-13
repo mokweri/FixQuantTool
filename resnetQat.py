@@ -245,8 +245,12 @@ def train(model, train_loader, val_loader, optimizer, criterion, device_ids, sta
 def main():
     print('Used arguments:', args)
 
-    train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
-    val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
+    # train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
+    # val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
+
+    data_dir = "/home/obed/Documents/Obed/data"
+    train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
+    val_loader = getValData("cifar10", batch_size=args.train_batch, num_workers=8, path=data_dir)
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
@@ -255,7 +259,7 @@ def main():
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     model = resnet18_cifar10()
-    saved_filepath = './models/saved_models/resnet18_best_94.510.pth'
+    saved_filepath = './models/saved_models/resnet18_best_87.790.pth'
     checkpoint = torch.load(saved_filepath)
     model.load_state_dict(checkpoint['state_dict'])
 
