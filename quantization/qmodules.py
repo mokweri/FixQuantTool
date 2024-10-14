@@ -70,22 +70,22 @@ class _QuantizedConv(_QuantizedConvNd):
                 raise KeyError(f"Module '{self._mod_name}' not found in qconfig.")
 
             if "weight" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['weight'] = self.quantizer.frac_w
+                self.qconfig[self._mod_name]['weight'] = int(self.quantizer.frac_w)
             else:
                 raise KeyError(f"Key 'weight' not found in module '{self._mod_name}' configuration.")
 
             if "bias" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['bias'] = self.quantizer.frac_b
+                self.qconfig[self._mod_name]['bias'] = int(self.quantizer.frac_b)
             else:
                 raise KeyError(f"Key 'bias' not found in module '{self._mod_name}' configuration.")
 
             if "in" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in'] = self.quantizer.frac_in
+                self.qconfig[self._mod_name]['in'] = int(self.quantizer.frac_in)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 
             if "out" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['out'] = self.quantizer.frac_out
+                self.qconfig[self._mod_name]['out'] = int(self.quantizer.frac_out)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 
@@ -199,22 +199,22 @@ class QuantizedLinear(nn.Linear):
                 raise KeyError(f"Module '{self._mod_name}' not found in qconfig.")
 
             if "weight" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['weight'] = self.quantizer.frac_w
+                self.qconfig[self._mod_name]['weight'] = int(self.quantizer.frac_w)
             else:
                 raise KeyError(f"Key 'weight' not found in module '{self._mod_name}' configuration.")
 
             if "bias" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['bias'] = self.quantizer.frac_b
+                self.qconfig[self._mod_name]['bias'] = int(self.quantizer.frac_b)
             else:
                 raise KeyError(f"Key 'bias' not found in module '{self._mod_name}' configuration.")
 
             if "in" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in'] = self.quantizer.frac_in
+                self.qconfig[self._mod_name]['in'] = int(self.quantizer.frac_in)
             else:
                 raise KeyError(f"Key 'in' not found in module '{self._mod_name}' configuration.")
 
             if "out" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['out'] = self.quantizer.frac_out
+                self.qconfig[self._mod_name]['out'] = int(self.quantizer.frac_out)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 
@@ -292,12 +292,12 @@ class QMaxPool2D(torch.nn.MaxPool2d):
                 raise KeyError(f"Module '{self._mod_name}' not found in qconfig.")
 
             if "in" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in'] = self.quantizer.frac_in
+                self.qconfig[self._mod_name]['in'] = int(self.quantizer.frac_in)
             else:
                 raise KeyError(f"Key 'in' not found in module '{self._mod_name}' configuration.")
 
             if "out" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['out'] = self.quantizer.frac_out
+                self.qconfig[self._mod_name]['out'] = int(self.quantizer.frac_out)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 
@@ -490,12 +490,12 @@ class QElementwiseAdd(nn.Module):
                 raise KeyError(f"Module '{self._mod_name}' not found in qconfig.")
 
             if "in1" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in1'] = in1
+                self.qconfig[self._mod_name]['in1'] = int(in1)
             else:
                 raise KeyError(f"Key 'in1' not found in module '{self._mod_name}' configuration.")
 
             if "in2" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in2'] = in2
+                self.qconfig[self._mod_name]['in2'] = int(in2)
             else:
                 raise KeyError(f"Key 'in1' not found in module '{self._mod_name}' configuration.")
 

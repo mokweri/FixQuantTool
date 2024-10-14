@@ -296,22 +296,22 @@ class _ConvBnNd(nn.modules.conv._ConvNd, _FusedModule):
                 raise KeyError(f"Module '{self.mod_name}' not found in qconfig.")
 
             if "weight" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['weight'] = self.quantizer.frac_w
+                self.qconfig[self._mod_name]['weight'] = int(self.quantizer.frac_w)
             else:
                 raise KeyError(f"Key 'weight' not found in module '{self._mod_name}' configuration.")
 
             if "bias" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['bias'] = self.quantizer.frac_b
+                self.qconfig[self._mod_name]['bias'] = int(self.quantizer.frac_b)
             else:
                 raise KeyError(f"Key 'bias' not found in module '{self._mod_name}' configuration.")
 
             if "in" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['in'] = self.quantizer.frac_in
+                self.qconfig[self._mod_name]['in'] = int(self.quantizer.frac_in)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 
             if "out" in self.qconfig[self._mod_name]:
-                self.qconfig[self._mod_name]['out'] = self.quantizer.frac_out
+                self.qconfig[self._mod_name]['out'] = int(self.quantizer.frac_out)
             else:
                 raise KeyError(f"Key 'out' not found in module '{self._mod_name}' configuration.")
 

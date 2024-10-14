@@ -258,7 +258,7 @@ def main():
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    model = resnet18_cifar10()
+    model = resnet50_cifar10()
     saved_filepath = './models/saved_models/resnet18_best_87.790.pth'
     checkpoint = torch.load(saved_filepath)
     model.load_state_dict(checkpoint['state_dict'])
@@ -284,7 +284,7 @@ def main():
 
     # optimizer
     net_params = []
-    for param in model.parameters():
+    for param in quantized_model.parameters():
         if param.requires_grad:
             net_params.append(param)
     optimizer = build_optimizer(net_params, "sgd", opt_param=None, init_lr=args.lr,
@@ -302,5 +302,5 @@ def main():
 
 
 if __name__ == '__main__':
-    # with torch.autograd.set_detect_anomaly(True):
-    main()
+    with torch.autograd.set_detect_anomaly(True):
+        main()
