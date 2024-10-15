@@ -126,6 +126,11 @@ class _QuantizedConv(_QuantizedConvNd):
         conv.bias = mod.bias
         return conv
 
+    def quantize_module(self):
+        self.weight = nn.Parameter(self.quantizer.quantize(self.weight, self.qconfig[self._mod_name]['weight']))
+        if self.bias is not None:
+            self.bias = nn.Parameter(self.quantizer.quantize(self.bias, self.qconfig[self._mod_name]['bias']))
+
 
 class QuantizedConv2d(_QuantizedConv):
     """A Conv2d module attached with FakeQuantizer modules for weight and bias, used for quantization aware training.
@@ -264,6 +269,12 @@ class QuantizedLinear(nn.Linear):
         linear.weight = mod.weight
         linear.bias = mod.bias
         return linear
+
+    def quantize_module(self):
+
+        self.weight = nn.Parameter(self.quantizer.quantize(self.weight, self.qconfig[self._mod_name]['weight']))
+        if self.bias is not None:
+            self.bias = nn.Parameter(self.quantizer.quantize(self.bias, self.qconfig[self._mod_name]['bias']))
 
 
 class QMaxPool2D(torch.nn.MaxPool2d):

@@ -248,7 +248,8 @@ def main():
     # train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
     # val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
 
-    data_dir = "/home/obed/Documents/Obed/data"
+    # data_dir = "/home/obed/Documents/Obed/data"
+    data_dir = r"C:\Users\oma02\OneDrive - Mälardalens universitet\Documents\Obed Workspaces\Python Projects\data"
     train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
     val_loader = getValData("cifar10", batch_size=args.train_batch, num_workers=8, path=data_dir)
 
@@ -258,13 +259,13 @@ def main():
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    model = resnet50_cifar10()
+    model = resnet18_cifar10()
     saved_filepath = './models/saved_models/resnet18_best_87.790.pth'
-    checkpoint = torch.load(saved_filepath)
+    checkpoint = torch.load(saved_filepath, weights_only=True)
     model.load_state_dict(checkpoint['state_dict'])
 
+    # Step 1: Initialize QConfig with Post Training Quantization (PTQ)
     qconfig = create_qconfig(model, val_loader, bitwidth=8)
-    qconfig = standardize_qconfig(qconfig)
 
     # # save the dict for ease of future use
     # with open('qconfig_vgg.json', 'w') as json_file:
@@ -277,24 +278,27 @@ def main():
     # for key, value in qconfig.items():
     #     print(f"{key}: {value}")
 
-    quantized_model = create_quantizable_model(model, qconfig)
-
-    # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().to(device)
-
-    # optimizer
-    net_params = []
-    for param in quantized_model.parameters():
-        if param.requires_grad:
-            net_params.append(param)
-    optimizer = build_optimizer(net_params, "sgd", opt_param=None, init_lr=args.lr,
-                                weight_decay=args.weight_decay, no_decay_keys=None)
-
     # inputs = torch.randn([args.train_batch, 3, 224, 224], dtype=torch.float32, device=device)
 
     if args.mode == 'QAT':
-        #best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids)
+        # Step 2: Get fused and quantized model
+        quantized_model = create_quantizable_model(model, qconfig)
+
+        criterion = nn.CrossEntropyLoss().to(device)
+        optimizer = build_optimizer(quantized_model, "sgd", opt_param=None, init_lr=args.lr,
+                                    weight_decay=args.weight_decay, no_decay_keys=None)
+
+        # Step 3: Train and Test
+        best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids, start_epoch=0)
+
+        quantized_model.load_state_dict(torch.load(best_ckpt, weights_only=True)['state_dict'])
         validate(val_loader, quantized_model, criterion, device)
+
+        # Save model and QConfig
+        with open('qconfig_resnet18_qat.json', 'w') as json_file:
+            json.dump(qconfig, json_file)
+
+        torch.save(quantized_model.state_dict(), 'testqmodel.pth')
     elif args.mode == 'deploy':
         pass
     else:

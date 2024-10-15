@@ -147,7 +147,12 @@ def measure_net_latency(net, l_type="gpu8", fast=True, input_shape=(3, 32, 32), 
 """ optimizer """
 
 
-def build_optimizer(net_params, opt_type, opt_param, init_lr, weight_decay, no_decay_keys):
+def build_optimizer(model, opt_type, opt_param, init_lr, weight_decay, no_decay_keys):
+    net_params = []
+    for param in model.parameters():
+        if param.requires_grad:
+            net_params.append(param)
+
     if no_decay_keys is not None:
         assert isinstance(net_params, list) and len(net_params) == 2
         net_params = [

@@ -105,9 +105,9 @@ class FakeQuantize(torch.autograd.Function):
 
 
 class FixedPointQuantizer:
-    def __init__(self, bitwidth, frac_w=None, frac_b=None, frac_out=None, inplace=False):
+    def __init__(self, bitwidth, frac_w=0, frac_b=0, frac_out=0, inplace=False):
         self.bitwidth = bitwidth
-        self.frac_in = None
+        self.frac_in = 0
         self.frac_w = frac_w
         self.frac_b = frac_b
         self.frac_out = frac_out
