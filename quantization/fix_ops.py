@@ -23,6 +23,53 @@ def fake_quantize_per_tensor(x, scale_inv, zero_point, quant_min, quant_max, met
         return output
 
 
+def fake_quantize_tensor(x, signed=True, n_bits=8, n_frac =0):
+    if signed:
+        max_v = (1 << (n_bits - 1)) - 1
+        min_v = -max_v - 1
+    else:
+        min_v = 0
+        max_v = (1 << n_bits) - 1
+
+    output = x.clone()
+
+    scale = 2.0 ** n_frac
+    input_scaled = round_tensor(x * scale, 'HALF_UP')
+    output.copy_(torch.clamp(input_scaled, min_v, max_v) / scale)
+    return output
+
+
+def to_int_tensor(tensor, signed=True, n_bits=8, n_frac=0):
+    """
+    Converts a floating-point tensor to a quantized integer tensor.
+    Args:
+        tensor (torch.Tensor): Input floating-point tensor.
+        signed (bool): If the tensor values are signed (True) or unsigned (False).
+        n_bits (int): Number of bits for the quantized representation.
+        n_frac (int): Fractional length for binary point scaling.
+
+    Returns:
+        torch.Tensor: Quantized integer tensor.
+    """
+    if signed:
+        max_v = (1 << (n_bits - 1)) - 1
+        min_v = -max_v - 1
+    else:
+        min_v = 0
+        max_v = (1 << n_bits) - 1
+
+    # Compute the scale factor for binary point scaling
+    scale = 2.0 ** n_frac
+
+    int_tensor  = tensor.clone()
+
+    int_tensor = round_tensor(tensor*scale, 'HALF_UP')
+    int_tensor = torch.clamp(int_tensor, min_v, max_v)
+
+    int_tensor = int_tensor.to(torch.int32)  # You can change to int8 if needed
+    return int_tensor
+
+
 def find_fix_pos(input, bit_width, scope, method):
     """ An equivalent of the fi() object in matlab"""
     # check if input tensor is all zeros
@@ -120,6 +167,10 @@ class FixedPointQuantizer:
         self.frac_in = find_fix_pos(x, self.bitwidth, 1, 2)
         return self.frac_in
 
+    def calc_frac_out(self, x):
+        self.frac_out = find_fix_pos(x, self.bitwidth, 1, 2)
+        return self.frac_out
+
     @property
     def get_frac_in(self):
         return self.frac_in
@@ -184,11 +235,17 @@ def QuantStubF(x):
 
 
 if __name__ == '__main__':
-    quantizer = FixedPointQuantizer(bitwidth=8)
-    w_quantizer = quantizer.get_weight_quantizer('weight')
-    qw = w_quantizer(torch.tensor([0.4847, 0.4672]))
-    print(type(quantizer.get_frac_b))
-    print(quantizer.get_frac_w)
+    # quantizer = FixedPointQuantizer(bitwidth=8)
+    # w_quantizer = quantizer.get_weight_quantizer('weight')
+    # qw = w_quantizer(torch.tensor([0.4847, 0.4672]))
+    # print(type(quantizer.get_frac_b))
+    # print(quantizer.get_frac_w)
+    #
+    # print(qw)
+    # print(QuantStubF(torch.tensor([0.4847, 0.4672])))
 
-    print(qw)
-    print(QuantStubF(torch.tensor([0.4847, 0.4672])))
+    float_tensor = torch.tensor([[0.5, -0.75, 1.25], [0.1, 0.3, -0.2]], dtype=torch.float32)
+    int_tensor = to_int_tensor(float_tensor, signed=True, n_bits=8, n_frac=3)
+
+    print("Original Float Tensor:\n", float_tensor)
+    print("Quantized Integer Tensor:\n", int_tensor)

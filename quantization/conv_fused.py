@@ -115,10 +115,17 @@ class _ConvBnNd(nn.modules.conv._ConvNd, _FusedModule):
         self._mod_name = value
 
     def _forward(self, input):
-        self.quantizer.calc_frac_in(input)
         if self._enable_slow_path_for_better_numerical_stability:
-            return self._forward_slow(input)
-        return self._forward_approximate(input)
+            output = self._forward_slow(input)
+        output = self._forward_approximate(input)
+
+        if self.training:
+            out_quantizer = self.quantizer.get_weight_quantizer('out')
+            q_out = out_quantizer(output)
+            self.update_qconfig()
+        else:
+            q_out = self.quantizer.quantize(output, self.qconfig[self._mod_name]['out'])
+        return q_out
 
     def _forward_approximate(self, input):
         """Approximated method to fuse conv and bn. It requires only one forward pass.
