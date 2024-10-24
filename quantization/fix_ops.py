@@ -63,11 +63,18 @@ def to_int_tensor(tensor, signed=True, n_bits=8, n_frac=0):
 
     int_tensor  = tensor.clone()
 
-    int_tensor = round_tensor(tensor*scale, 'HALF_UP')
+    int_tensor = round_tensor(int_tensor*scale, 'HALF_UP')
     int_tensor = torch.clamp(int_tensor, min_v, max_v)
-
     int_tensor = int_tensor.to(torch.int32)  # You can change to int8 if needed
+
     return int_tensor
+
+
+def to_float_tensor(tensor, n_frac=0):
+    scale = 2.0 ** (-n_frac)
+    float_tensor = tensor.clone()
+    float_tensor = float_tensor*scale
+    return float_tensor
 
 
 def find_fix_pos(input, bit_width, scope, method):
@@ -103,7 +110,7 @@ def find_fix_pos(input, bit_width, scope, method):
                 final_scale = scale
                 fixed_diff_min = diff
 
-    return final_scale
+    return int(final_scale.item())
 
 
 def round_tensor(x, mode='HALF_TO_EVEN'):
@@ -227,11 +234,26 @@ class FixedPointQuantizer:
         qout = self._fake_quantize(x, scale)
         return qout
 
+    def quantize_toInt(self, x, frac):
+        return to_int_tensor(x, signed=True, n_bits=self.bitwidth, n_frac=frac)
+
 
 def QuantStubF(x):
     quantizer = FixedPointQuantizer(bitwidth=8)
     input_quantizer = quantizer.get_weight_quantizer('out')
     return input_quantizer(x)
+
+
+def QuantStubI(x, frac):
+    def _wrapper(_x, _frac):
+        return to_int_tensor(_x, signed=True, n_bits=8, n_frac=_frac)
+    return _wrapper(x, frac)
+
+
+def QuantStubE(x, frac):
+    def _wrapper(_x, _frac):
+        return to_float_tensor(_x, n_frac=_frac)
+    return _wrapper(x, frac)
 
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ from torch.nn.modules.utils import _pair
 import torch.nn.functional as F
 from torch.nn.utils import fuse_conv_bn_weights
 from quantization.fix_ops import FixedPointQuantizer
+from quantization.qmodules import QuantizedConv2d
 
 
 # Adopted from https://github.com/Xilinx/Vitis-AI/blob/master/src/vai_optimizer/pytorch_binding/pytorch_nndct/nn
@@ -434,6 +435,37 @@ class _ConvBnNd(nn.modules.conv._ConvNd, _FusedModule):
                 self.bn.bias,
             )
         conv.train(self.training)
+        return conv
+
+    def to_fusedQConv2d(self):
+        conv = QuantizedConv2d(
+            self.in_channels,
+            self.out_channels,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+            self.bias is not None,
+            self.padding_mode,
+            self.qconfig
+        )
+        conv.weight = torch.nn.Parameter(self.weight.detach())
+        if self.bias is not None:
+            conv.bias = torch.nn.Parameter(self.bias.detach())
+
+        # fuse bn into conv
+        assert self.bn.running_var is not None and self.bn.running_mean is not None
+        conv.weight, conv.bias = fuse_conv_bn_weights(
+            conv.weight,
+            conv.bias,
+            self.bn.running_mean,
+            self.bn.running_var,
+            self.bn.eps,
+            self.bn.weight,
+            self.bn.bias,
+        )
+        conv.module_name = self._mod_name
         return conv
 
 

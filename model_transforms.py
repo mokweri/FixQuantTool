@@ -8,7 +8,8 @@ from torch.nn.utils.fusion import fuse_conv_bn_weights
 from quantization.qmodules import QuantizedLinear, QuantizedConv2d, QMaxPool2D, QAdaptiveAvgPool2d, QElementwiseAdd
 from quantization.conv_fused import QuantizedConvBatchNorm2d
 from quantization.qmodules import QuantizedConv2d
-from quantization.fix_ops import FixedPointQuantizer, QuantStubF
+from quantization.fix_ops import FixedPointQuantizer, QuantStubF, QuantStubI, QuantStubE
+from quantization.emu_modules import *
 
 
 def create_quantizable_model(model, qconfig):
@@ -23,6 +24,10 @@ def create_quantizable_model(model, qconfig):
         (torch.nn.Conv2d, torch.nn.BatchNorm2d),
         (torch.nn.Conv3d, torch.nn.BatchNorm3d)
     }
+
+    print('=' * 50)
+    print('> Preparing Quantized Model...'.center(50))
+    print('=' * 50)
 
     # Fuse conv with BN according to matching pattern
     for pattern in modules_patterns:
@@ -107,6 +112,116 @@ def create_quantizable_model(model, qconfig):
     return fx_model
 
 
+def create_deployable_model(model, qconfig):
+    # Check if model is already a GraphModule
+    if isinstance(model, fx.GraphModule):
+        fx_model = copy.deepcopy(model)
+    else:
+        model = copy.deepcopy(model)
+        fx_model = fx.symbolic_trace(model)
+
+    print('=' * 50)
+    print('> Preparing Emulation Model...'.center(50))
+    print('=' * 50)
+
+    # Step 1: Fuse the weights of the QuantizedConvBatchNorm2d module
+    modules = dict(fx_model.named_modules())
+    for node in fx_model.graph.nodes:
+        if node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, nn.Conv2d):
+                if type(target_module).__name__ == 'QuantizedConvBatchNorm2d':
+                    # fuse the weights
+                    fusedConv = target_module.to_fusedQConv2d()
+                    fusedConv.quantize_module()
+                    replace_node_module(node, modules, fusedConv)
+    fx_model.graph.lint()
+    fx_model.recompile()
+
+    # Step 2: Switch modules to the emulation modules
+    modules = dict(fx_model.named_modules())
+    for node in fx_model.graph.nodes:
+        if node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, QuantizedConv2d):
+                print(f'{node.name}: Replacing QuantizedConv2d with FxP_QConv2D')
+                emuConv = FxP_QConv2D.from_float(target_module)
+                emuConv.module_name = str(node.name).strip()
+                emuConv.quantize_module()
+                replace_node_module(node, modules, emuConv)
+
+            if isinstance(target_module, nn.Linear):
+                print(f'{node.name}: Replacing QuantizedLinear with FxP_QLinear')
+                emuConv = FxP_QLinear.from_float(target_module)
+                emuConv.module_name = str(node.name).strip()
+                emuConv.quantize_module()
+                replace_node_module(node, modules, emuConv)
+
+            if isinstance(target_module, nn.MaxPool2d):
+                print(f'{node.name}: Replacing QMaxPool2D with FxP_QMaxPool2D')
+                emuMax = FxP_QMaxPool2D.from_float(target_module)
+                emuMax.module_name = str(node.name).strip()
+                replace_node_module(node, modules, emuMax)
+
+            if isinstance(target_module, nn.AdaptiveAvgPool2d):
+                print(f'{node.name}: Replacing QAdaptiveAvgPool2d with FxP_QAdaptiveAvgPool2d')
+                emuAdptAvgP = FxP_QAdaptiveAvgPool2d.from_float(target_module)
+                emuAdptAvgP.module_name = str(node.name).strip()
+                replace_node_module(node, modules, emuAdptAvgP)
+        #
+        #     if isinstance(target_module, nn.AvgPool2d):
+        #         emuAvgP = FxP_QAvgPool2d.from_float(target_module)
+        #         emuAvgP.module_name = str(node.name).strip()
+        #         replace_node_module(node, modules, emuAvgP)
+        #
+        elif node.op == "call_function":
+            if hasattr(node.target, '__self__') and isinstance(node.target.__self__, QElementwiseAdd):
+                print(f'{node.name}: Replacing QElementwiseAdd with FxP_QElementwiseAdd')
+                with fx_model.graph.inserting_after(node):
+                    QAdd = FxP_QElementwiseAdd(qconfig)
+                    QAdd.module_name = str(node.name).strip()
+                    QAdd_node = fx_model.graph.call_function(QAdd.forward, args=(node.args[0], node.args[1]))
+                    QAdd_node.name = str(node.name).strip()
+                    node.replace_all_uses_with(QAdd_node)
+                fx_model.graph.erase_node(node)
+            elif node.target == QuantStubF:
+                with fx_model.graph.inserting_after(node):
+                    print(f'{node.name}: Replacing QuantStubF with QuantStubI')
+                    quant_stub_i = fx_model.graph.call_function(QuantStubI, args=(node.args[0], qconfig['x']['out']))
+                    node.replace_all_uses_with(quant_stub_i)
+                    fx_model.graph.erase_node(node)
+        fx_model.graph.lint()
+    fx_model.recompile()
+    add_stub_at_end(fx_model, QuantStubE, qconfig)
+
+    return fx_model
+
+
+def add_stub_at_end(fx_model: fx.GraphModule, stub_fn, qconfig):
+    last_node = None
+    output_node = None
+
+    for node in fx_model.graph.nodes:
+        if node.op == 'output':
+            output_node = node
+        else:
+            last_node = node
+
+    # Insert the new stub function after the last operation node (before output)
+    if last_node is not None:
+        with fx_model.graph.inserting_after(last_node):
+            quant_stub_node = fx_model.graph.call_function(stub_fn, args=(last_node, qconfig['output']['out']))
+            quant_stub_node.name = 'qfloat_output'
+
+        # Replace the input to the output node with the new quant_stub_node
+        if output_node is not None:
+            output_node.replace_input_with(output_node.args[0], quant_stub_node)
+
+    # Recompile the graph after modification
+    fx_model.graph.lint()
+    fx_model.recompile()
+
+
 def fuse_conv_bn(m: torch.nn.Module):
     model = copy.deepcopy(m)
     gm: fx.GraphModule = fx.symbolic_trace(model)
@@ -171,7 +286,7 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
             quantizer = FixedPointQuantizer(bitwidth)
             images, classes = next(iter(valid_loader))
             q_image = quantizer.get_weight_quantizer('out')(images)
-            qconfig[node.name][node.next.name] = int(quantizer.get_frac_out.item())
+            qconfig[node.name][node.next.name] = int(quantizer.get_frac_out)
             quantizer = None
             for user in node.users:
                 node_input[node.name][user.name] = q_image
@@ -182,10 +297,10 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
                     print("QConfig::{} is a conv - Conv2d or Linear".format(str(node.name)))
                     quantizer = FixedPointQuantizer(bitwidth)
                     q_weight = quantizer.get_weight_quantizer('weight')(modules[node.target].weight.data)
-                    qconfig[node.name]["weight"] = int(quantizer.get_frac_w.item())
+                    qconfig[node.name]["weight"] = int(quantizer.get_frac_w)
                     if modules[node.target].bias !=None:
                         q_bias = quantizer.get_weight_quantizer('bias')(modules[node.target].bias.data)
-                        qconfig[node.name]["bias"] = int(quantizer.get_frac_b.item())
+                        qconfig[node.name]["bias"] = int(quantizer.get_frac_b)
                     else:
                         q_bias = None
                         qconfig[node.name]["bias"] = int(8)
@@ -200,7 +315,7 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
                     for ar in node.args:
                         qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
                     for no in node.users:
-                        qconfig[node.name][no.name] = int(quantizer.get_frac_out.item())
+                        qconfig[node.name][no.name] = int(quantizer.get_frac_out)
                     quantizer = None
                     # prepare input for next layer
                     for user in node.users:
@@ -214,7 +329,7 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
                     for ar in node.args:
                         qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
                     for no in node.users:
-                        qconfig[node.name][no.name] = int(quantizer.get_frac_out.item())
+                        qconfig[node.name][no.name] = int(quantizer.get_frac_out)
                     quantizer = None
                     # prepare input for next layer
                     for user in node.users:
@@ -228,7 +343,7 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
                 act_i = modules[node.target](node_input[node.args[0].name][node.name])
                 q_act = quantizer.get_weight_quantizer('out')(act_i)
                 for no in node.users:
-                    qconfig[node.name][no.name] = int(quantizer.get_frac_out.item())
+                    qconfig[node.name][no.name] = int(quantizer.get_frac_out)
                 quantizer = None
                 # prepare input for next layer
                 for user in node.users:
@@ -252,7 +367,7 @@ def create_qconfig(model, valid_loader=None, bitwidth=8):
                 if "flatten" in node.name:
                     qconfig[node.name][no.name] = qconfig[node.prev.name][node.name]
                 else:
-                    qconfig[node.name][no.name] = int(quantizer.get_frac_out.item())
+                    qconfig[node.name][no.name] = int(quantizer.get_frac_out)
             quantizer = None
             # prepare input for next layer
             for user in node.users:

@@ -271,7 +271,6 @@ class QuantizedLinear(nn.Linear):
         return linear
 
     def quantize_module(self):
-
         self.weight = nn.Parameter(self.quantizer.quantize(self.weight, self.qconfig[self._mod_name]['weight']))
         if self.bias is not None:
             self.bias = nn.Parameter(self.quantizer.quantize(self.bias, self.qconfig[self._mod_name]['bias']))

@@ -10,7 +10,7 @@ import torch.optim
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torchvision.models as models
-from model_transforms import create_quantizable_model, create_qconfig, standardize_qconfig
+from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
 from models.resnet_cifar import *
 
 from utils.pytorch_utils import build_optimizer, save_checkpoint
@@ -119,7 +119,6 @@ def validate(val_loader, model, criterion, device):
 
 
 def adjust_learning_rate(optimizer, epoch, step):
-
     # Define the initial learning rate and set global variables for tracking
     global lr_current, best_acc
 
@@ -259,8 +258,8 @@ def main():
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    model = resnet18_cifar10()
-    saved_filepath = './models/saved_models/resnet18_best_87.790.pth'
+    model = resnet50_cifar10()
+    saved_filepath = './models/saved_models/resnet50_best_86.450.pth'
     checkpoint = torch.load(saved_filepath, weights_only=True)
     model.load_state_dict(checkpoint['state_dict'])
 
@@ -284,21 +283,27 @@ def main():
         # Step 2: Get fused and quantized model
         quantized_model = create_quantizable_model(model, qconfig)
 
+        emu_model = create_deployable_model(quantized_model, qconfig)
+
+        # print(quantized_model)
+        print(emu_model)
+        #torch.save(emu_model.state_dict(), 'emu1model.pth')
+
         criterion = nn.CrossEntropyLoss().to(device)
-        optimizer = build_optimizer(quantized_model, "sgd", opt_param=None, init_lr=args.lr,
-                                    weight_decay=args.weight_decay, no_decay_keys=None)
+        # optimizer = build_optimizer(quantized_model, "sgd", opt_param=None, init_lr=args.lr,
+        #                             weight_decay=args.weight_decay, no_decay_keys=None)
 
         # Step 3: Train and Test
-        best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids, start_epoch=0)
+        # best_ckpt = train(quantized_model, train_loader, val_loader, optimizer, criterion, device_ids, start_epoch=0)
 
-        quantized_model.load_state_dict(torch.load(best_ckpt, weights_only=True)['state_dict'])
-        validate(val_loader, quantized_model, criterion, device)
+        # quantized_model.load_state_dict(torch.load(best_ckpt, weights_only=True)['state_dict'])
+        validate(val_loader, emu_model, criterion, device)
 
         # Save model and QConfig
-        with open('qconfig_resnet18_qat.json', 'w') as json_file:
-            json.dump(qconfig, json_file)
-
-        torch.save(quantized_model.state_dict(), 'testqmodel.pth')
+        # with open('qconfig_resnet18_qat.json', 'w') as json_file:
+        #     json.dump(qconfig, json_file)
+        #
+        #torch.save(fused_model.state_dict(), 'testfusedmodel.pth')
     elif args.mode == 'deploy':
         pass
     else:
