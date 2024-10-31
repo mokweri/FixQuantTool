@@ -1,14 +1,11 @@
 import argparse
 import os
-import time
 import json
 import math
+from tqdm import tqdm
 
-import torch
 import torch.nn as nn
 import torch.optim
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
 import torchvision.models as models
 from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
 from models.resnet_cifar import *
@@ -37,9 +34,9 @@ parser.add_argument('--start_epoch',
 parser.add_argument('--warmup_epoch',
                     default=0, type=int, metavar='N', help='manual warmup epoch number (useful on restarts)')
 parser.add_argument('--train_batch',
-                    default=32, type=int, metavar='N', help='train batchsize (default: 32)')
+                    default=12, type=int, metavar='N', help='train batchsize (default: 32)')
 parser.add_argument('--val_batch',
-                    default=32, type=int, metavar='N', help='validation batchsize (default: 32)')
+                    default=12, type=int, metavar='N', help='validation batchsize (default: 32)')
 parser.add_argument('--lr', '--learning-rate',
                     default=0.1, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_type',
@@ -76,44 +73,38 @@ best_acc = 0
 
 
 def validate(val_loader, model, criterion, device):
-    batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(
-        len(val_loader), [batch_time, losses, top1, top5], prefix='Test: ')
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
 
     # switch to evaluate mode
     model.eval()
     if not isinstance(model, nn.DataParallel):
         model = model.to(device)
 
-    with torch.no_grad():
-        end = time.time()
-        for i, (images, target) in enumerate(val_loader):
-            images = images.to(device, non_blocking=True)
-            target = target.to(device, non_blocking=True)
+    with tqdm(total=len(val_loader), desc='Validation: ') as t:
+        with torch.no_grad():
+            for i, (images, target) in enumerate(val_loader):
+                images = images.to(device, non_blocking=True)
+                target = target.to(device, non_blocking=True)
 
-            # compute output
-            output = model(images)
-            loss = criterion(output, target)
+                # compute output
+                output = model(images)
+                loss = criterion(output, target)
 
-            # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
+                # measure accuracy and record loss
+                acc1, acc5 = accuracy(output, target, topk=(1, 5))
+                losses.update(loss.item(), images.size(0))
+                top1.update(acc1[0], images.size(0))
+                top5.update(acc5[0], images.size(0))
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+                t.set_postfix({
+                    'loss': float(losses.avg) if isinstance(losses.avg, torch.Tensor) else losses.avg,
+                    'Acc@1': float(top1.avg) if isinstance(top1.avg, torch.Tensor) else top1.avg,
+                    'Acc@5': float(top5.avg) if isinstance(top5.avg, torch.Tensor) else top5.avg
+                })
 
-            if i % 50 == 0:
-                progress.display(i)
-
-        # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'.format(
-            top1=top1, top5=top5))
+                t.update(1)
 
     return top1.avg
 
@@ -188,56 +179,47 @@ def train(model, train_loader, val_loader, optimizer, criterion, device_ids, sta
         if len(device_ids) > 1:
             model = nn.DataParallel(model, device_ids=device_ids)
 
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
-        progress = ProgressMeter(len(train_loader) * args.epochs, [batch_time, data_time, losses, top1, top5],
-                                 prefix="Epoch[{}], Step: ".format(epoch))
+        with tqdm(total=len(val_loader), desc='Train Epoch  #{}'.format(epoch + 1)) as t:
+            for i, (images, target) in enumerate(train_loader):
 
-        for i, (images, target) in enumerate(train_loader):
-            end = time.time()
-            # measure data loading time
-            data_time.update(time.time() - end)
+                step = len(train_loader) * epoch + i
 
-            step = len(train_loader) * epoch + i
+                adjust_learning_rate(optimizer, epoch, step)
+                loss, acc1, acc5 = train_one_step(model, (images, target), criterion, optimizer, step, device)
 
-            adjust_learning_rate(optimizer, epoch, step)
-            loss, acc1, acc5 = train_one_step(model, (images, target), criterion, optimizer, step, device)
+                losses.update(loss.item(), images.size(0))
+                top1.update(acc1[0], images.size(0))
+                top5.update(acc5[0], images.size(0))
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+                t.set_postfix({
+                    'loss': float(losses.avg) if isinstance(losses.avg, torch.Tensor) else losses.avg,
+                    'Acc@1': float(top1.avg) if isinstance(top1.avg, torch.Tensor) else top1.avg,
+                    'Acc@5': float(top5.avg) if isinstance(top5.avg, torch.Tensor) else top5.avg
+                })
+                t.update(1)
 
-            losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
-
-            if step % args.display_freq == 0:
-                progress.display(step)
-
-            if step % args.val_freq == 0:
-                # evaluate on validation set
-                acc1 = validate(val_loader, model, criterion, device)
-                is_best = acc1 > best_acc1
-                if is_best:
-                    print('Saving..')
-                    best_acc1 = acc1
-
-                    filepath = save_checkpoint(
-                        {
-                            'epoch': epoch + 1,
-                            'state_dict': model.state_dict() if not isinstance(model, nn.DataParallel)
-                            else model.module.state_dict(),
-                            'best_acc1': best_acc1,
-                            'optimizer': optimizer.state_dict(),
-                        }, True, args.save_dir)
-                if is_best:
-                    best_filepath = filepath
-
+                if step % args.val_freq == 0:
+                    # evaluate on validation set
+                    acc1 = validate(val_loader, model, criterion, device)
+                    is_best = acc1 > best_acc1
+                    if is_best:
+                        print('Saving..')
+                        best_acc1 = acc1
+                        filepath = save_checkpoint(
+                            {
+                                'epoch': epoch + 1,
+                                'state_dict': model.state_dict() if not isinstance(model, nn.DataParallel)
+                                else model.module.state_dict(),
+                                'best_acc1': best_acc1,
+                                'optimizer': optimizer.state_dict(),
+                            }, True, args.save_dir)
+                    if is_best:
+                        best_filepath = filepath
     return best_filepath
 
 
@@ -247,27 +229,28 @@ def main():
     # train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
     # val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
 
-    # data_dir = "/home/obed/Documents/Obed/data"
-    data_dir = r"C:\Users\oma02\OneDrive - Mälardalens universitet\Documents\Obed Workspaces\Python Projects\data"
-    train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
-    val_loader = getValData("cifar10", batch_size=args.train_batch, num_workers=8, path=data_dir)
+    data_dir = "/home/obed/Documents/cifar_data"
+    data_dir = "/home/obed/Documents/imagenet"
+
+    #train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
+    val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=data_dir)
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
 
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    model = resnet50_cifar10()
-    saved_filepath = './models/saved_models/resnet50_best_86.450.pth'
-    checkpoint = torch.load(saved_filepath, weights_only=True)
-    model.load_state_dict(checkpoint['state_dict'])
+    # model = resnet50_cifar10()
+    # # saved_filepath = './models/saved_models/resnet50_best_86.450.pth'
+    # # checkpoint = torch.load(saved_filepath, weights_only=True)
+    # # model.load_state_dict(checkpoint['state_dict'])
 
     # Step 1: Initialize QConfig with Post Training Quantization (PTQ)
     qconfig = create_qconfig(model, val_loader, bitwidth=8)
 
-    # # save the dict for ease of future use
-    # with open('qconfig_vgg.json', 'w') as json_file:
+    # save the dict for ease of future use
+    # with open('qconfig_resnet18-imagenet-init.json', 'w') as json_file:
     #     json.dump(qconfig, json_file)
 
     # load qconfig
@@ -286,7 +269,7 @@ def main():
         emu_model = create_deployable_model(quantized_model, qconfig)
 
         # print(quantized_model)
-        print(emu_model)
+        # print(emu_model)
         #torch.save(emu_model.state_dict(), 'emu1model.pth')
 
         criterion = nn.CrossEntropyLoss().to(device)

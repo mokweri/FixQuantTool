@@ -1,31 +1,34 @@
+# Once for All: Train One Network and Specialize it for Efficient Deployment
+# Han Cai, Chuang Gan, Tianzhe Wang, Zhekai Zhang, Song Han
+# International Conference on Learning Representations (ICLR), 2020.
+
 from utils import calc_learning_rate, build_optimizer
 from data_providers import ImagenetDataProvider
 from data_providers import Cifar10DataProvider
 from data_providers import Cifar100DataProvider
 import torch
-
 __all__ = ["RunConfig", "ClassificationRunConfig", "DistributedClassificationRunConfig"]
 
 
 class RunConfig:
     def __init__(
-            self,
-            n_epochs,
-            init_lr,
-            lr_schedule_type,
-            lr_schedule_param,
-            dataset,
-            train_batch_size,
-            test_batch_size,
-            valid_size,
-            opt_type,
-            opt_param,
-            weight_decay,
-            label_smoothing,
-            no_decay_keys,
-            model_init,
-            validation_frequency,
-            print_frequency,
+        self,
+        n_epochs,
+        init_lr,
+        lr_schedule_type,
+        lr_schedule_param,
+        dataset,
+        train_batch_size,
+        test_batch_size,
+        valid_size,
+        opt_type,
+        opt_param,
+        weight_decay,
+        label_smoothing,
+        no_decay_keys,
+        model_init,
+        validation_frequency,
+        print_frequency,
     ):
         self.n_epochs = n_epochs
         self.init_lr = init_lr
@@ -43,10 +46,11 @@ class RunConfig:
         self.label_smoothing = label_smoothing
         self.no_decay_keys = no_decay_keys
 
+
         self.model_init = model_init
         self.validation_frequency = validation_frequency
         self.print_frequency = print_frequency
-
+       
     @property
     def config(self):
         config = {}
@@ -70,7 +74,7 @@ class RunConfig:
         return new_lr
 
     def warmup_adjust_learning_rate(
-            self, optimizer, T_total, nBatch, epoch, batch=0, warmup_lr=0
+        self, optimizer, T_total, nBatch, epoch, batch=0, warmup_lr=0
     ):
         T_cur = epoch * nBatch + batch + 1
         new_lr = T_cur / T_total * (self.init_lr - warmup_lr) + warmup_lr
@@ -97,7 +101,7 @@ class RunConfig:
         return self.data_provider.test
 
     def random_sub_train_loader(
-            self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
+        self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
     ):
         return self.data_provider.build_sub_train_loader(
             n_images, batch_size, num_worker, num_replicas, rank
@@ -116,28 +120,29 @@ class RunConfig:
         )
 
 
+
 class ClassificationRunConfig(RunConfig):
     def __init__(
-            self,
-            n_epochs=150,
-            init_lr=0.05,
-            lr_schedule_type="cosine",
-            lr_schedule_param=None,
-            dataset="imagenet",  # 'cifar10' or 'cifar100'
-            train_batch_size=32,
-            test_batch_size=16,
-            valid_size=None,
-            opt_type="sgd",
-            opt_param=None,
-            weight_decay=4e-5,
-            label_smoothing=0.1,
-            no_decay_keys=None,
-            model_init="he_fout",
-            validation_frequency=1,
-            print_frequency=10,
-            n_worker=32,
-            image_size=224,  # 32
-            **kwargs
+        self,
+        n_epochs=150,
+        init_lr=0.05,
+        lr_schedule_type="cosine",
+        lr_schedule_param=None,
+        dataset="imagenet", # 'cifar10' or 'cifar100'
+        train_batch_size=32,
+        test_batch_size=16,
+        valid_size=None,
+        opt_type="sgd",
+        opt_param=None,
+        weight_decay=4e-5,
+        label_smoothing=0.1,
+        no_decay_keys=None,
+        model_init="he_fout",
+        validation_frequency=1,
+        print_frequency=10,
+        n_worker=32,
+        image_size=224, # 32
+        **kwargs
     ):
         super(ClassificationRunConfig, self).__init__(
             n_epochs,
@@ -160,16 +165,15 @@ class ClassificationRunConfig(RunConfig):
 
         self.n_worker = n_worker
         self.image_size = image_size
-
     @property
     def data_provider(self):
         if self.__dict__.get("_data_provider", None) is None:
             if self.dataset == ImagenetDataProvider.name():
                 DataProviderClass = ImagenetDataProvider
-            elif self.dataset == Cifar10DataProvider.name():
+            elif self.dataset == Cifar10DataProvider.name():   
                 DataProviderClass = Cifar10DataProvider
-            elif self.dataset == Cifar100DataProvider.name():
-                DataProviderClass = Cifar100DataProvider
+            elif self.dataset == Cifar100DataProvider.name():   
+                DataProviderClass = Cifar100DataProvider        
             else:
                 raise NotImplementedError
             self.__dict__["_data_provider"] = DataProviderClass(
@@ -181,29 +185,28 @@ class ClassificationRunConfig(RunConfig):
             )
         return self.__dict__["_data_provider"]
 
-
 class DistributedClassificationRunConfig(ClassificationRunConfig):
     def __init__(
-            self,
-            n_epochs=150,
-            init_lr=0.05,
-            lr_schedule_type="cosine",
-            lr_schedule_param=None,
-            dataset="imagenet",
-            train_batch_size=64,
-            test_batch_size=64,
-            valid_size=None,
-            opt_type="sgd",
-            opt_param=None,
-            weight_decay=4e-5,
-            label_smoothing=0.1,
-            no_decay_keys=None,
-            model_init="he_fout",
-            validation_frequency=1,
-            print_frequency=10,
-            n_worker=8,
-            image_size=224,
-            **kwargs
+        self,
+        n_epochs=150,
+        init_lr=0.05,
+        lr_schedule_type="cosine",
+        lr_schedule_param=None,
+        dataset="imagenet",
+        train_batch_size=64,
+        test_batch_size=64,
+        valid_size=None,
+        opt_type="sgd",
+        opt_param=None,
+        weight_decay=4e-5,
+        label_smoothing=0.1,
+        no_decay_keys=None,
+        model_init="he_fout",
+        validation_frequency=1,
+        print_frequency=10,
+        n_worker=8,
+        image_size=224,
+        **kwargs
     ):
         super(DistributedClassificationRunConfig, self).__init__(
             n_epochs,
@@ -236,9 +239,9 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
             if self.dataset == ImagenetDataProvider.name():
                 DataProviderClass = ImagenetDataProvider
             elif self.dataset == Cifar10DataProvider.name():
-                DataProviderClass = Cifar10DataProvider
+                DataProviderClass = Cifar10DataProvider  
             elif self.dataset == Cifar100DataProvider.name():
-                DataProviderClass = Cifar100DataProvider
+                DataProviderClass = Cifar100DataProvider        
             else:
                 raise NotImplementedError
             if self.dataset == "imagenet":
@@ -259,7 +262,8 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
                     n_worker=self.n_worker,
                     image_size=self.image_size,
                     num_replicas=self._num_replicas,
-                    rank=self._rank,
-                )
+                    rank=self._rank,   
+                ) 
         return self.__dict__["_data_provider"]
 
+        

@@ -5,31 +5,30 @@ import numpy as np
 import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from data_providers.base_provider import DataProvider
-from data_providers.my_dataloader import MyRandomResizedCrop, MyDistributedSampler
+from .base_provider import DataProvider
+from utils.my_dataloader import MyRandomResizedCrop, MyDistributedSampler
 
 __all__ = ["Cifar100DataProvider"]
 
-
 class Cifar100DataProvider(DataProvider):
     DEFAULT_PATH = "./dataset/cifar100"
-
     def __init__(
-            self,
-            save_path=None,
-            train_batch_size=256,
-            test_batch_size=512,
-            valid_size=None,
-            n_worker=32,
-            image_size=32,
-            num_replicas=None,
-            rank=None,
+        self,
+        save_path=None,
+        train_batch_size=256,
+        test_batch_size=512,
+        valid_size=None,
+        n_worker=32,
+        image_size=32,
+        num_replicas=None,
+        rank=None,
     ):
 
         warnings.filterwarnings("ignore")
         self._save_path = save_path
 
         self.image_size = image_size  # int or list of int
+    
 
         self._valid_transform_dict = {}
         valid_transforms = self.build_valid_transform()
@@ -146,11 +145,10 @@ class Cifar100DataProvider(DataProvider):
         raise ValueError("unable to download %s" % self.name())
 
     def train_dataset(self, _transforms):
-        return datasets.CIFAR100(self.train_path, train=True, transform=_transforms, download=True)
-
+        return datasets.CIFAR100(self.train_path, train=True, transform=_transforms,download=True)
+    
     def test_dataset(self, _transforms):
-        return datasets.CIFAR100(self.valid_path, train=False, transform=_transforms, download=True)
-
+        return datasets.CIFAR100(self.valid_path, train=False, transform=_transforms,download=True)
     @property
     def train_path(self):
         return os.path.join(self.save_path, "train")
@@ -161,32 +159,33 @@ class Cifar100DataProvider(DataProvider):
 
     @property
     def normalize(self):
-        return transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
+        return  transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
 
-    def build_train_transform(self, ):
-        # random_resize_crop -> random_horizontal_flip
+    def build_train_transform(self,):
+		# random_resize_crop -> random_horizontal_flip
         train_transforms = [
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            # AutoAugment(),
-        ]
-
+			transforms.RandomCrop(32,padding=4),
+			transforms.RandomHorizontalFlip(),
+			# AutoAugment(),
+		]
+		
         train_transforms += [
-            transforms.ToTensor(),
-            # self.normalize,
-        ]
+			transforms.ToTensor(),
+			# self.normalize,
+		]
 
         train_transforms = transforms.Compose(train_transforms)
         return train_transforms
 
     def build_valid_transform(self):
         return transforms.Compose([
-            transforms.ToTensor(),
-            self.normalize,
-        ])
+			transforms.ToTensor(),
+			self.normalize,
+		])
+
 
     def build_sub_train_loader(
-            self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
+        self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
     ):
         # used for resetting BN running statistics
         if self.__dict__.get("sub_train_%d" % self.image_size, None) is None:

@@ -1,58 +1,33 @@
 import os
+import random
 import time
 import json
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
-import math
 from tqdm import tqdm
 
 from utils import (
+    get_net_info,
+    cross_entropy_loss_with_soft_target,
+    cross_entropy_with_label_smoothing,
+)
+from utils import (
     AverageMeter,
     accuracy,
-    write_log
+    write_log,
+    init_models,
 )
 
 __all__ = ["RunManager"]
 
 
-def init_models(net, model_init="he_fout"):
-    """
-    Conv2d,
-    BatchNorm2d, BatchNorm1d, GroupNorm
-    Linear,
-    """
-    if isinstance(net, list):
-        for sub_net in net:
-            init_models(sub_net, model_init)
-        return
-    for m in net.modules():
-        if isinstance(m, nn.Conv2d):
-            if model_init == "he_fout":
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2.0 / n))
-            elif model_init == "he_fin":
-                n = m.kernel_size[0] * m.kernel_size[1] * m.in_channels
-                m.weight.data.normal_(0, math.sqrt(2.0 / n))
-            else:
-                raise NotImplementedError
-            if m.bias is not None:
-                m.bias.data.zero_()
-        elif type(m) in [nn.BatchNorm2d, nn.BatchNorm1d, nn.GroupNorm]:
-            m.weight.data.fill_(1)
-            m.bias.data.zero_()
-        elif isinstance(m, nn.Linear):
-            stdv = 1.0 / math.sqrt(m.weight.size(1))
-            m.weight.data.uniform_(-stdv, stdv)
-            if m.bias is not None:
-                m.bias.data.zero_()
-
-
 class RunManager:
     def __init__(
-            self, path, net, run_config, init=True, measure_latency=None, no_gpu=False
+        self, path, net, run_config, init=True, measure_latency=None, no_gpu=False
     ):
         self.path = path
         self.net = net
@@ -73,6 +48,8 @@ class RunManager:
         # initialize model (default)
         if init:
             init_models(run_config.model_init)
+
+        
 
         # criterion
         self.train_criterion = nn.CrossEntropyLoss()
@@ -100,7 +77,6 @@ class RunManager:
                         net_params.append(param)
         self.optimizer = self.run_config.build_optimizer(net_params)
         self.net = torch.nn.DataParallel(self.net)
-
     """ save path and log path """
 
     @property
@@ -223,16 +199,16 @@ class RunManager:
     """ train and test """
 
     def validate(
-            self,
-            epoch=0,
-            is_test=False,
-            run_str="",
-            net=None,
-            data_loader=None,
-            no_logs=False,
-            train_mode=False,
-            extra_preprocess=None,
-            att=None
+        self,
+        epoch=0,
+        is_test=False,
+        run_str="",
+        net=None,
+        data_loader=None,
+        no_logs=False,
+        train_mode=False,
+        extra_preprocess = None,
+        att = None
     ):
         if net is None:
             net = self.net
@@ -254,20 +230,20 @@ class RunManager:
 
         with torch.no_grad():
             with tqdm(
-                    total=len(data_loader),
-                    desc="Validate Epoch #{} {}".format(epoch + 1, run_str),
-                    disable=no_logs,
+                total=len(data_loader),
+                desc="Validate Epoch #{} {}".format(epoch + 1, run_str),
+                disable=no_logs,
             ) as t:
                 for i, (images, labels) in enumerate(data_loader):
                     images, labels = images.to(self.device), labels.to(self.device)
                     if extra_preprocess is not None:
                         for preprocess in extra_preprocess:
-                            if att != None:
-                                images = preprocess(images, att[0], att[1], att[2])
+                            if att!=None:
+                                images = preprocess(images,att[0],att[1],att[2])
                             else:
-                                images = preprocess(images)
-
-                                # compute output
+                                images = preprocess(images) 
+                    
+                    # compute output
                     output = net(images)
                     loss = self.test_criterion(output, labels)
                     # measure accuracy and record loss
@@ -282,8 +258,9 @@ class RunManager:
                         }
                     )
                     t.update(1)
-        return losses.avg, self.get_metric_vals(metric_dict), output
+        return losses.avg, self.get_metric_vals(metric_dict)
 
+  
     def train_one_epoch(self, args, epoch, warmup_epochs=0, warmup_lr=0):
         # switch to train mode
         self.net.train()
@@ -295,8 +272,8 @@ class RunManager:
         data_time = AverageMeter()
 
         with tqdm(
-                total=nBatch,
-                desc="{} Train Epoch #{}".format(self.run_config.dataset, epoch + 1),
+            total=nBatch,
+            desc="{} Train Epoch #{}".format(self.run_config.dataset, epoch + 1),
         ) as t:
             end = time.time()
             for i, (images, labels) in enumerate(self.run_config.train_loader):
@@ -317,6 +294,8 @@ class RunManager:
 
                 images, labels = images.to(self.device), labels.to(self.device)
                 target = labels
+
+            
 
                 # compute output
                 output = self.net(images)
@@ -354,9 +333,7 @@ class RunManager:
             )
 
             if (epoch + 1) % self.run_config.validation_frequency == 0:
-                val_loss, val_acc, val_acc5 = self.validate(
-                    epoch=epoch, is_test=False
-                )
+                val_loss, val_acc, val_acc5 = self.validate( epoch=epoch, is_test=False)
 
                 is_best = np.mean(val_acc) > self.best_acc
                 self.best_acc = max(self.best_acc, np.mean(val_acc))

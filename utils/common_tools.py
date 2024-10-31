@@ -24,11 +24,11 @@ __all__ = [
     "write_log",
     "pairwise_accuracy",
     "accuracy",
-    "ProgressMeter",
     "AverageMeter",
     "MultiClassAverageMeter",
+    "DistributedMetric",
+    "DistributedTensor",
 ]
-
 
 def mkdir_if_not_exist(x):
     if not x or os.path.isdir(x):
@@ -169,6 +169,8 @@ def pairwise_accuracy(la, lb, n_samples=200000):
     return float(count) / total
 
 
+
+
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
@@ -185,31 +187,17 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 
-class ProgressMeter(object):
-
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
-
 class AverageMeter(object):
-    """Computes and stores the average and current value"""
+    """
+    Computes and stores the average and current value
+    Copied from: https://github.com/pytorch/examples/blob/master/imagenet/main.py
+    """
 
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
+    def __init__(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
 
     def reset(self):
         self.val = 0
@@ -223,12 +211,9 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
 
 class MultiClassAverageMeter:
+
     """Multi Binary Classification Tasks"""
 
     def __init__(self, num_classes, balanced=False, **kwargs):
@@ -266,8 +251,8 @@ class MultiClassAverageMeter:
             if self.balanced:
                 value = np.mean(
                     (
-                            self.counts[k]
-                            / np.maximum(np.sum(self.counts[k], axis=1), 1)[:, None]
+                        self.counts[k]
+                        / np.maximum(np.sum(self.counts[k], axis=1), 1)[:, None]
                     ).diagonal()
                 )
             else:
@@ -277,3 +262,50 @@ class MultiClassAverageMeter:
 
             mean += value / self.num_classes * 100.0
         return mean
+
+
+class DistributedMetric(object):
+    """
+    Horovod: average metrics from distributed training.
+    """
+
+    def __init__(self, name):
+        self.name = name
+        self.sum = torch.zeros(1)[0]
+        self.count = torch.zeros(1)[0]
+
+    def update(self, val, delta_n=1):
+        import horovod.torch as hvd
+
+        val *= delta_n
+        self.sum += hvd.allreduce(val.detach().cpu(), name=self.name)
+        self.count += delta_n
+
+    @property
+    def avg(self):
+        return self.sum / self.count
+
+
+class DistributedTensor(object):
+    def __init__(self, name):
+        self.name = name
+        self.sum = None
+        self.count = torch.zeros(1)[0]
+        self.synced = False
+
+    def update(self, val, delta_n=1):
+        val *= delta_n
+        if self.sum is None:
+            self.sum = val.detach()
+        else:
+            self.sum += val.detach()
+        self.count += delta_n
+
+    @property
+    def avg(self):
+        import horovod.torch as hvd
+
+        if not self.synced:
+            self.sum = hvd.allreduce(self.sum, name=self.name)
+            self.synced = True
+        return self.sum / self.count

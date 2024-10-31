@@ -1,11 +1,16 @@
+# Once for All: Train One Network and Specialize it for Efficient Deployment
+# Han Cai, Chuang Gan, Tianzhe Wang, Zhekai Zhang, Song Han
+# International Conference on Learning Representations (ICLR), 2020.
+
 import warnings
 import os
+import math
 import numpy as np
 import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from data_providers.base_provider import DataProvider
-from data_providers.my_dataloader import MyDistributedSampler
+from .base_provider import DataProvider
+from utils.my_dataloader import MyDistributedSampler
 
 __all__ = ["ImagenetDataProvider"]
 
@@ -63,14 +68,14 @@ class ImagenetDataProvider(DataProvider):
                 batch_size=train_batch_size,
                 sampler=train_sampler,
                 num_workers=n_worker,
-                pin_memory=True,
+                pin_memory=False,
             )
             self.valid = torch.utils.data.DataLoader(
                 valid_dataset,
                 batch_size=test_batch_size,
                 sampler=valid_sampler,
                 num_workers=n_worker,
-                pin_memory=True,
+                pin_memory=False,
             )
         else:
             if num_replicas is not None:

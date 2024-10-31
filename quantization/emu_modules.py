@@ -175,7 +175,7 @@ class FxP_QMaxPool2D(nn.MaxPool2d):
             kernel_size=mod.kernel_size,
             stride=mod.stride,
             padding=mod.padding,
-            dilation=mod.padding,
+            dilation=mod.dilation,
             return_indices=mod.return_indices,
             ceil_mode=mod.ceil_mode
         )
