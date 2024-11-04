@@ -33,6 +33,10 @@ ENV/
 
 # Generated files
 .idea/**/contentModel.xml
+logs/
+*.out
+*.tar
+
 
 # idea folder
 .idea

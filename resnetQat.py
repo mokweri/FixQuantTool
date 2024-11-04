@@ -38,7 +38,7 @@ parser.add_argument('--train_batch',
 parser.add_argument('--val_batch',
                     default=12, type=int, metavar='N', help='validation batchsize (default: 32)')
 parser.add_argument('--lr', '--learning-rate',
-                    default=0.1, type=float, metavar='LR', help='initial learning rate')
+                    default=0.01, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--lr_type',
                     default='cos', type=str, help='lr scheduler (exp/cos/step3/fixed)')
 parser.add_argument('--schedule',
@@ -230,7 +230,7 @@ def main():
     # val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
 
     data_dir = "/home/obed/Documents/cifar_data"
-    data_dir = "/home/obed/Documents/imagenet"
+    data_dir = "/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet"
 
     #train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
     val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=data_dir)
@@ -238,7 +238,7 @@ def main():
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
 
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     # model = resnet50_cifar10()

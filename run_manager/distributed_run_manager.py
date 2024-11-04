@@ -88,6 +88,16 @@ class DistributedRunManager:
                     keys, mode="include"
                 ),  # parameters without weight decay
             ]
+            ## if we dont have get_parameters is not implemented on model
+            # no_decay_params = []
+            # decay_params = []
+            # for name, param in self.net.named_parameters():
+            #     if any(key in name for key in keys):
+            #         no_decay_params.append(param)
+            #     else:
+            #         decay_params.append(param)
+
+            # net_params = [decay_params, no_decay_params]
         else:
             # noinspection PyBroadException
             try:
@@ -97,6 +107,7 @@ class DistributedRunManager:
                 for param in self.network.parameters():
                     if param.requires_grad:
                         net_params.append(param)
+
         self.optimizer = self.run_config.build_optimizer(net_params)
         self.optimizer = hvd.DistributedOptimizer(
             self.optimizer,
@@ -362,12 +373,11 @@ class DistributedRunManager:
 
     def train(self, args, warmup_epochs=5, warmup_lr=0):
         for epoch in range(self.start_epoch, self.run_config.n_epochs + warmup_epochs):
+            
             train_loss, (train_top1, train_top5) = self.train_one_epoch(
                 args, epoch, warmup_epochs, warmup_lr
             )
-            val_loss, val_top1, val_top5 = self.validate(
-                epoch, is_test=False
-            )
+            val_loss, val_top1, val_top5 = self.validate(epoch, is_test=False )
 
             is_best = list_mean(val_top1) > self.best_acc
             self.best_acc = max(self.best_acc, list_mean(val_top1))

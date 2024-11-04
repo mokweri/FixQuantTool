@@ -1,4 +1,5 @@
 import os
+import json
 import math
 import argparse
 import torch
@@ -14,16 +15,16 @@ import torch.multiprocessing as mp
 import torch.utils.data.distributed
 import horovod.torch as hvd
 
-from utils.mimer_dataset import ImageNetDataset
+from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
 
 parser = argparse.ArgumentParser(description="Trains a ResNet-50 on ImageNet-1k")
 
 # Hyperparameters
 parser.add_argument('--epochs',
-                    default=100, type=int, help='No. of training epochs.')
+                    default=50, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=5,
                     help='number of warmup epochs')
-parser.add_argument("--batch-size", type=int, default=64)
+parser.add_argument("--batch-size", type=int, default=100)
 parser.add_argument('--base_lr', '--learning-rate',
                     default=1e-3, type=float, metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum',
@@ -51,7 +52,7 @@ parser.add_argument(
 )
 parser.add_argument("--use-amp", action="store_true")
 parser.add_argument("--amp-dtype", default=torch.float16, type=get_dtype)
-parser.add_argument("--num-workers", type=int, default=1,
+parser.add_argument("--num-workers", type=int, default=4,
                     help='We have an issues with zipfiles so we use a single worker')
 parser.add_argument("--pin-memory", default=True, action="store_true")
 parser.add_argument("--no-pin-memory", dest="pin_memory", action="store_false")
@@ -82,7 +83,7 @@ parser.add_argument('--validation', default=True, action=argparse.BooleanOptiona
 
 
 # Horovod: average metrics from distributed training.
-class Metric(object):
+class DistributedMetric(object):
     def __init__(self, name):
         self.name = name
         self.sum = torch.tensor(0.)
@@ -100,11 +101,11 @@ class Metric(object):
 def train(epoch):
     best_acc1 = 0
 
-    model.train()
+    qmodel.train()
     train_sampler.set_epoch(epoch)
-    train_loss = Metric('train_loss')
-    train_Acc1 = Metric('train_Acc@1')
-    train_Acc5 = Metric('train_Acc@5')
+    train_loss = DistributedMetric('train_loss')
+    train_Acc1 = DistributedMetric('train_Acc@1')
+    train_Acc5 = DistributedMetric('train_Acc@5')
 
     with tqdm(total=len(train_loader), desc='Train Epoch     #{}'.format(epoch + 1),
               disable=not verbose) as t:
@@ -118,7 +119,7 @@ def train(epoch):
             for i in range(0, len(data), args.batch_size):
                 data_batch = data[i:i + args.batch_size]
                 target_batch = target[i:i + args.batch_size]
-                output = model(data_batch)
+                output = qmodel(data_batch)
 
                 acc1, acc5 = accuracy(output, target_batch, topk=(1, 5))
 
@@ -131,9 +132,11 @@ def train(epoch):
                 loss.backward()
             # Gradient is applied across all ranks
             optimizer.step()
-            t.set_postfix({'loss': train_loss.avg.item(),
-                           'Acc@1': 100. * train_Acc1.avg.item(), 'Acc@5': 100. * train_Acc5.avg.item()})
-            t.update(1)
+
+            if hvd.rank() == 0:
+                t.set_postfix({'loss': train_loss.avg.item(),
+                            'Acc@1': train_Acc1.avg.item(), 'Acc@5': train_Acc5.avg.item()})
+                t.update(1)
 
             # Saving checkpoint
             is_best = acc1 > best_acc1
@@ -150,27 +153,42 @@ def train(epoch):
 # accuracy. Scale the learning rate `lr = base_lr` ---> `lr = base_lr * hvd.size()` during
 # the first five epochs. See https://arxiv.org/abs/1706.02677 for details.
 # After the warmup reduce learning rate by 10 on the 30th, 60th and 80th epochs.
+# def adjust_learning_rate(epoch, batch_idx):
+#     if epoch < args.warmup_epochs:
+#         epoch += float(batch_idx + 1) / len(train_loader)
+#         lr_adj = 1. / hvd.size() * (epoch * (hvd.size() - 1) / args.warmup_epochs + 1)
+#     elif epoch < 30:
+#         lr_adj = 1.
+#     elif epoch < 60:
+#         lr_adj = 1e-1
+#     elif epoch < 80:
+#         lr_adj = 1e-2
+#     else:
+#         lr_adj = 1e-3
+#     for param_group in optimizer.param_groups:
+#         param_group['lr'] = args.base_lr * hvd.size() * args.batches_per_allreduce * lr_adj
 def adjust_learning_rate(epoch, batch_idx):
     if epoch < args.warmup_epochs:
+        # Linear warmup
         epoch += float(batch_idx + 1) / len(train_loader)
         lr_adj = 1. / hvd.size() * (epoch * (hvd.size() - 1) / args.warmup_epochs + 1)
-    elif epoch < 30:
-        lr_adj = 1.
-    elif epoch < 60:
-        lr_adj = 1e-1
-    elif epoch < 80:
-        lr_adj = 1e-2
     else:
-        lr_adj = 1e-3
+        # Cosine decay
+        total_epochs = args.epochs
+        current_iter = epoch * len(train_loader) + batch_idx
+        max_iter = total_epochs * len(train_loader)
+        lr_adj = 0.5 * (1 + math.cos(math.pi * current_iter / max_iter))
+
     for param_group in optimizer.param_groups:
         param_group['lr'] = args.base_lr * hvd.size() * args.batches_per_allreduce * lr_adj
 
 
-def validate(epoch):
-    model.eval()
-    val_loss = Metric('val_loss')
-    val_Acc1 = Metric('val_Acc@1')
-    val_Acc5 = Metric('val_Acc@5')
+
+def validate(mod, epoch):
+    mod.eval()
+    val_loss = DistributedMetric('val_loss')
+    val_Acc1 = DistributedMetric('val_Acc@1')
+    val_Acc5 = DistributedMetric('val_Acc@5')
 
     with tqdm(total=len(val_loader), desc='Validate Epoch  #{}'.format(epoch + 1),
               disable=not verbose) as t:
@@ -178,16 +196,17 @@ def validate(epoch):
             for data, target in val_loader:
                 if args.cuda:
                     data, target = data.cuda(), target.cuda()
-                output = model(data)
+                output = mod(data)
 
                 val_loss.update(F.cross_entropy(output, target))
                 acc1, acc5 = accuracy(output, target, topk=(1, 5))
                 val_Acc1.update(acc1[0])
                 val_Acc5.update(acc5[0])
 
-                t.set_postfix({'loss': val_loss.avg.item(),
-                               'Acc@1': 100. * val_Acc1.avg.item(), 'Acc@5': 100. * val_Acc5.avg.item()})
-                t.update(1)
+                if hvd.rank() == 0:
+                    t.set_postfix({'loss': val_loss.avg.item(),
+                                'Acc@1': val_Acc1.avg.item(), 'Acc@5': val_Acc5.avg.item()})
+                    t.update(1)
 
     if log_writer:
         log_writer.add_scalar('val/loss', val_loss.avg, epoch)
@@ -215,7 +234,7 @@ def save_checkpoint(epoch):
         filepath = args.checkpoint_format.format(epoch=epoch + 1)
         state = {
             'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
+            'state_dict': qmodel.state_dict(),
             'optimizer': optimizer.state_dict(),
         }
         torch.save(state, filepath)
@@ -238,6 +257,8 @@ if __name__ == '__main__':
 
     cudnn.benchmark = True
 
+    print("No of GPU used {}".format(hvd.size()))
+
     # If set > 0, will resume training from a given checkpoint.
     resume_from_epoch = 0
     for try_epoch in range(args.epochs, 0, -1):
@@ -257,9 +278,9 @@ if __name__ == '__main__':
     log_writer = SummaryWriter(args.log_dir) if hvd.rank() == 0 else None
 
     # Horovod: limit # of CPU threads to be used per worker.
-    torch.set_num_threads(4)
+    torch.set_num_threads(16)
 
-    kwargs = {'num_workers': 4, 'pin_memory': True} if args.cuda else {}
+    kwargs = {'num_workers': 16, 'pin_memory': True} if args.cuda else {}
     # When supported, use 'forkserver' to spawn dataloader workers instead of 'fork' to prevent
     # issues with Infiniband implementations that are not fork-safe
     if (kwargs.get('num_workers', 0) > 0 and hasattr(mp, '_supports_context') and
@@ -297,21 +318,33 @@ if __name__ == '__main__':
 
     # set up model
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    # with open('qconfig_resnet18-imagenet-init.json', 'r') as json_file:
+    #     qconfig = json.load(json_file)
+    qconfig = create_qconfig(model, val_loader, bitwidth=8)
+    qmodel = create_quantizable_model(model, qconfig)
+    checkpoint = torch.load('checkpoint-37.pth.tar')
+    qmodel.cuda()
 
+    # if hvd.rank() == 0:
+    #     # print(qmodel)
+    #     with open('qconfig_resnet50-imagenet-init.json', 'w') as json_file:
+    #         json.dump(qconfig, json_file)
+
+    """
     # By default, Adasum doesn't need scaling up learning rate.
     # For sum/average with gradient Accumulation: scale learning rate by batches_per_allreduce
     lr_scaler = args.batches_per_allreduce * hvd.size() if not args.use_adasum else 1
 
     if args.cuda:
         # Move model to GPU.
-        model.cuda()
+        qmodel.cuda()
         # If using GPU Adasum allreduce, scale learning rate by local_size.
         if args.use_adasum and hvd.nccl_built():
             lr_scaler = args.batches_per_allreduce * hvd.local_size()
 
     # Build Optimizer
     # Horovod: scale learning rate by the number of GPUs.
-    optimizer = optim.SGD(model.parameters(),
+    optimizer = optim.SGD(qmodel.parameters(),
                           lr=(args.base_lr * lr_scaler),
                           momentum=args.momentum, weight_decay=args.wd)
 
@@ -320,7 +353,7 @@ if __name__ == '__main__':
 
     # Horovod: wrap optimizer with DistributedOptimizer.
     optimizer = hvd.DistributedOptimizer(
-        optimizer, named_parameters=model.named_parameters(),
+        optimizer, named_parameters=qmodel.named_parameters(),
         compression=compression,
         backward_passes_per_step=args.batches_per_allreduce,
         op=hvd.Adasum if args.use_adasum else hvd.Average,
@@ -331,14 +364,22 @@ if __name__ == '__main__':
     if resume_from_epoch > 0 and hvd.rank() == 0:
         filepath = args.checkpoint_format.format(epoch=resume_from_epoch)
         checkpoint = torch.load(filepath)
-        model.load_state_dict(checkpoint['state_dict'])
+        qmodel.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
     # Horovod: broadcast parameters & optimizer state.
-    hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+    hvd.broadcast_parameters(qmodel.state_dict(), root_rank=0)
     hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+    hvd.broadcast_object(qconfig, root_rank=0) 
 
     for epoch in range(resume_from_epoch, args.epochs):
-        # train(epoch)
+        train(epoch)
         validate(epoch)
+    """
+    
+    validate(qmodel, 1)
+    
+    
+    # with open('qconfig_resnet50-imagenet.json', 'w') as json_file:
+    #     json.dump(qconfig, json_file)
 

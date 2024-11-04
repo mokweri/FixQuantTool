@@ -1,10 +1,17 @@
 #!/bin/env bash
 
-#SBATCH -A NAISS2024-22-1352   # find your project with the "projinfo" command
-#SBATCH -p alvis               # what partition to use (usually not necessary)
-#SBATCH -t 0-00:20:00          # how long time it will take to run
-#SBATCH --gpus-per-node=T4:1   # choosing no. GPUs and their type
-#SBATCH -J FixQuantTool        # the jobname (not necessary)
+#SBATCH -A NAISS2024-22-1352     # find your project with the "projinfo" command
+#SBATCH -p alvis                 # what partition to use (usually not necessary)
+#SBATCH -t 1-12:00:00            # how long time it will take to run
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
+#SBATCH --gpus-per-node=A100:4   # choosing no. GPUs and their type
+#SBATCH -J FixQuantTool          # the jobname (not necessary)
+#SBATCH -D /mimer/NOBACKUP/groups/naiss2024-22-1352/Obed_Work/FixQuantTool
+
+# export PS1="non-interactive"
+# export OMPI_MCA_plm=slurm
+# export OMPI_MCA_btl_vader_single_copy_mechanism=none
 
 # Set up Environment
 module purge
@@ -18,18 +25,8 @@ module load matplotlib/3.5.2-foss-2022a
 
 source /mimer/NOBACKUP/groups/naiss2024-22-1352/Obed_Work/obed_venv/bin/activate
 
-# Set up for the different multiprocessing alternatives
 ngpus=$SLURM_GPUS_ON_NODE
 export WORLD_SIZE=$ngpus
 
 # run my code
-python resnetQat.py
-
-#submit a job interactively using srun
-srun -A NAISS2024-22-1352 -p alvis --gpus-per-node=A100:4 -t 00:5:00 --pty bash
-
-srun -A NAISS2024-22-1352 -p alvis --gpus-per-node=A100:1 -t 00:20:00 --pty bash
-
-/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet
-
-
+mpirun -np 4 python run_dist2.py
