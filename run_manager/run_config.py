@@ -1,19 +1,18 @@
-# Once for All: Train One Network and Specialize it for Efficient Deployment
-# Han Cai, Chuang Gan, Tianzhe Wang, Zhekai Zhang, Song Han
-# International Conference on Learning Representations (ICLR), 2020.
-
 from utils import calc_learning_rate, build_optimizer
 from data_providers import ImagenetDataProvider
 from data_providers import Cifar10DataProvider
 from data_providers import Cifar100DataProvider
+
 import torch
-__all__ = ["RunConfig", "ClassificationRunConfig", "DistributedClassificationRunConfig"]
+
+__all__ = ["BaseConfig", "RunConfig", "DistributedRunConfig"]
 
 
-class RunConfig:
+class BaseConfig:
     def __init__(
         self,
         n_epochs,
+        warmup_epochs,
         init_lr,
         lr_schedule_type,
         lr_schedule_param,
@@ -24,13 +23,12 @@ class RunConfig:
         opt_type,
         opt_param,
         weight_decay,
-        label_smoothing,
         no_decay_keys,
-        model_init,
         validation_frequency,
         print_frequency,
     ):
         self.n_epochs = n_epochs
+        self.warmup_epochs = warmup_epochs
         self.init_lr = init_lr
         self.lr_schedule_type = lr_schedule_type
         self.lr_schedule_param = lr_schedule_param
@@ -43,11 +41,8 @@ class RunConfig:
         self.opt_type = opt_type
         self.opt_param = opt_param
         self.weight_decay = weight_decay
-        self.label_smoothing = label_smoothing
         self.no_decay_keys = no_decay_keys
 
-
-        self.model_init = model_init
         self.validation_frequency = validation_frequency
         self.print_frequency = print_frequency
        
@@ -59,46 +54,42 @@ class RunConfig:
                 config[key] = self.__dict__[key]
         return config
 
-    def copy(self):
-        return RunConfig(**self.config)
-
     """ learning rate """
-
-    def adjust_learning_rate(self, optimizer, epoch, batch=0, nBatch=None):
+    def adjust_learning_rate(self, optimizer, train_loader, epoch, batch_idx, ddp=False):
         """adjust learning of a given optimizer and return the new learning rate"""
         new_lr = calc_learning_rate(
-            epoch, self.init_lr, self.n_epochs, batch, nBatch, self.lr_schedule_type
+            init_lr=self.init_lr,
+            epoch=epoch,
+            n_epochs=self.n_epochs,
+            batch_idx=batch_idx,
+            n_batch=len(train_loader),
+            train_loader_length=len(train_loader),
+            lr_schedule_type="cosine",
+            ddp=ddp,  # Set to True if using DDP
+            warmup_epochs=self.warmup_epochs,
+            hvd_size=1,
+            batches_per_allreduce=1
         )
         for param_group in optimizer.param_groups:
             param_group["lr"] = new_lr
         return new_lr
 
-    def warmup_adjust_learning_rate(
-        self, optimizer, T_total, nBatch, epoch, batch=0, warmup_lr=0
-    ):
-        T_cur = epoch * nBatch + batch + 1
-        new_lr = T_cur / T_total * (self.init_lr - warmup_lr) + warmup_lr
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = new_lr
-        return new_lr
-
     """ data provider """
-
     @property
     def data_provider(self):
         raise NotImplementedError
 
     @property
     def train_loader(self):
-        return self.data_provider.train
+        return self.data_provider.train_loader
 
     @property
-    def valid_loader(self):
-        return self.data_provider.valid
+    def val_loader(self):
+        return self.data_provider.val_loader
 
     @property
     def test_loader(self):
-        return self.data_provider.test
+        return self.data_provider.test_loader
 
     def random_sub_train_loader(
         self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
@@ -108,7 +99,6 @@ class RunConfig:
         )
 
     """ optimizer """
-
     def build_optimizer(self, net_params):
         return build_optimizer(
             net_params,
@@ -121,10 +111,11 @@ class RunConfig:
 
 
 
-class ClassificationRunConfig(RunConfig):
+class RunConfig(BaseConfig):
     def __init__(
         self,
         n_epochs=150,
+        warmup_epochs=5,
         init_lr=0.05,
         lr_schedule_type="cosine",
         lr_schedule_param=None,
@@ -135,17 +126,16 @@ class ClassificationRunConfig(RunConfig):
         opt_type="sgd",
         opt_param=None,
         weight_decay=4e-5,
-        label_smoothing=0.1,
         no_decay_keys=None,
-        model_init="he_fout",
         validation_frequency=1,
         print_frequency=10,
         n_worker=32,
         image_size=224, # 32
         **kwargs
     ):
-        super(ClassificationRunConfig, self).__init__(
+        super(RunConfig, self).__init__(
             n_epochs,
+            warmup_epochs,
             init_lr,
             lr_schedule_type,
             lr_schedule_param,
@@ -156,15 +146,14 @@ class ClassificationRunConfig(RunConfig):
             opt_type,
             opt_param,
             weight_decay,
-            label_smoothing,
             no_decay_keys,
-            model_init,
             validation_frequency,
             print_frequency,
         )
 
         self.n_worker = n_worker
         self.image_size = image_size
+
     @property
     def data_provider(self):
         if self.__dict__.get("_data_provider", None) is None:
@@ -182,13 +171,15 @@ class ClassificationRunConfig(RunConfig):
                 valid_size=self.valid_size,
                 n_worker=self.n_worker,
                 image_size=self.image_size,
+                pin_memory=True
             )
         return self.__dict__["_data_provider"]
 
-class DistributedClassificationRunConfig(ClassificationRunConfig):
+class DistributedRunConfig(RunConfig):
     def __init__(
         self,
         n_epochs=150,
+        warmup_epochs=5,
         init_lr=0.05,
         lr_schedule_type="cosine",
         lr_schedule_param=None,
@@ -201,15 +192,16 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
         weight_decay=4e-5,
         label_smoothing=0.1,
         no_decay_keys=None,
-        model_init="he_fout",
         validation_frequency=1,
         print_frequency=10,
         n_worker=8,
+        batches_per_allreduce=1,
         image_size=224,
         **kwargs
     ):
-        super(DistributedClassificationRunConfig, self).__init__(
+        super(DistributedRunConfig, self).__init__(
             n_epochs,
+            warmup_epochs,
             init_lr,
             lr_schedule_type,
             lr_schedule_param,
@@ -222,16 +214,17 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
             weight_decay,
             label_smoothing,
             no_decay_keys,
-            model_init,
             validation_frequency,
             print_frequency,
             n_worker,
-            image_size,
             **kwargs
         )
 
         self._num_replicas = kwargs["num_replicas"]
         self._rank = kwargs["rank"]
+        self.hvd_size = kwargs["hvd_size"]
+        self.image_size = image_size
+        self.batches_per_allreduce = batches_per_allreduce
 
     @property
     def data_provider(self):
@@ -253,6 +246,7 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
                     image_size=self.image_size,
                     num_replicas=self._num_replicas,
                     rank=self._rank,
+                    pin_memory=True
                 )
             else:
                 self.__dict__["_data_provider"] = DataProviderClass(
@@ -262,8 +256,27 @@ class DistributedClassificationRunConfig(ClassificationRunConfig):
                     n_worker=self.n_worker,
                     image_size=self.image_size,
                     num_replicas=self._num_replicas,
-                    rank=self._rank,   
+                    rank=self._rank,
+                    pin_memory=True
                 ) 
         return self.__dict__["_data_provider"]
+
+    def adjust_learning_rate(self, optimizer, train_loader, epoch, batch_idx, ddp=True):
+        new_lr = calc_learning_rate(
+            init_lr=self.init_lr,
+            epoch=epoch,
+            n_epochs=self.n_epochs,
+            batch_idx=batch_idx,
+            n_batch=len(train_loader),
+            train_loader_length=len(train_loader),
+            lr_schedule_type=self.lr_schedule_type,
+            ddp=ddp,  # Set to True if using DDP
+            warmup_epochs=self.warmup_epochs,
+            hvd_size=self.hvd_size,
+            batches_per_allreduce=self.batches_per_allreduce
+        )
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = new_lr
+        return new_lr
 
         

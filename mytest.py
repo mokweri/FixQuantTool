@@ -1,10 +1,7 @@
 import argparse
-import os
 import torch
 import torchvision.models as models
-from model_transforms import create_quantizable_model, create_qconfig, standardize_qconfig
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+from quantization.utils.model_transforms import create_quantizable_model
 import json
 
 from data_providers.imagenet import ImagenetDataProvider
@@ -89,7 +86,7 @@ if __name__ == '__main__':
     #     json.dump(qconfig, json_file)
 
     # load qconfig
-    with open('qconfig_vgg.json', 'r') as json_file:
+    with open('qconfig_files/qconfig_vgg.json', 'r') as json_file:
         qconfig = json.load(json_file)
     # print
     # for key, value in qconfig.items():

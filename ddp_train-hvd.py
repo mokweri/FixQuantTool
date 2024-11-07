@@ -4,7 +4,6 @@ import math
 import argparse
 import torch
 from tqdm import tqdm
-import torch.optim as optim
 import torchvision.models as models
 from torchvision import datasets, transforms
 import torch.nn.functional as F
@@ -15,7 +14,7 @@ import torch.multiprocessing as mp
 import torch.utils.data.distributed
 import horovod.torch as hvd
 
-from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
+from quantization.utils.model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
 
 parser = argparse.ArgumentParser(description="Trains a ResNet-50 on ImageNet-1k")
 

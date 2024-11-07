@@ -2,6 +2,15 @@ import sys
 import torch
 
 
+def fix_quantize_tensor(Tinput, valmin, valmax, scale, zero_point, method):
+    if method == -1:
+        # Affine quantization (automatic handling by PyTorch)
+        return torch.fake_quantize_per_tensor_affine(Tinput, scale, zero_point, valmin, valmax)
+    else:
+        return torch.clamp(round_tensor(Tinput/scale, 'HALF_UP'), valmin, valmax) * scale
+
+    # return torch.clamp(torch.round(x/scale), quant_min.item(), quant_max.item()) * scale
+
 def fake_quantize_per_tensor(x, scale_inv, zero_point, quant_min, quant_max, method, inplace):
     if method == -1:
         # Affine quantization (automatic handling by PyTorch)
@@ -131,6 +140,14 @@ def round_tensor(x, mode='HALF_TO_EVEN'):
     else:
         raise ValueError("Unsupported rounding mode")
 
+# method:
+#   // 2: half_up
+#   // 3: c++ std::round: negative half_down, positive half_up
+#   // 4: floor
+#   // 5: negative half_up, positive half_even
+#   // 6: towards zero: negative half_up, positive half_down (vs method 3)
+#   // 7: up
+#   // 8: half_even
 
 class FakeQuantize(torch.autograd.Function):
     @staticmethod

@@ -24,7 +24,7 @@ parser.add_argument('--lr',
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
 parser.add_argument('--save_dir',
-                    default='./saved_models', help='Directory to save trained models.')
+                    default='./saved_models-FP', help='Directory to save trained models.')
 # Device options
 parser.add_argument('--gpus',
                     type=str, default='0', help='gpu ids to be used for training, seperated by commas')
@@ -184,8 +184,8 @@ if __name__ == '__main__':
     # if args.resume:
     #     # Load checkpoint.
     #     print('==> Resuming from checkpoint..')
-    #     assert os.path.isdir('./saved_models'), 'Error: no checkpoint directory found!'
-    #     resume_filepath = './saved_models/model_best_84.470.pth'
+    #     assert os.path.isdir('./saved_models-FP'), 'Error: no checkpoint directory found!'
+    #     resume_filepath = './saved_models-FP/model_best_84.470.pth'
     #     checkpoint = torch.load(resume_filepath)
     #     model.load_state_dict(checkpoint['state_dict'])
     #     optimizer.load_state_dict(checkpoint['optimizer'])

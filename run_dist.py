@@ -1,7 +1,5 @@
 import argparse
 import numpy as np
-import os
-import json
 import random
 import torchvision.models as models
 
@@ -10,15 +8,11 @@ import horovod.torch as hvd
 import torch
 
 from data_providers.imagenet import ImagenetDataProvider
-from data_providers.cifar10 import Cifar10DataProvider
-from data_providers.cifar100 import Cifar100DataProvider
 from run_manager import (
     DistributedClassificationRunConfig,
-    DistributedRunManager,
-    ClassificationRunConfig,
-    RunManager)
+    DistributedRunManager)
 
-from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
+from quantization.utils.model_transforms import create_quantizable_model, create_qconfig
 from utils.data_utils import getValData
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")

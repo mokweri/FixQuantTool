@@ -223,17 +223,31 @@ def build_optimizer(
 """ learning rate schedule """
 
 
-def calc_learning_rate(
-    epoch, init_lr, n_epochs, batch=0, nBatch=None, lr_schedule_type="cosine"
-):
-    if lr_schedule_type == "cosine":
-        t_total = n_epochs * nBatch
-        t_cur = epoch * nBatch + batch
+def calc_learning_rate(init_lr, epoch, n_epochs, batch_idx, n_batch, train_loader_length,
+                       lr_schedule_type="cosine", ddp=False, warmup_epochs=0, hvd_size=1,
+                       batches_per_allreduce=1):
+    if epoch < warmup_epochs:
+        # Linear warmup
+        epoch += float(batch_idx + 1) / train_loader_length
+        if ddp:
+            # Adjust learning rate for DDP (assuming Horovod)
+            lr_adj = 1. / hvd_size * (epoch * (hvd_size - 1) / warmup_epochs + 1)
+            lr = init_lr * lr_adj
+        else:
+            lr = init_lr * (epoch / warmup_epochs)
+    elif lr_schedule_type == "cosine":
+        t_total = n_epochs * n_batch
+        t_cur = epoch * n_batch + batch_idx
         lr = 0.5 * init_lr * (1 + math.cos(math.pi * t_cur / t_total))
     elif lr_schedule_type is None:
         lr = init_lr
     else:
-        raise ValueError("do not support: %s" % lr_schedule_type)
+        raise ValueError("Unsupported learning rate schedule type: %s" % lr_schedule_type)
+
+    # Adjust for DDP scale
+    if ddp:
+        lr *= hvd_size * batches_per_allreduce
+
     return lr
 
 

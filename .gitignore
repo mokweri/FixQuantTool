@@ -40,5 +40,5 @@ logs/
 
 # idea folder
 .idea
-/models/saved_models/
+/saved_models-FP/
 

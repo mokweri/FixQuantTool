@@ -7,15 +7,11 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim
 import torchvision.models as models
-from model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
-from models.resnet_cifar import *
+from quantization.utils.model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
 
-from utils.pytorch_utils import build_optimizer, save_checkpoint
+from utils.pytorch_utils import save_checkpoint
 from utils.common_tools import *
-from utils.data_utils import getTrainData, getValData
-
-from data_providers.imagenet import ImagenetDataProvider
-from run_manager import ClassificationRunConfig, RunManager
+from utils.data_utils import getValData
 
 # Parse arguments
 parser = argparse.ArgumentParser()
@@ -242,7 +238,7 @@ def main():
     #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     # model = resnet50_cifar10()
-    # # saved_filepath = './models/saved_models/resnet50_best_86.450.pth'
+    # # saved_filepath = './models/saved_models-FP/resnet50_best_86.450.pth'
     # # checkpoint = torch.load(saved_filepath, weights_only=True)
     # # model.load_state_dict(checkpoint['state_dict'])
 
