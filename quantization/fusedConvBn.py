@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from quantization.tqt import TQTQuantizer
+
 # Number of steps before freezing the batch norm running average and variance
 FREEZE_BN_DELAY_DEFAULT = 200000
 
@@ -11,7 +13,7 @@ _conv_meta = {'conv1d': (1, F.conv1d),
 
 
 class FusedConvBN(nn.Module):
-    def __init__(self, conv_mod, bn_mod, freeze_bn_delay=FREEZE_BN_DELAY_DEFAULT, qconfig=None, _mod_name=None):
+    def __init__(self, conv_mod, bn_mod, freeze_bn_delay=FREEZE_BN_DELAY_DEFAULT, _mod_name=None):
         if not bn_mod.track_running_stats:
             raise ValueError("FusedConv BN folding is only supported for BatchNorm which tracks running stats")
 
@@ -20,8 +22,11 @@ class FusedConvBN(nn.Module):
         self.bn_mod = bn_mod
         self.freeze_bn_delay = freeze_bn_delay
         self.frozen = False
-        self.qconfig = qconfig
-        self.quantizer = None
+
+        self.weight_quantizer = TQTQuantizer(bitwidth=8, tensor_type='weight')
+        self.bias_quantizer = TQTQuantizer(bitwidth=8, tensor_type='weight')
+        self.act_quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
+
         self._mod_name = None
         if isinstance(conv_mod, nn.Linear):
             self.conv_forward_fn = self._linear_layer_forward
@@ -75,32 +80,36 @@ class FusedConvBN(nn.Module):
         if not self.frozen:
             w, b, gamma, beta = self._get_all_parameters()
             if self.training:
-                batch_mean, batch_var = self.get_batch_stats(self.conv_forward_fn(x, w), b)     # 1st forward call
-                recip_sigma_batch = torch.rsqrt(batch_var + self.bn.eps)
+                # -------     1st forward pass
+                batch_mean, batch_var = self.get_batch_stats(self.conv_forward_fn(x, w), b)
+                recip_sigma_batch = torch.rsqrt(batch_var + self.bn_mod.eps)
                 with torch.no_grad():
                     sigma_running = torch.sqrt(self.bn_mod.running_var + self.bn_mod.eps)
                 w_corrected = w * self.broadcast_correction_weight(gamma / sigma_running)
 
-                w_quantized = self._quant_param(w_corrected) # @TODO Add my Quantizer
+                # -------     2nd forward pass
+                w_quantized = self.weight_quantizer.forward(w_corrected) # weight Quantizer
                 recip_c = self.broadcast_correction(sigma_running * recip_sigma_batch)
                 bias_corrected = beta - gamma * batch_mean * recip_sigma_batch
-                bias_quantized = self.broadcast_correction(self._quant_param(bias_corrected))  # @TODO Add my Quantizer
-                y = self.conv_forward_fn(x, w_quantized, None)                              # 2nd forward call
+                bias_quantized = self.broadcast_correction(self.bias_quantizer.forward(bias_corrected)) # bias quantizer
+                y = self.conv_forward_fn(x, w_quantized, None)     # 2nd forward call
                 y.mul_(recip_c).add_(bias_quantized)
             else:
                 with torch.no_grad():
                     recip_sigma_running = torch.rsqrt(self.bn_mod.running_var + self.bn_mod.eps)
                 w_corrected = w * self.broadcast_correction_weight(gamma * recip_sigma_running)
-                w_quantized = self._quant_param(w_corrected) # @TODO Add my Quantizer
+                w_quantized = self.weight_quantizer.forward(w_corrected) # weight Quantizer
                 corrected_mean = self.bn_mod.running_mean - (b if b is not None else 0)
                 bias_corrected = beta - gamma * corrected_mean * recip_sigma_running
-                bias_quantized = self._quant_param(bias_corrected)  # @TODO Add my Quantizer
+                bias_quantized = self.bias_quantizer.forward(bias_corrected)  # biasQuantizer
                 y = self.conv_forward_fn(x, w_quantized, bias_quantized)
         else:
             w, b = self.conv_mod.weight, self.conv_mod.bias
-            w_quantized, bias_quantized = self._quant_param(w), self._quant_param(b) # @TODO Add my Quantizer
+            w_quantized = self.weight_quantizer.forward(w)
+            bias_quantized = self.bias_quantizer.forward(b)
             y = self.conv_forward_fn(x, w_quantized, bias_quantized)
 
+        y = self.act_quantizer.forward(y) # quantize the activation
         return y
 
     def broadcast_correction(self, c: torch.Tensor):
@@ -239,6 +248,109 @@ class FusedConvBN(nn.Module):
                                           error_msgs)
 
         # Handle additional keys if necessary
+        added_states = ['frozen']
+        for param in added_states:
+            key = prefix + param
+            if key in state_dict:
+                # Update `self.frozen` with the value from the state_dict
+                setattr(self, param, state_dict[key])
+                # Remove the key to prevent it from being processed later
+                state_dict.pop(key, None)
+            else:
+                # If `frozen` is missing, you may want to add it to `missing_keys` if strict loading is desired
+                if strict:
+                    missing_keys.append(key)
+
         super(FusedConvBN, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
                                                        unexpected_keys, error_msgs)
 
+    def export_quant_info(self):
+        # "conv1": {"weight": 8, "bias": 7, "in": 5, "out": 6}, # @TODO Format accordingly
+        frac_w = self.weight_quantizer.export_quant_info()[1]
+        frac_b = self.bias_quantizer.export_quant_info()[1]
+        frac_out = self.act_quantizer.export_quant_info()[1]
+        return frac_w, frac_b, frac_out
+
+    def __repr__(self):
+        return f'QFusedConvBN({self.conv_mod.__repr__()}, Quantizer=TQT)'
+
+
+
+if __name__ == '__main__':
+    # TEST THE CLASS
+    # Define device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    import torch.optim as optim
+
+    # Set up input data and define parameters
+    batch_size, in_channels, height, width = 8, 3, 32, 32
+    input_data = torch.randn(batch_size, in_channels, height, width).to(device)
+
+    # Conv and BatchNorm configuration
+    out_channels = 16
+    kernel_size = 3
+    stride = 1
+    padding = 1
+
+    # Define standard Conv + BatchNorm model
+    conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=True).to(device)
+    bn = nn.BatchNorm2d(out_channels).to(device)
+    standard_model = nn.Sequential(conv, bn)
+    standard_model.eval()
+
+    # Define FusedConvBN model
+    fused_model = FusedConvBN(conv_mod=conv, bn_mod=bn, freeze_bn_delay=2000).to(device)
+    fused_model.eval()
+
+    # Check for forward pass and compare outputs
+    with torch.no_grad():
+        standard_output = standard_model(input_data)
+        fused_output = fused_model(input_data)
+
+    # Compare outputs for initial consistency
+    print("Initial output mse:", nn.functional.mse_loss(standard_output, fused_output))
+    print(fused_model.export_quant_info())
+
+    # Test freezing behavior
+    fused_model.freeze()
+    with torch.no_grad():
+        fused_frozen_output = fused_model(input_data)
+
+    print("mse after freezing:", nn.functional.mse_loss(standard_output, fused_frozen_output))
+    print(fused_model.export_quant_info())
+
+    # torch.save(fused_model.state_dict(), 'fused_conv_bn_model_model.pt')
+    # fused_model.load_state_dict(torch.load('fused_conv_bn_model.pt'))
+
+    #print quantizer parameters
+    def quantizer_parameters(model):
+        return [
+            param for name, param in model.named_parameters()
+            if 'log_threshold' in name
+        ]
+
+    def non_quantizer_parameters(model):
+        return [
+            param for name, param in model.named_parameters()
+            if 'log_threshold' not in name
+        ]
+
+    for name, param in fused_model.named_parameters():
+        if 'log_threshold' in name:
+            print(name)
+
+    # # Check if frozen parameters remain constant
+    # optimizer = optim.SGD(fused_model.parameters(), lr=1e-3, momentum=0.9)
+    # fused_model.train()
+    # for _ in range(5):  # Small number of training steps
+    #     optimizer.zero_grad()
+    #     output = fused_model(input_data)
+    #     loss = output.mean()  # Arbitrary loss function for testing
+    #     loss.backward()
+    #     optimizer.step()
+    #
+    # # Verify if frozen batchnorm parameters are unaffected by updates
+    # with torch.no_grad():
+    #     final_output = fused_model(input_data)
+    #
+    # print("Output difference after training steps:", torch.norm(fused_frozen_output - final_output).item())

@@ -9,15 +9,15 @@ from quantization.fix_ops import fix_quantize_tensor
 class FakeQuantizer(nn.Module):
     """Simulate the quantize and dequantize operations in training time.
 
-  In general, the output of this module is given by
-  x_out = (clamp(round(x / scale + zero_point), quant_min, quant_max) - zero_point) * scale
-  See https://arxiv.org/pdf/1903.08066.pdf
+      In general, the output of this module is given by
+      x_out = (clamp(round(x / scale + zero_point), quant_min, quant_max) - zero_point) * scale
+      See https://arxiv.org/pdf/1903.08066.pdf
 
-  We use symmetric quantization and power-of-2 scaling (Fixed point quantization). That is,
-    zero_point = 0,
-    quant_min = -2^(bitwidth - 1),
-    quant_max = 2^(bitwidth - 1) - 1
-  """
+      We use symmetric quantization and power-of-2 scaling (Fixed point quantization). That is,
+        zero_point = 0,
+        quant_min = -2^(bitwidth - 1),
+        quant_max = 2^(bitwidth - 1) - 1
+    """
     _version = 2
 
     def __init__(self, bitwidth):
@@ -38,6 +38,8 @@ class FakeQuantizer(nn.Module):
         super(FakeQuantizer, self)._save_to_state_dict(destination, prefix, keep_vars)
         destination.pop(prefix + 'quant_enabled')
         destination.pop(prefix + 'domain')
+        destination.pop(prefix + 'bitwidth')
+
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
@@ -45,21 +47,18 @@ class FakeQuantizer(nn.Module):
         ignored_params = ['bitwidth', 'quant_enabled', 'domain']
         ignored_keys = {prefix + name for name in ignored_params}
 
-        for param in ignored_params:
-            state_dict.pop(prefix + param, None)
-
-        # Filter out ignored keys from missing_keys and unexpected_keys lists
         missing_keys[:] = [key for key in missing_keys if key not in ignored_keys]
         unexpected_keys[:] = [key for key in unexpected_keys if key not in ignored_keys]
-
+        # Temporarily override strict mode if missing keys should be ignored
+        if strict:
+            strict = False
+        # # Call the parent class's _load_from_state_dict
+        super(FakeQuantizer, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
+                                                         missing_keys, unexpected_keys, error_msgs)
         # Check for any unexpected keys and print warnings
         for key in unexpected_keys:
             if key in ignored_keys:
                 print('[WARNING] Unexpected key in state dict:', key)
-
-        # Call the parent class's _load_from_state_dict
-        super(FakeQuantizer, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict,
-                                                         missing_keys, unexpected_keys, error_msgs)
 
 
 class TQTQuantizer(FakeQuantizer):
@@ -71,6 +70,11 @@ class TQTQuantizer(FakeQuantizer):
             raise ValueError(
                 "'tensor_type' must be one of {}".format(valid_tensor_types))
         self.tensor_type = tensor_type
+        if method is not None:
+            self.method = method
+        else:
+            self.method = 3 if tensor_type == 'weight' else 2
+
         self.quantize_fn_cls = TQTQuantize
         self.log_threshold = nn.Parameter(torch.tensor([0.0]))
         self.register_buffer('warmup_enabled', torch.tensor([1], dtype=torch.uint8))
@@ -196,7 +200,7 @@ class TQTQuantizer(FakeQuantizer):
         """
         bitwidth = self.bitwidth.item()
         ceil_log2t = torch.ceil(self.log_threshold).item()
-        return [[bitwidth, int(bitwidth - 1 - ceil_log2t)]]
+        return [bitwidth, int(bitwidth - 1 - ceil_log2t)]
 
 
 class TQTQuantize(torch.autograd.Function):
@@ -249,3 +253,20 @@ class TQTQuantize(torch.autograd.Function):
     grad_x = torch.where(is_ge_min_and_le_max, grad_x, 0 * grad_x)
 
     return grad_x, grad_logt, None, None
+
+
+if __name__ == '__main__':
+    tqtq = TQTQuantizer(bitwidth=8, tensor_type='weight')
+    float_tensor = torch.tensor([[0.5, -0.75, 1.25], [0.1, 0.3, -0.2]], dtype=torch.float32)
+    print(tqtq.state_dict())
+    qtensor = tqtq.forward(float_tensor)
+
+    print(qtensor)
+    print(tqtq.export_quant_info())
+    torch.save(tqtq.state_dict(), 'tqt.pth')
+    tqtq.load_state_dict(torch.load('tqt.pth'))
+
+    # print(tqtq.state_dict())
+
+
+

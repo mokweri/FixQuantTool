@@ -278,17 +278,20 @@ def QuantStubE(x, frac):
 
 
 if __name__ == '__main__':
-    # quantizer = FixedPointQuantizer(bitwidth=8)
-    # w_quantizer = quantizer.get_weight_quantizer('weight')
-    # qw = w_quantizer(torch.tensor([0.4847, 0.4672]))
+    float_tensor = torch.tensor([[0.5, -0.75, 1.25], [0.1, 0.3, -0.2]], dtype=torch.float32)
+
+    quantizer = FixedPointQuantizer(bitwidth=8)
+    w_quantizer = quantizer.get_weight_quantizer('weight')
+    qw = w_quantizer(float_tensor)
     # print(type(quantizer.get_frac_b))
-    # print(quantizer.get_frac_w)
+    print(qw)
+    print(quantizer.get_frac_w)
     #
     # print(qw)
     # print(QuantStubF(torch.tensor([0.4847, 0.4672])))
 
-    float_tensor = torch.tensor([[0.5, -0.75, 1.25], [0.1, 0.3, -0.2]], dtype=torch.float32)
-    int_tensor = to_int_tensor(float_tensor, signed=True, n_bits=8, n_frac=3)
 
-    print("Original Float Tensor:\n", float_tensor)
-    print("Quantized Integer Tensor:\n", int_tensor)
+    # int_tensor = to_int_tensor(float_tensor, signed=True, n_bits=8, n_frac=3)
+
+    # print("Original Float Tensor:\n", float_tensor)
+    # print("Quantized Integer Tensor:\n", int_tensor)
