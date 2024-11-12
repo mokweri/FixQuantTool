@@ -199,7 +199,7 @@ class QMaxPool2D(torch.nn.MaxPool2d):
         return super().extra_repr() + f", mod_name={self._mod_name},"
 
     @classmethod
-    def from_float(cls, mod, qconfig):
+    def from_float(cls, mod):
         maxpool = cls(mod.kernel_size, mod.stride, mod.padding, mod.dilation, mod.return_indices, mod.ceil_mode, )
         return maxpool
 
@@ -279,7 +279,7 @@ class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
 
 
 class QElementwiseAdd(nn.Module):
-    def __init__(self, qconfig=None):
+    def __init__(self):
         super().__init__()
 
         self.quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
@@ -306,3 +306,7 @@ class QElementwiseAdd(nn.Module):
         frac_out = self.quantizer.export_quant_info()[1]
         return frac_out
 
+
+def QuantStubF(x):
+    quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
+    return quantizer.forward(x)

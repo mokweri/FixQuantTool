@@ -11,6 +11,7 @@ def fix_quantize_tensor(Tinput, valmin, valmax, scale, zero_point, method):
 
     # return torch.clamp(torch.round(x/scale), quant_min.item(), quant_max.item()) * scale
 
+
 def fake_quantize_per_tensor(x, scale_inv, zero_point, quant_min, quant_max, method, inplace):
     if method == -1:
         # Affine quantization (automatic handling by PyTorch)

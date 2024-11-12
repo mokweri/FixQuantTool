@@ -3,13 +3,15 @@ import torch.nn as nn
 from torch.fx.experimental.optimization import matches_module_pattern, replace_node_module
 from torch.fx.immutable_collections import immutable_list
 
-from quantization.fusedConvBn import  FusedConvBN
+from quantization.fusedConvBn import FusedConvBN
 from quantization.qmodules import (
     QuantizedConv2d,
     QuantizedLinear,
     QMaxPool2D,
     QAdaptiveAvgPool2d,
-    QAvgPool2d
+    QAvgPool2d,
+    QElementwiseAdd,
+    QuantStubF
 )
 
 # for testing
@@ -59,32 +61,91 @@ def fuse_convbn(mod, verbose=False):
                     # conv that has multiple consumers is not fused
                     print('NOOOO')
                 else:
-                    previous_node = node.args[0]
+                    if verbose:
+                        print('{}: Fusing Conv2d with BatchNorm2d --> QFusedConvBN'
+                              .format(str(node.args[0])))
+                    previous_node = node.args[0]    # node with conv
                     bn = module_of_node(gm, node)
                     conv = module_of_previous_node(gm, node)
                     assert isinstance(bn, nn.BatchNorm2d)
                     assert isinstance(conv, nn.Conv2d)
                     fusemod = FusedConvBN.from_float(conv, bn)
+                    fusemod.module_name = str(previous_node).strip()
                     replace_node_module(previous_node, modules, fusemod)
                     node.replace_all_uses_with(previous_node)
                     gm.graph.erase_node(node)
-                gm.graph.lint()
+                    gm.graph.lint()
     gm.recompile()
     gm.delete_all_unused_submodules()
     return gm
 
 
+def create_quantized_model(mod, verbose=False):
+    # fuse the conv bn modules
+    gm = fuse_convbn(mod, verbose=verbose)
+    modules = dict(gm.named_modules())
 
+    # Replace other standard modules
+    for node in gm.graph.nodes:
+        if node.target == 'x':
+            with gm.graph.inserting_after(node):
+                quant_stub = gm.graph.call_function(QuantStubF, args=(node,))
+                node.replace_all_uses_with(quant_stub)
+                quant_stub.name = "QuantStub"
+                # node.name = "x"
+                quant_stub.replace_input_with(quant_stub, node)
 
+        elif node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, FusedConvBN):
+                # print(target_module.module_name)
+                pass
+            elif isinstance(target_module, nn.Conv2d):
+                if verbose:
+                    print('{}: Replacing a Conv2d layer with QuantizedConv2d'
+                          .format(str(node.name)))
+                newConv = QuantizedConv2d.from_float(target_module)
+                newConv.module_name = str(node.name).strip()
+                replace_node_module(node, modules, newConv)
+            elif isinstance(target_module, nn.Linear):
+                if verbose:
+                    print('{}: Replacing a Linear layer with QuantizedLinear'
+                          .format(str(node.name)))
+                newQlinear = QuantizedLinear.from_float(target_module)
+                newQlinear.module_name = str(node.name).strip()
+                replace_node_module(node, modules, newQlinear)
+            elif isinstance(target_module, nn.MaxPool2d):
+                if verbose:
+                    print('{}: Replacing a MaxPool2d layer with QMaxPool2d'. format(str(node.name)))
+                newMaxPool = QMaxPool2D.from_float(target_module)
+                newMaxPool.module_name = str(node.name).strip()
+                replace_node_module(node, modules, newMaxPool)
+            elif isinstance(target_module, nn.AdaptiveAvgPool2d):
+                if verbose:
+                    print('{}: Replacing a AdaptiveAvgPool2d layer with'.format(str(node.name)))
+                newPool = QAdaptiveAvgPool2d.from_float(target_module)
+                newPool.module_name = str(node.name).strip()
+                replace_node_module(node, modules, newPool)
+        elif node.op == "call_function":
+            if node.target.__name__ == "add":
+                with gm.graph.inserting_after(node):
+                    if verbose:
+                        print('{}: Replacing function add with QAdd'.format(str(node.name)))
+                    QAdd = QElementwiseAdd()
+                    QAdd.module_name = str(node.name).strip()
+                    QAdd_node = gm.graph.call_function(QAdd.forward, args=(node.args[0], node.args[1]))
+                    QAdd_node.name = str(node.name).strip()
+                    node.replace_all_uses_with(QAdd_node)
+                gm.graph.erase_node(node)
 
-
-
-
-
+        gm.graph.lint()
+    gm.recompile()
+    return gm
 
 
 if __name__ == '__main__':
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
 
-    model = fuse_convbn(model)
+    # model = fuse_convbn(model)
+    model = create_quantized_model(model, verbose=True)
     print(model)
