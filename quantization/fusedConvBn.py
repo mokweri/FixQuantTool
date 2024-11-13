@@ -203,7 +203,12 @@ class FusedConvBN(nn.Module):
         w, b, gamma, beta = self._get_all_parameters()
         with torch.no_grad():
             recip_sigma_running = torch.rsqrt(self.bn_mod.running_var + self.bn_mod.eps)
-            w.mul_(self.broadcast_correction_weight(gamma * recip_sigma_running))
+            # w.mul_(self.broadcast_correction_weight(gamma * recip_sigma_running))
+
+            w = self.conv_mod.weight.detach().clone()  # Detach to avoid in-place modification error
+            w *= self.broadcast_correction_weight(gamma * recip_sigma_running)  # Modify weight
+            self.conv_mod.weight = nn.Parameter(w)
+
             corrected_mean = self.bn_mod.running_mean - (b if b is not None else 0)
             bias_corrected = beta - gamma * corrected_mean * recip_sigma_running
             if b is not None:

@@ -131,7 +131,6 @@ class QuantizedLinear(nn.Linear):
 
         qweight = self.weight_quantizer.forward(self.weight)
         qbias = self.bias_quantizer.forward(self.bias) if self.bias is not None else None
-
         output = F.linear(input, qweight, qbias)
         output = self.act_quantizer.forward(output)
         return output

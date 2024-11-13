@@ -50,9 +50,11 @@ if __name__ == '__main__':
     train_loader = data_provider.train_loader
     val_loader = data_provider.val_loader
 
-    with tqdm(total=len(train_loader), desc='Validate Loop:', disable=False) as t:
-        for idx, (data, target) in enumerate(train_loader):
+    calib_loader = data_provider.build_sub_train_loader(24,24)
+
+    with tqdm(total=len(calib_loader), desc='Validate Loop:', disable=False) as t:
+        for idx, (data, target) in enumerate(calib_loader):
             print(data.shape)
-            if idx == 1000:
-                break
+            # if idx == 1000:
+            #     break
             t.update(1)

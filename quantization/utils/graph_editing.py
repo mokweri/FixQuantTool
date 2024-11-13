@@ -2,6 +2,7 @@ import torch.fx as fx
 import torch.nn as nn
 from torch.fx.experimental.optimization import matches_module_pattern, replace_node_module
 from torch.fx.immutable_collections import immutable_list
+# from torch.utils.tensorboard.summary import image
 
 from quantization.fusedConvBn import FusedConvBN
 from quantization.qmodules import (
@@ -16,6 +17,7 @@ from quantization.qmodules import (
 
 # for testing
 import torchvision.models as models
+from data_providers.imagenet import ImagenetDataProvider
 
 
 def module_of_node(gm : fx.GraphModule, node : fx.Node):
@@ -143,9 +145,28 @@ def create_quantized_model(mod, verbose=False):
     return gm
 
 
-if __name__ == '__main__':
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+def freeze(model):
+    gm = model
+    modules = dict(gm.named_modules())
+    for node in gm.graph.nodes:
+        if node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, FusedConvBN):
+                target_module.freeze()
 
+
+def calibrate(model, calib_loader):
+    model.eval()
+    model.cuda()
+    for iteration, (input, target) in enumerate(calib_loader):
+        input = input.cuda()
+        output = model(input)
+
+
+if __name__ == '__main__':
+
+
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     # model = fuse_convbn(model)
-    model = create_quantized_model(model, verbose=True)
-    print(model)
+
+    print(model.state_dict())

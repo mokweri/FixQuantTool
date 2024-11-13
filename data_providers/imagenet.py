@@ -31,8 +31,8 @@ class ImagenetDataProvider(DataProvider):
         self._save_path = save_path
         self.image_size = image_size  # int or list of int
         self._valid_transform_dict = {}
-        valid_transforms = self.build_valid_transform()
 
+        valid_transforms = self.build_valid_transform()
         train_dataset = self.train_dataset(self.build_train_transform())
 
         if valid_size is not None:
@@ -189,9 +189,9 @@ class ImagenetDataProvider(DataProvider):
         # used for resetting BN running statistics
         if self.__dict__.get("sub_train_%d" % self.image_size, None) is None:
             if num_worker is None:
-                num_worker = self.train.num_workers
+                num_worker = 4
 
-            n_samples = len(self.train.dataset)
+            n_samples = len(self.train_loader)
             g = torch.Generator()
             g.manual_seed(DataProvider.SUB_SEED)
             rand_indexes = torch.randperm(n_samples, generator=g).tolist()

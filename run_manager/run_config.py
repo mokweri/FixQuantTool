@@ -1,3 +1,5 @@
+from fontTools.misc.cython import returns
+
 from utils import calc_learning_rate, build_optimizer
 from data_providers import ImagenetDataProvider
 from data_providers import Cifar10DataProvider
@@ -16,6 +18,8 @@ class BaseConfig:
         init_lr,
         lr_schedule_type,
         lr_schedule_param,
+        quantizer_lr,
+        quantizer_lr_decay,
         dataset,
         train_batch_size,
         test_batch_size,
@@ -32,6 +36,9 @@ class BaseConfig:
         self.init_lr = init_lr
         self.lr_schedule_type = lr_schedule_type
         self.lr_schedule_param = lr_schedule_param
+
+        self.quantizer_lr = quantizer_lr
+        self.quantizer_lr_decay = quantizer_lr_decay
 
         self.dataset = dataset
         self.train_batch_size = train_batch_size
@@ -74,6 +81,28 @@ class BaseConfig:
             param_group["lr"] = new_lr
         return new_lr
 
+    def adjust_learning_rate_tqt(self, optimizer, train_loader, epoch, batch_idx, ddp=False):
+        """Sets the learning rate to the initial LR decayed by decay ratios"""
+
+        weight_lr_decay_steps = 3000 * (24 / self.train_batch_size)
+        quantizer_lr_decay_steps = 1000 * (24 / self.train_batch_size)
+        weight_lr_decay = 0.94
+
+        step = len(train_loader)*epoch + batch_idx
+
+        for param_group in optimizer.param_groups:
+            group_name = param_group['name']
+            if group_name == 'weight' and step % weight_lr_decay_steps == 0:
+                lr = self.init_lr * (weight_lr_decay ** (step / weight_lr_decay_steps))
+                param_group['lr'] = lr
+                print('Adjust lr at epoch {}, step {}: group_name={}, lr={}'.format(epoch, step, group_name, lr))
+            if group_name == 'quantizer' and step % quantizer_lr_decay_steps == 0:
+                lr = self.quantizer_lr * (
+                        self.quantizer_lr_decay ** (step / quantizer_lr_decay_steps))
+                param_group['lr'] = lr
+                print('Adjust lr at epoch {}, step {}: group_name={}, lr={}'.format(
+                    epoch, step, group_name, lr))
+
     """ data provider """
     @property
     def data_provider(self):
@@ -109,6 +138,10 @@ class BaseConfig:
             self.no_decay_keys,
         )
 
+    def build_optimizer_tqt(self, param_groups):
+        optimizer = torch.optim.Adam(param_groups, self.init_lr, weight_decay=self.weight_decay)
+        return optimizer
+
 
 
 class RunConfig(BaseConfig):
@@ -119,6 +152,8 @@ class RunConfig(BaseConfig):
         init_lr=0.05,
         lr_schedule_type="cosine",
         lr_schedule_param=None,
+        quantizer_lr=1e-2,
+        quantizer_lr_decay=0.5,
         dataset="imagenet", # 'cifar10' or 'cifar100'
         train_batch_size=32,
         test_batch_size=16,
@@ -139,6 +174,8 @@ class RunConfig(BaseConfig):
             init_lr,
             lr_schedule_type,
             lr_schedule_param,
+            quantizer_lr,
+            quantizer_lr_decay,
             dataset,
             train_batch_size,
             test_batch_size,

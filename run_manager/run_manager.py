@@ -40,8 +40,8 @@ class RunManager:
             self.device = torch.device("cpu")
 
         # criterion
-        self.train_criterion = nn.CrossEntropyLoss()
-        self.test_criterion = nn.CrossEntropyLoss()
+        self.train_criterion = nn.CrossEntropyLoss().to(self.device)
+        self.test_criterion = nn.CrossEntropyLoss().to(self.device)
 
         # optimizer
         if self.run_config.no_decay_keys:
@@ -62,7 +62,20 @@ class RunManager:
                 for param in self.network.parameters():
                     if param.requires_grad:
                         net_params.append(param)
-        self.optimizer = self.run_config.build_optimizer(net_params)
+
+        # optimizer based on param groups - tqt
+        param_groups = [{
+            'params': self.quantizer_parameters(self.net),
+            'lr': self.run_config.quantizer_lr,
+            'name': 'quantizer'
+        }, {
+            'params': self.non_quantizer_parameters(self.net),
+            'lr': self.run_config.init_lr,
+            'name': 'weight'
+        }]
+
+        # self.optimizer = self.run_config.build_optimizer(net_params)
+        self.optimizer = self.run_config.build_optimizer_tqt(param_groups)
 
     """ save path and log path """
 
@@ -173,17 +186,25 @@ class RunManager:
             for i, (images, labels) in enumerate(self.run_config.train_loader):
                 data_time.update(time.time() - end)
 
-                new_lr = self.run_config.adjust_learning_rate(
-                    self.optimizer,
-                    self.run_config.train_loader,
-                    epoch, i,
-                    ddp=False)
+                # new_lr = self.run_config.adjust_learning_rate(self.optimizer, self.run_config.train_loader, epoch, i, ddp=False)
+                self.run_config.adjust_learning_rate_tqt(self.optimizer, self.run_config.train_loader, epoch, i,
+                                                         ddp=False)
 
                 images, labels = images.to(self.device), labels.to(self.device)
 
                 # compute output
                 output = self.net(images)
                 loss = self.train_criterion(output, labels)
+
+                # tqt quantizer stuff
+                l2_decay = 1e-4
+                l2_norm = 0.0
+                quantizer_norm = True
+                q_params = self.quantizer_parameters(self.net)
+                for param in q_params:
+                    l2_norm += torch.pow(param, 2.0)[0]
+                if quantizer_norm:
+                    loss += l2_decay * torch.sqrt(l2_norm)
 
                 # compute gradient and do SGD step
                 self.optimizer.zero_grad()
@@ -201,7 +222,7 @@ class RunManager:
                         "loss": losses.avg,
                         'Acc@1': top1.avg.item(),
                         'Acc@5': top5.avg.item(),
-                        "lr": new_lr,
+                        # "lr": new_lr,
                         "data_time": data_time.avg,
                     }
                 )
@@ -209,7 +230,7 @@ class RunManager:
                 end = time.time()
         return losses.avg, top1.avg, top5.avg
 
-    def train(self, args, warmup_epoch=0, warmup_lr=0):
+    def train(self, warmup_epoch=0):
 
         for epoch in range(self.start_epoch, self.run_config.n_epochs + warmup_epoch):
             train_loss, train_top1, train_top5 = self.train_one_epoch(epoch)
@@ -231,3 +252,16 @@ class RunManager:
                 },
                 is_best=is_best,
             )
+
+    @staticmethod
+    def quantizer_parameters(model):
+        return [
+            param for name, param in model.named_parameters()
+            if 'log_threshold' in name
+        ]
+    @staticmethod
+    def non_quantizer_parameters(model):
+        return [
+            param for name, param in model.named_parameters()
+            if 'log_threshold' not in name
+        ]

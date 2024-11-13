@@ -105,10 +105,7 @@ class TQTQuantizer(FakeQuantizer):
             mn = 0
             mx = np.max(np.abs(x))
             y = x.astype(np.float32) if x.dtype == np.float16 else x
-            hist, bin_edges = np.histogram((np.abs(y)),
-                                           'sqrt',
-                                           range=(mn, mx),
-                                           density=True)
+            hist, bin_edges = np.histogram((np.abs(y)), 'sqrt', range=(mn, mx), density=True)
             hist = hist.astype(x.dtype)
             bin_edges = bin_edges.astype(x.dtype)
             pdf = hist / np.sum(hist)
@@ -151,6 +148,9 @@ class TQTQuantizer(FakeQuantizer):
         return x
 
     def _quantize(self, x, log_threshold, domain, method):
+        device = x.device
+        log_threshold = log_threshold.to(device)
+        domain = domain.to(device)
         return self.quantize_fn_cls.apply(x, log_threshold, domain, method)
 
     def _quantize_with_warmup(self, x, log_threshold, domain, method):
@@ -210,49 +210,47 @@ class TQTQuantize(torch.autograd.Function):
 
   @staticmethod
   def forward(ctx, x, logt, domain, method):
-    #scale = torch.pow(torch.tensor(2.0, device=x.device), torch.ceil(logt)) / domain
-    #scale = torch.pow(2.0, torch.ceil(logt)) / domain
-    scale = 2**(torch.ceil(logt)) / domain
-    quant_max = domain - 1
-    quant_min = -domain
+      # scale = torch.pow(torch.tensor(2.0, device=x.device), torch.ceil(logt)) / domain
+      #scale = torch.pow(2.0, torch.ceil(logt)) / domain
+      scale = 2**(torch.ceil(logt)) / domain
 
-    ctx.save_for_backward(x, scale, quant_max, quant_min, logt)
+      quant_max = domain - 1
+      quant_min = -domain
 
-    x = x.clone()
-    return fix_quantize_tensor(x, quant_min, quant_max, scale, 0, 2)
+      ctx.save_for_backward(x, scale, quant_max, quant_min, logt)
+      x = x.clone()
+      return fix_quantize_tensor(x, quant_min, quant_max, scale, 0, 2)
 
 
   @staticmethod
   def backward(ctx, grad_output):
-    x, scale, quant_max, quant_min, logt = ctx.saved_tensors
+      x, scale, quant_max, quant_min, logt = ctx.saved_tensors
+      scaled_x = x / scale
 
-    scaled_x = x / scale
 
-    # Python equivalent to NndctFixNeuron rounding implementation which is consistent with hardware runtime.
-    # Round -1.5 to -1 instead of -2.
-    rounded_scaled_x = torch.where(
-        (scaled_x < 0) & (scaled_x - torch.floor(scaled_x) == 0.5),
-        torch.ceil(scaled_x), torch.round(scaled_x))
+      # Python equivalent to NndctFixNeuron rounding implementation which is consistent with hardware runtime.
+      # Round -1.5 to -1 instead of -2.
+      rounded_scaled_x = torch.where(
+          (scaled_x < 0) & (scaled_x - torch.floor(scaled_x) == 0.5),
+          torch.ceil(scaled_x), torch.round(scaled_x))
 
-    is_lt_min = rounded_scaled_x < quant_min
-    is_gt_max = rounded_scaled_x > quant_max
-    is_ge_min_and_le_max = ~is_lt_min & ~is_gt_max
+      is_lt_min = rounded_scaled_x < quant_min
+      is_gt_max = rounded_scaled_x > quant_max
+      is_ge_min_and_le_max = ~is_lt_min & ~is_gt_max
 
-    # Equation (7) in section 3.3
-    #grad_logt = torch.ones(grad_output.shape, dtype=grad_output.dtype, device=grad_output.device) * scale * math.log(2)
-    grad_logt = grad_output * scale * math.log(2)
-    grad_logt = torch.where(is_ge_min_and_le_max,
-                            grad_logt * (rounded_scaled_x - scaled_x),
-                            grad_logt)
-    grad_logt = torch.where(is_lt_min, grad_logt * quant_min, grad_logt)
-    grad_logt = torch.where(is_gt_max, grad_logt * quant_max, grad_logt)
-    grad_logt = grad_logt.sum().expand_as(logt)
+      # Equation (7) in section 3.3
+      #grad_logt = torch.ones(grad_output.shape, dtype=grad_output.dtype, device=grad_output.device) * scale * math.log(2)
+      grad_logt = grad_output * scale * math.log(2)
+      grad_logt = torch.where(is_ge_min_and_le_max, grad_logt * (rounded_scaled_x - scaled_x), grad_logt)
+      grad_logt = torch.where(is_lt_min, grad_logt * quant_min, grad_logt)
+      grad_logt = torch.where(is_gt_max, grad_logt * quant_max, grad_logt)
+      grad_logt = grad_logt.sum().expand_as(logt)
 
-    # Equation (8)
-    grad_x = grad_output.clone()
-    grad_x = torch.where(is_ge_min_and_le_max, grad_x, 0 * grad_x)
+      # Equation (8)
+      grad_x = grad_output.clone()
+      grad_x = torch.where(is_ge_min_and_le_max, grad_x, 0 * grad_x)
 
-    return grad_x, grad_logt, None, None
+      return grad_x, grad_logt, None, None
 
 
 if __name__ == '__main__':

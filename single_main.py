@@ -2,12 +2,11 @@ import argparse
 import numpy as np
 import random
 import torchvision.models as models
-
 import torch
 
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
-
+from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
 
@@ -16,18 +15,22 @@ parser.add_argument("--train_batch_size", type=int, default=64)
 parser.add_argument("--test_batch_size", type=int, default=64)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=50, type=int, help='No. of training epochs.')
+                    default=5, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr',type=float,
                     default=-1, metavar='LR', help='warmup learning rate')
 parser.add_argument('--init_lr', '--learning-rate',
-                    default=1e-4, type=float, metavar='LR', help='initial learning rate')
+                    default=1e-5, type=float, metavar='LR', help='initial learning rate')
+parser.add_argument('--quantizer_lr',
+                    default=1e-2, type=float, help='Initial learning rate of quantizer.')
+parser.add_argument('--quantizer_lr_decay',
+                    default=0.5, type=int, help='Learning rate decay ratio of quantizer.')
 
 parser.add_argument('--momentum',
                     default=0.9, type=float, metavar='M', help='momentum')
 parser.add_argument('--no_nesterov', default=False)
-parser.add_argument('--weight_decay', default=1e-5, type=float,
+parser.add_argument('--weight_decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument("--train_criterion", type=str, default="ce",choices=["ce"])
 parser.add_argument("--test_criterion", type=str, default="ce",choices=["ce"])
@@ -65,25 +68,35 @@ parser.add_argument('--output_dir',
 parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
+
 if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
+
+    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    data_provider = ImagenetDataProvider()
+    calib_loader = data_provider.build_sub_train_loader(24, 24)
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    model.to(device)
+    #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    model = create_quantized_model(model, verbose=False)
+    # freeze(model)
+    calibrate(model, calib_loader)
+
     run_config = RunConfig(**args.__dict__,)
 
     print("Run configurations:")
     for k, v in run_config.config.items():
         print("\t%s: %s" % (k, v))
 
-    run_manager = RunManager(args.save_dir, model, run_config)
+    with torch.autograd.set_detect_anomaly(True):
+        run_manager = RunManager(args.save_dir, model, run_config)
+        run_manager.train()
 
-    run_manager.validate(0)
+    # run_manager.validate(0)
 
 
