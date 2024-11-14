@@ -238,8 +238,8 @@ class RunManager:
             if (epoch + 1) % self.run_config.validation_frequency == 0:
                 val_loss, val_acc, val_acc5 = self.validate( epoch=epoch, is_test=False)
 
-                is_best = np.mean(val_acc) > self.best_acc
-                self.best_acc = max(self.best_acc, np.mean(val_acc))
+                is_best = val_acc > self.best_acc
+                self.best_acc = max(self.best_acc, val_acc)
             else:
                 is_best = False
 

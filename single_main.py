@@ -15,7 +15,7 @@ parser.add_argument("--train_batch_size", type=int, default=64)
 parser.add_argument("--test_batch_size", type=int, default=64)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=5, type=int, help='No. of training epochs.')
+                    default=3, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr',type=float,
