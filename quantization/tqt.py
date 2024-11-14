@@ -84,61 +84,102 @@ class TQTQuantizer(FakeQuantizer):
     def _init_threshold(self, x):
         """See Table 2 in https://arxiv.org/pdf/1903.08066.pdf"""
 
+        def torch_interp(x, xp, fp):
+            """
+            Mimics np.interp for 1D linear interpolation in PyTorch.
+
+            Args:
+                x (torch.Tensor): The x-coordinates to interpolate at.
+                xp (torch.Tensor): The x-coordinates of the data points, must be sorted.
+                fp (torch.Tensor): The y-coordinates of the data points.
+
+            Returns:
+                torch.Tensor: Interpolated values, same shape as x.
+            """
+
+            # Find indices where xp is smaller or equal to x
+            indices = torch.searchsorted(xp, x, right=True) - 1
+            indices = torch.clamp(indices, 0, len(xp) - 2)
+
+            x0, x1 = xp[indices], xp[indices + 1]
+            y0, y1 = fp[indices], fp[indices + 1]
+
+
+            slope = (y1 - y0) / (x1 - x0)
+            return y0 + slope * (x - x0)
+
         def _max(x):
-            return np.max(np.abs(x))
+            return torch.max(torch.abs(x))
 
         def _3sd(x):
-            y = x.astype(np.float32) if x.dtype == np.float16 else x
-            return np.abs(np.mean(y + 1e-6)) + 3 * np.std(y)
+            eps = torch.tensor(1e-8, device=x.device)
+            # x += eps
+            mean_value = torch.tensor([x.mean().abs().data], device=x.device) + eps
+            std_value = x.std().data
+            return mean_value + 3 * std_value
 
         def _kl_j(x):
-            """
-            Ref paper (Algorithm 1):
-            "Quantizing Convolutional Neural Networks for Low-Power
-            High-Throughput Inference Engines" - Sean Settle et al.
-            https://arxiv.org/pdf/1805.07941.pdf
-            """
-
-            def calculate_kl_j(x, y):
-                return np.sum((x - y) * np.log2(x / y))
-
             mn = 0
-            mx = np.max(np.abs(x))
-            y = x.astype(np.float32) if x.dtype == np.float16 else x
-            hist, bin_edges = np.histogram((np.abs(y)), 'sqrt', range=(mn, mx), density=True)
-            hist = hist.astype(x.dtype)
-            bin_edges = bin_edges.astype(x.dtype)
-            pdf = hist / np.sum(hist)
-            cdf = np.cumsum(pdf)
-            n = pow(2, self.bitwidth.item() - 1)
+            mx = torch.max(torch.abs(x))
+            x = x.to(torch.float32)  # Ensure float32 for precision
+
+            def calculate_kl_divergence(p, q):
+                mask = (p != 0) & (q != 0)
+                return torch.sum(p[mask] * torch.log2(p[mask] / q[mask]))
+
+            # Manually calculate histogram
+            bins = int(np.sqrt(x.numel()))
+            bin_edges = torch.linspace(mn, mx, bins + 1)
+            mx = mx.item()
+            hist = torch.histc(x.abs(), bins=bins, min=mn, max=mx)
+            pdf = hist / hist.sum()
+            cdf = torch.cumsum(pdf, dim=0)
+
+            # Threshold and KL divergence calculations
+            n = 2 ** (self.bitwidth - 1)
             threshold = []
             d = []
-            if n + 1 > len(bin_edges) - 1:
-                return bin_edges[(-1)]
-            else:
-                for i in range(n + 1, len(bin_edges), 1):
-                    threshold_tmp = (i + 0.5) * (bin_edges[1] - bin_edges[0])
-                    threshold = np.concatenate((threshold, [threshold_tmp]))
-                    p = np.copy(cdf)
-                    p[i - 1:] = 1
-                    x = np.linspace(0.0, 1.0, n)
-                    xp = np.linspace(0.0, 1.0, i)
-                    fp = p[:i]
-                    p_interp = np.interp(x, xp, fp)
-                    x = np.linspace(0.0, 1.0, i)
-                    xp = np.linspace(0.0, 1.0, n)
-                    fp = p_interp
-                    q_interp = np.interp(x, xp, fp)
-                    q = np.copy(p)
-                    q[:i] = q_interp
-                    d_tmp = calculate_kl_j(cdf[np.nonzero(cdf)], q[np.nonzero(cdf)])
-                    d = np.concatenate((d, [d_tmp]))
 
-                return threshold[np.argmin(d)]
+            if n + 1 > len(bin_edges) - 1:
+                return bin_edges[-1]
+            else:
+                for i in range(n + 1, len(bin_edges)):
+                    threshold_tmp = (i + 0.5) * (bin_edges[1] - bin_edges[0])
+                    threshold.append(threshold_tmp)
+
+                    # Copy and interpolate distributions
+                    p = cdf.clone()
+                    p[i:] = 1
+                    n = int(n.item()) if isinstance(n, torch.Tensor) else int(n)
+                    interp_x = torch.linspace(torch.tensor(0.0, device=x.device),
+                                              torch.tensor(1.0, device=x.device), n, device=x.device)
+                    interp_fp = p[:i]
+                    xp = torch.linspace(torch.tensor(0.0, device=x.device),
+                                        torch.tensor(1.0, device=x.device), i, device=x.device)
+                    p_interp = torch_interp(interp_x, xp, interp_fp)
+
+                    # Ensure the shapes match exactly
+                    if p_interp.shape[0] < i:
+                        # Pad p_interp if it has fewer elements
+                        padding = torch.zeros(i - p_interp.shape[0], device=p_interp.device)
+                        p_interp = torch.cat([p_interp, padding])
+                    elif p_interp.shape[0] > i:
+                        # Truncate p_interp if it has more elements
+                        p_interp = p_interp[:i]
+
+                    q_interp = torch.zeros_like(p)
+                    q_interp[:i] = p_interp
+                    q_interp[i:] = p[i:]
+
+                    d_tmp = calculate_kl_divergence(cdf, q_interp)
+                    d.append(d_tmp.item())
+
+                threshold_idx = torch.tensor(d).argmin()
+                return threshold[threshold_idx]
 
         init_scheme = {'weight': _3sd, 'act': _kl_j}
         # init_scheme = {'weight': _max, 'act': _kl_j}
-        data = x.detach().cpu().numpy()
+        data = x.clone()
         th = init_scheme[self.tensor_type](data)
 
         return torch.tensor([th], dtype=x.dtype, device=x.device)

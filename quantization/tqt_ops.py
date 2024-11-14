@@ -4,56 +4,6 @@ import math
 import torch.nn.functional as F
 
 
-def kl_divergence(ha, hb):
-    """
-        ans = J_{kl}(a,b)
-    """
-    return torch.sum(ha * torch.log(ha / hb))
-
-
-def quantize_bins_and_expand(dist, quant_bins):
-    dist_len = dist.shape[0]
-    width = math.floor(1. * dist_len / quant_bins)
-    dist_q = torch.zeros([quant_bins])
-    dist_e = 0. * dist
-    for i in range(quant_bins):
-        if i != quant_bins - 1:
-            dist_q[i] = dist[i * width:(i + 1) * width].sum()
-            width_preserve = width - (dist[i * width:(i + 1) * width]== 0).sum()
-            if width_preserve == 0:
-                dist_e[i * width:(i + 1) * width] = 0
-            else:
-                dist_e[i * width:(i + 1) * width] = dist_q[i] / width_preserve
-        else:
-            dist_q[i] = dist[i * width:].sum()
-            width_preserve = width - (dist[i * width:] == 0).sum()
-            if width_preserve == 0:
-                dist_e[i * width:] = 0
-            else:
-                dist_e[i * width:] = dist_q[i] / width_preserve
-    return dist_e * (dist != 0)
-
-
-def _calc_threshold(x, bin_number=2048, cali_number=128, eps=1e-12):
-    q = x.flatten().data
-    dist = torch.histc(q, bins=bin_number) + eps
-    bin_width = (q.max() - q.min()) / bin_number
-    divergence = torch.zeros([bin_number]) * 1.0
-
-    for i in range(cali_number, bin_number):
-        ref_dist = dist[:i].clone()
-        outliers_count = dist[i:].sum()
-        ref_dist[-1] += outliers_count
-        ref_dist /= ref_dist.sum()
-        can_dist = quantize_bins_and_expand(dist[:i], cali_number)
-        can_dist /= can_dist.sum()
-        divergence[i] = kl_divergence(ref_dist, can_dist)
-    m, m_idx = torch.min(divergence[cali_number:], 0)
-    threshold = q.min() + (m_idx + cali_number + 0.5) * bin_width + eps
-    log2_t = torch.tensor([torch.log2(threshold)])
-    return log2_t
-
-
 def _init_threshold(x):
     """See Table 2 in https://arxiv.org/pdf/1903.08066.pdf"""
 
@@ -112,6 +62,67 @@ def _init_threshold(x):
                 d = np.concatenate((d, [d_tmp]))
 
             return threshold[np.argmin(d)]
+    return _kl_j(x)
+
+
+def _init_threshold2(x):
+    def _max(x):
+        return torch.max(torch.abs(x))
+
+    def _3sd(x):
+        eps = 1e-8
+        # x += eps
+        mean_value = torch.tensor([x.mean().abs().data]) + eps
+        std_value = x.std().data
+        return mean_value + 3 * std_value
+
+    def _kl_j(x, bitwidth=8):
+        mn = 0
+        mx = torch.max(torch.abs(x))
+        x = x.to(torch.float32)  # Ensure float32 for precision
+        x = x.to("cuda")
+
+        def calculate_kl_divergence(p, q):
+            mask = (p != 0) & (q != 0)
+            return torch.sum(p[mask] * torch.log2(p[mask] / q[mask]))
+
+        # Manually calculate histogram
+        bins = int(np.sqrt(x.numel()))
+        bin_edges = torch.linspace(mn, mx, bins + 1)
+        hist = torch.histc(x.abs(), bins=bins, min=mn, max=mx)
+        pdf = hist / hist.sum()
+        cdf = torch.cumsum(pdf, dim=0)
+
+        # Threshold and KL divergence calculations
+        n = 2 ** (bitwidth - 1)
+        threshold = []
+        d = []
+
+        if n + 1 > len(bin_edges) - 1:
+            return bin_edges[-1]
+        else:
+            for i in range(n + 1, len(bin_edges)):
+                threshold_tmp = (i + 0.5) * (bin_edges[1] - bin_edges[0])
+                threshold.append(threshold_tmp)
+
+                # Copy and interpolate distributions
+                p = cdf.clone()
+                p[i:] = 1
+                interp_x = torch.linspace(0.0, 1.0, n)
+                interp_fp = p[:i]
+                xp = torch.linspace(0.0, 1.0, i)
+                p_interp = torch.interp(interp_x, xp, interp_fp)
+
+                q_interp = torch.zeros_like(p)
+                q_interp[:i] = p_interp
+                q_interp[i:] = p[i:]
+
+                d_tmp = calculate_kl_divergence(cdf, q_interp)
+                d.append(d_tmp.item())
+
+            threshold_idx = torch.tensor(d).argmin()
+            return threshold[threshold_idx]
+
     return _kl_j(x)
 
 def _cdf_measure(x, y, measure_name='Kullback-Leibler-J'):
@@ -186,7 +197,7 @@ if __name__ == '__main__':
 
         def init_threshold(self, x):
             th = _init_threshold(x)
-            return np.log2(th)
+            return th
 
     class Example2:
         def __init__(self, bitwidth=8, tensor_type='act'):
@@ -194,18 +205,21 @@ if __name__ == '__main__':
             self.tensor_type = tensor_type
 
         def init_threshold(self, x):
-            return _calc_threshold(x)
+            return _init_threshold2(x)
 
     # Test setup
+    weight_shape = (16, 3, 3, 3)
+    # Generate the random weight tensor with a normal distribution
+    x = torch.randn(weight_shape)
+    x2 = x.clone()
+    y = x2.numpy()
+
     example = Example(bitwidth=8, tensor_type='act')
     example2 = Example2(bitwidth=8, tensor_type='act')
-    x = np.random.randn(2000).astype(np.float32)
-    y = torch.from_numpy(x)
-    y.cuda()
 
     # Calculate threshold in PyTorch
-    threshold_numpy = example.init_threshold(x)
+    threshold_numpy = example.init_threshold(y)
     print("Threshold (Numpy):", threshold_numpy)
 
-    threshold_torch = example2.init_threshold(y)
+    threshold_torch = example2.init_threshold(x)
     print("Threshold (Torch):", threshold_torch)

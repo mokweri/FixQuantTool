@@ -97,6 +97,6 @@ if __name__ == '__main__':
         run_manager = RunManager(args.save_dir, model, run_config)
         run_manager.train()
 
-    # run_manager.validate(0)
+    run_manager.validate(0)
 
 
