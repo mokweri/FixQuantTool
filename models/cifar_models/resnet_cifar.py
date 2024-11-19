@@ -254,7 +254,7 @@ if __name__ == '__main__':
     net = resnet18_cifar10()
     model = models.resnet18()
     print(model)
-    y = net(torch.randn(12, 3, 224, 224))
+    y = net(torch.randn(12, 3, 32, 32))
     print(y.size())
 
 

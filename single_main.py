@@ -11,11 +11,11 @@ from quantization.utils.graph_editing import create_quantized_model,freeze,calib
 parser = argparse.ArgumentParser(description="FixQuant Tool")
 
 # Hyperparameters
-parser.add_argument("--train_batch_size", type=int, default=64)
-parser.add_argument("--test_batch_size", type=int, default=64)
+parser.add_argument("--train_batch_size", type=int, default=32)
+parser.add_argument("--test_batch_size", type=int, default=32)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=3, type=int, help='No. of training epochs.')
+                    default=2, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr',type=float,
@@ -81,22 +81,23 @@ if __name__ == '__main__':
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    #model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    model = create_quantized_model(model, verbose=False)
-    # freeze(model)
-    calibrate(model, calib_loader)
+    # model = create_quantized_model(model, verbose=False)
+    # # freeze(model)
+    # calibrate(model, calib_loader)
 
-    run_config = RunConfig(**args.__dict__,)
+    run_config = RunConfig(**args.__dict__,is_qat=True)
 
     print("Run configurations:")
     for k, v in run_config.config.items():
         print("\t%s: %s" % (k, v))
 
-    with torch.autograd.set_detect_anomaly(True):
-        run_manager = RunManager(args.save_dir, model, run_config)
-        run_manager.train()
+    run_manager = RunManager(args.save_dir, model, run_config)
+    # with torch.autograd.set_detect_anomaly(True):
+    #     run_manager.train()
 
-    run_manager.validate(0)
+    # run_manager.validate(0)
 
 

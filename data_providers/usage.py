@@ -21,8 +21,8 @@ if __name__ == '__main__':
     #             break
     #         t.update(1)
 
-    """
-    Cifar10DataProvider.DEFAULT_PATH = '/home/obed/Documents/cifar_data'
+
+    # Cifar10DataProvider.DEFAULT_PATH = '/home/obed/Documents/cifar_data'
     data_provider = Cifar10DataProvider(
         train_batch_size=62,
         test_batch_size=32,
@@ -38,23 +38,23 @@ if __name__ == '__main__':
             if idx == 100:
                 break
             t.update(1)
-    """
 
-    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
-    data_provider = ImagenetDataProvider(
-        train_batch_size=128,
-        test_batch_size=62,
-        image_size=224,
-        pin_memory=True,
-    )
-    train_loader = data_provider.train_loader
-    val_loader = data_provider.val_loader
 
-    calib_loader = data_provider.build_sub_train_loader(24,24)
-
-    with tqdm(total=len(calib_loader), desc='Validate Loop:', disable=False) as t:
-        for idx, (data, target) in enumerate(calib_loader):
-            print(data.shape)
-            # if idx == 1000:
-            #     break
-            t.update(1)
+    # ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    # data_provider = ImagenetDataProvider(
+    #     train_batch_size=128,
+    #     test_batch_size=62,
+    #     image_size=224,
+    #     pin_memory=True,
+    # )
+    # train_loader = data_provider.train_loader
+    # val_loader = data_provider.val_loader
+    #
+    # calib_loader = data_provider.build_sub_train_loader(24,24)
+    #
+    # with tqdm(total=len(calib_loader), desc='Validate Loop:', disable=False) as t:
+    #     for idx, (data, target) in enumerate(calib_loader):
+    #         print(data.shape)
+    #         # if idx == 1000:
+    #         #     break
+    #         t.update(1)

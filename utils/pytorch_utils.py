@@ -207,12 +207,8 @@ def build_optimizer(
 
     if opt_type == "sgd":
         opt_param = {} if opt_param is None else opt_param
-        momentum, nesterov = opt_param.get("momentum", 0.9), opt_param.get(
-            "nesterov", True
-        )
-        optimizer = torch.optim.SGD(
-            net_params, init_lr, momentum=momentum, nesterov=nesterov
-        )
+        momentum, nesterov = opt_param.get("momentum", 0.9), opt_param.get("nesterov", True)
+        optimizer = torch.optim.SGD(net_params, init_lr, momentum=momentum, nesterov=nesterov)
     elif opt_type == "adam":
         optimizer = torch.optim.Adam(net_params, init_lr)
     else:
@@ -221,7 +217,6 @@ def build_optimizer(
 
 
 """ learning rate schedule """
-
 
 def calc_learning_rate(init_lr, epoch, n_epochs, batch_idx, n_batch, train_loader_length,
                        lr_schedule_type="cosine", ddp=False, warmup_epochs=0, hvd_size=1,
@@ -257,8 +252,6 @@ def save_checkpoint(state, is_best, directory):
     filepath = os.path.join(directory, 'model.pth')
     torch.save(state, filepath)
     if is_best:
-        best_acc1 = state['best_acc1'].item()
-        best_filepath = os.path.join(directory, 'model_best_%5.3f.pth' % best_acc1)
+        best_filepath = os.path.join(directory, "model_best.pth")
         shutil.copyfile(filepath, best_filepath)
-        print('Saving best ckpt to {}, acc1: {}'.format(best_filepath, best_acc1))
     return best_filepath if is_best else filepath

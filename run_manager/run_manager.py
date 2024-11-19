@@ -44,38 +44,39 @@ class RunManager:
         self.test_criterion = nn.CrossEntropyLoss().to(self.device)
 
         # optimizer
-        if self.run_config.no_decay_keys:
-            keys = self.run_config.no_decay_keys.split("#")
-            no_decay_params = []
-            decay_params = []
-            for name, param in self.net.named_parameters():
-                if any(key in name for key in keys):
-                    no_decay_params.append(param)
-                else:
-                    decay_params.append(param)
-            net_params = [decay_params, no_decay_params]
+        if self.run_config.is_qat:
+            """ optimizer based on param groups - tqt """
+            net_params = [{
+                'params': self.quantizer_parameters(self.net),
+                'lr': self.run_config.quantizer_lr,
+                'name': 'quantizer'
+            }, {
+                'params': self.non_quantizer_parameters(self.net),
+                'lr': self.run_config.init_lr,
+                'name': 'weight'
+            }]
         else:
-            try:
-                net_params = self.network.weight_parameters()
-            except Exception:
-                net_params = []
-                for param in self.network.parameters():
-                    if param.requires_grad:
-                        net_params.append(param)
+            """ Normal training parameters """
+            if self.run_config.no_decay_keys:
+                keys = self.run_config.no_decay_keys.split("#")
+                no_decay_params = []
+                decay_params = []
+                for name, param in self.net.named_parameters():
+                    if any(key in name for key in keys):
+                        no_decay_params.append(param)
+                    else:
+                        decay_params.append(param)
+                net_params = [decay_params, no_decay_params]
+            else:
+                try:
+                    net_params = self.network.weight_parameters()
+                except Exception:
+                    net_params = []
+                    for param in self.network.parameters():
+                        if param.requires_grad:
+                            net_params.append(param)
 
-        # optimizer based on param groups - tqt
-        param_groups = [{
-            'params': self.quantizer_parameters(self.net),
-            'lr': self.run_config.quantizer_lr,
-            'name': 'quantizer'
-        }, {
-            'params': self.non_quantizer_parameters(self.net),
-            'lr': self.run_config.init_lr,
-            'name': 'weight'
-        }]
-
-        # self.optimizer = self.run_config.build_optimizer(net_params)
-        self.optimizer = self.run_config.build_optimizer_tqt(param_groups)
+        self.optimizer = self.run_config.build_optimizer(net_params)
 
     """ save path and log path """
 
@@ -152,6 +153,7 @@ class RunManager:
                     # compute output
                     output = net(images)
                     loss = self.test_criterion(output, labels)
+
                     # measure accuracy and record loss
                     acc1, acc5 = accuracy(output, labels, topk=(1, 5))
                     losses.update(loss.item(), images.size(0))
@@ -187,8 +189,7 @@ class RunManager:
                 data_time.update(time.time() - end)
 
                 # new_lr = self.run_config.adjust_learning_rate(self.optimizer, self.run_config.train_loader, epoch, i, ddp=False)
-                self.run_config.adjust_learning_rate_tqt(self.optimizer, self.run_config.train_loader, epoch, i,
-                                                         ddp=False)
+                self.run_config.adjust_learning_rate(self.optimizer, self.run_config.train_loader, epoch, i, ddp=False)
 
                 images, labels = images.to(self.device), labels.to(self.device)
 
@@ -197,14 +198,15 @@ class RunManager:
                 loss = self.train_criterion(output, labels)
 
                 # tqt quantizer stuff
-                l2_decay = 1e-4
-                l2_norm = 0.0
-                quantizer_norm = True
-                q_params = self.quantizer_parameters(self.net)
-                for param in q_params:
-                    l2_norm += torch.pow(param, 2.0)[0]
-                if quantizer_norm:
-                    loss += l2_decay * torch.sqrt(l2_norm)
+                if self.run_config.is_qat:
+                    l2_decay = 1e-4
+                    l2_norm = 0.0
+                    quantizer_norm = True
+                    q_params = self.quantizer_parameters(self.net)
+                    for param in q_params:
+                        l2_norm += torch.pow(param, 2.0)[0]
+                    if quantizer_norm:
+                        loss += l2_decay * torch.sqrt(l2_norm)
 
                 # compute gradient and do SGD step
                 self.optimizer.zero_grad()

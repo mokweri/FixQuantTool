@@ -18,6 +18,7 @@ class BaseConfig:
         init_lr,
         lr_schedule_type,
         lr_schedule_param,
+        is_qat,
         quantizer_lr,
         quantizer_lr_decay,
         dataset,
@@ -37,6 +38,7 @@ class BaseConfig:
         self.lr_schedule_type = lr_schedule_type
         self.lr_schedule_param = lr_schedule_param
 
+        self.is_qat = is_qat
         self.quantizer_lr = quantizer_lr
         self.quantizer_lr_decay = quantizer_lr_decay
 
@@ -63,45 +65,44 @@ class BaseConfig:
 
     """ learning rate """
     def adjust_learning_rate(self, optimizer, train_loader, epoch, batch_idx, ddp=False):
-        """adjust learning of a given optimizer and return the new learning rate"""
-        new_lr = calc_learning_rate(
-            init_lr=self.init_lr,
-            epoch=epoch,
-            n_epochs=self.n_epochs,
-            batch_idx=batch_idx,
-            n_batch=len(train_loader),
-            train_loader_length=len(train_loader),
-            lr_schedule_type="cosine",
-            ddp=ddp,  # Set to True if using DDP
-            warmup_epochs=self.warmup_epochs,
-            hvd_size=1,
-            batches_per_allreduce=1
-        )
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = new_lr
-        return new_lr
+        if self.is_qat:
+            """FOR TQT: Sets the learning rate to the initial LR decayed by decay ratios"""
+            weight_lr_decay_steps = 3000 * (24 / self.train_batch_size)
+            quantizer_lr_decay_steps = 1000 * (24 / self.train_batch_size)
+            weight_lr_decay = 0.94
 
-    def adjust_learning_rate_tqt(self, optimizer, train_loader, epoch, batch_idx, ddp=False):
-        """Sets the learning rate to the initial LR decayed by decay ratios"""
+            step = len(train_loader) * epoch + batch_idx
 
-        weight_lr_decay_steps = 3000 * (24 / self.train_batch_size)
-        quantizer_lr_decay_steps = 1000 * (24 / self.train_batch_size)
-        weight_lr_decay = 0.94
+            for param_group in optimizer.param_groups:
+                group_name = param_group['name']
+                if group_name == 'weight' and step % weight_lr_decay_steps == 0:
+                    lr = self.init_lr * (weight_lr_decay ** (step / weight_lr_decay_steps))
+                    param_group['lr'] = lr
+                    print('{} lr at epoch {}, step {}:, lr={}'.format(group_name, epoch, step,lr))
+                if group_name == 'quantizer' and step % quantizer_lr_decay_steps == 0:
+                    lr = self.quantizer_lr * (
+                            self.quantizer_lr_decay ** (step / quantizer_lr_decay_steps))
+                    param_group['lr'] = lr
+                    print('{} lr at epoch {}, step {}:, lr={}'.format(group_name, epoch, step,lr))
 
-        step = len(train_loader)*epoch + batch_idx
-
-        for param_group in optimizer.param_groups:
-            group_name = param_group['name']
-            if group_name == 'weight' and step % weight_lr_decay_steps == 0:
-                lr = self.init_lr * (weight_lr_decay ** (step / weight_lr_decay_steps))
-                param_group['lr'] = lr
-                print('Adjust lr at epoch {}, step {}: group_name={}, lr={}'.format(epoch, step, group_name, lr))
-            if group_name == 'quantizer' and step % quantizer_lr_decay_steps == 0:
-                lr = self.quantizer_lr * (
-                        self.quantizer_lr_decay ** (step / quantizer_lr_decay_steps))
-                param_group['lr'] = lr
-                print('Adjust lr at epoch {}, step {}: group_name={}, lr={}'.format(
-                    epoch, step, group_name, lr))
+        else:
+            """adjust learning of a given optimizer and return the new learning rate"""
+            new_lr = calc_learning_rate(
+                init_lr=self.init_lr,
+                epoch=epoch,
+                n_epochs=self.n_epochs,
+                batch_idx=batch_idx,
+                n_batch=len(train_loader),
+                train_loader_length=len(train_loader),
+                lr_schedule_type="cosine",
+                ddp=ddp,  # Set to True if using DDP
+                warmup_epochs=self.warmup_epochs,
+                hvd_size=1,
+                batches_per_allreduce=1
+            )
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = new_lr
+            return new_lr
 
     """ data provider """
     @property
@@ -129,19 +130,18 @@ class BaseConfig:
 
     """ optimizer """
     def build_optimizer(self, net_params):
-        return build_optimizer(
-            net_params,
-            self.opt_type,
-            self.opt_param,
-            self.init_lr,
-            self.weight_decay,
-            self.no_decay_keys,
-        )
-
-    def build_optimizer_tqt(self, param_groups):
-        optimizer = torch.optim.Adam(param_groups, self.init_lr, weight_decay=self.weight_decay)
-        return optimizer
-
+        if self.is_qat:
+            # optimizer for tqt
+            return torch.optim.Adam(net_params, self.init_lr, weight_decay=self.weight_decay)
+        else:
+            return build_optimizer(
+                net_params,
+                self.opt_type,
+                self.opt_param,
+                self.init_lr,
+                self.weight_decay,
+                self.no_decay_keys,
+            )
 
 
 class RunConfig(BaseConfig):
@@ -152,6 +152,7 @@ class RunConfig(BaseConfig):
         init_lr=0.05,
         lr_schedule_type="cosine",
         lr_schedule_param=None,
+        is_qat=False,
         quantizer_lr=1e-2,
         quantizer_lr_decay=0.5,
         dataset="imagenet", # 'cifar10' or 'cifar100'
@@ -165,7 +166,7 @@ class RunConfig(BaseConfig):
         validation_frequency=1,
         print_frequency=10,
         n_worker=32,
-        image_size=224, # 32
+        image_size=32, # 224, # 32
         **kwargs
     ):
         super(RunConfig, self).__init__(
@@ -174,6 +175,7 @@ class RunConfig(BaseConfig):
             init_lr,
             lr_schedule_type,
             lr_schedule_param,
+            is_qat,
             quantizer_lr,
             quantizer_lr_decay,
             dataset,
