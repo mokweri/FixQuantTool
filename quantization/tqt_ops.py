@@ -108,10 +108,12 @@ def _init_threshold2(x):
                 # Copy and interpolate distributions
                 p = cdf.clone()
                 p[i:] = 1
-                interp_x = torch.linspace(0.0, 1.0, n)
+                interp_x = torch.linspace(torch.tensor(0.0, device=x.device),
+                                          torch.tensor(1.0, device=x.device), n, device=x.device)
                 interp_fp = p[:i]
-                xp = torch.linspace(0.0, 1.0, i)
-                p_interp = torch.interp(interp_x, xp, interp_fp)
+                xp = torch.linspace(torch.tensor(0.0, device=x.device),
+                                    torch.tensor(1.0, device=x.device), i, device=x.device)
+                p_interp = interp(interp_x, xp, interp_fp)
 
                 q_interp = torch.zeros_like(p)
                 q_interp[:i] = p_interp
@@ -187,6 +189,50 @@ def _cdf_measure(x, y, measure_name='Kullback-Leibler-J'):
     return _cdf_measure(x, y, 'Kullback-Leibler-J')
 
 
+def interp(x: torch.Tensor, xp: torch.Tensor, fp: torch.Tensor, dim: int = -1,
+           extrapolate: str = 'linear') -> torch.Tensor:
+    """One-dimensional linear interpolation between monotonically increasing sample
+    points, with extrapolation beyond sample points.
+
+    Implementation according to https://github.com/pytorch/pytorch/issues/50334
+
+    Returns the one-dimensional piecewise linear interpolant to a function with
+    given discrete data points :math:`(xp, fp)`, evaluated at :math:`x`.
+
+    Args:
+        x: The :math:`x`-coordinates at which to evaluate the interpolated
+            values.
+        xp: The :math:`x`-coordinates of the data points, must be increasing.
+        fp: The :math:`y`-coordinates of the data points, same shape as `xp`.
+        dim: Dimension across which to interpolate.
+        extrapolate: How to handle values outside the range of `xp`. Options are:
+            - 'linear': Extrapolate linearly beyond range of xp values.
+            - 'constant': Use the boundary value of `fp` for `x` values outside `xp`.
+
+    Returns:
+        The interpolated values, same size as `x`.
+    """
+    # Move the interpolation dimension to the last axis
+    x = x.movedim(dim, -1)
+    xp = xp.movedim(dim, -1)
+    fp = fp.movedim(dim, -1)
+
+    m = torch.diff(fp) / torch.diff(xp)  # slope
+    b = fp[..., :-1] - m * xp[..., :-1]  # offset
+    indices = torch.searchsorted(xp, x, right=False)
+
+    if extrapolate == 'constant':
+        # Pad m and b to get constant values outside of xp range
+        m = torch.cat([torch.zeros_like(m)[..., :1], m, torch.zeros_like(m)[..., :1]], dim=-1)
+        b = torch.cat([fp[..., :1], b, fp[..., -1:]], dim=-1)
+    else:  # extrapolate == 'linear'
+        indices = torch.clamp(indices - 1, 0, m.shape[-1] - 1)
+
+    values = m.gather(-1, indices) * x + b.gather(-1, indices)
+
+    return values.movedim(-1, dim)
+
+
 if __name__ == '__main__':
 
     # Example usage for testing
@@ -223,3 +269,18 @@ if __name__ == '__main__':
 
     threshold_torch = example2.init_threshold(x)
     print("Threshold (Torch):", threshold_torch)
+
+
+
+    # xp = torch.linspace(0, 2*math.pi, 10)
+    # fp = torch.sin(xp)
+    # x = torch.linspace(0, 2*math.pi, 50)
+    # interpolated_vals = interp(x, xp, fp, extrapolate='linear')
+    # print(interpolated_vals)
+    #
+    # x = np.linspace(0, 2 * np.pi, 10)
+    # y = np.sin(x)
+    # xvals = np.linspace(0, 2 * np.pi, 50)
+    # yinterp = np.interp(xvals, x, y)
+    # intrp = np.interp(xvals, xp, fp)
+    # print(intrp)
