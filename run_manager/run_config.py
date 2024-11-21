@@ -214,6 +214,11 @@ class RunConfig(BaseConfig):
             )
         return self.__dict__["_data_provider"]
 
+    def print_config(self):
+        print("Run configurations:")
+        for k, v in self.config.items():
+            print("\t%s: %s" % (k, v))
+
 class DistributedRunConfig(RunConfig):
     def __init__(
         self,

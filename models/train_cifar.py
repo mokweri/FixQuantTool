@@ -18,7 +18,7 @@ parser.add_argument('--resume', '-r', default=True, type=bool, help='Resume from
 parser.add_argument('--epochs', default=150, type=int, help='No. of training epochs.')
 parser.add_argument('--train_batch', default=64, type=int, metavar='N',
                     help='train batchsize (default: 32)')
-parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
+parser.add_argument('--lr', default=0.05, type=float, help='learning rate')
 # Miscs
 parser.add_argument('--display_freq', default=100, type=int,
                     help='Display training metrics every n steps.')
@@ -115,6 +115,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, scheduler, devi
     top5 = AverageMeter()
 
     for epoch in range(start_epoch, args.epochs):
+        adjust_learning_rate(optimizer, epoch)
         with tqdm(total=len(train_loader), desc="Train Epoch #{}".format(epoch + 1), ) as t:
             for i, (images, target) in enumerate(train_loader):
                 end = time.time()
@@ -142,7 +143,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, scheduler, devi
                     }
                 )
                 t.update(1)
-                scheduler.step(loss)
+                # scheduler.step()
 
         acc1 = validate(val_loader, model, criterion, device)
         is_best = acc1 > best_acc
@@ -164,6 +165,12 @@ def train(model, train_loader, val_loader, criterion, optimizer, scheduler, devi
 
     return best_filepath
 
+def adjust_learning_rate(optimizer, epoch):
+    """Sets the learning rate to the initial LR decayed by 2 every 30 epochs"""
+    lr = args.lr * (0.5 ** (epoch // 30))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
 
 if __name__ == '__main__':
     data_dir = "/home/obed/Documents/data"
@@ -179,8 +186,8 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
-    scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5) # for vgg
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+    # For VGG16 we use defined lr_adjust function --> adjust_learning-rate()
 
     criterion = nn.CrossEntropyLoss().to(device)
 

@@ -3,19 +3,22 @@ import numpy as np
 import random
 import torchvision.models as models
 import torch
+from torch.utils.checkpoint import checkpoint
 
+from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
 from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate
+from models.cifar_models import *
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
 
 # Hyperparameters
-parser.add_argument("--train_batch_size", type=int, default=32)
-parser.add_argument("--test_batch_size", type=int, default=32)
+parser.add_argument("--train_batch_size", type=int, default=100)
+parser.add_argument("--test_batch_size", type=int, default=100)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=2, type=int, help='No. of training epochs.')
+                    default=1, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr',type=float,
@@ -53,7 +56,7 @@ parser.add_argument('--dynamic_batch_size',default=1,
                     help='dynamic_batch_size')
 
 # Misc. options
-parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
+parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
                     default="/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet",)
 
@@ -73,30 +76,38 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
-    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
-    data_provider = ImagenetDataProvider()
-    calib_loader = data_provider.build_sub_train_loader(24, 24)
-
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    """Calibration Dataset"""
+    # ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    # data_provider = ImagenetDataProvider()
+    data_provider = Cifar10DataProvider()
+
+    calib_loader = data_provider.build_sub_train_loader(24, 24)
+
+    """Imagenet models"""
+    # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
-    # model = create_quantized_model(model, verbose=False)
-    # # freeze(model)
-    # calibrate(model, calib_loader)
+    """cifar models"""
+    model = resnet18_cifar10()
+    checkpoint = torch.load('models/saved_models-FP/resnet18_best90.15_cifar10.pth')
+    model.load_state_dict(checkpoint['state_dict'])
+
+    model = create_quantized_model(model, verbose=False)
+    # freeze(model)
+    calibrate(model, calib_loader)
+
+    print(model)
 
     run_config = RunConfig(**args.__dict__,is_qat=True)
-
-    print("Run configurations:")
-    for k, v in run_config.config.items():
-        print("\t%s: %s" % (k, v))
+    run_config.print_config()
 
     run_manager = RunManager(args.save_dir, model, run_config)
-    # with torch.autograd.set_detect_anomaly(True):
-    #     run_manager.train()
+    with torch.autograd.set_detect_anomaly(True):
+        run_manager.train()
 
     # run_manager.validate(0)
 

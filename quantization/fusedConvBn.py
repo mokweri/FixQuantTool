@@ -5,7 +5,9 @@ from torch.nn import functional as F
 from quantization.tqt import TQTQuantizer
 
 # Number of steps before freezing the batch norm running average and variance
-FREEZE_BN_DELAY_DEFAULT = 200000
+# change if you cahnge dataset
+FREEZE_BN_DELAY_DEFAULT = 93200 #200000
+
 
 _conv_meta = {'conv1d': (1, F.conv1d),
               'conv2d': (2, F.conv2d),
@@ -40,7 +42,6 @@ class FusedConvBN(nn.Module):
         else:
             self.conv_forward_fn = self._conv_layer_forward
             self.conv_module_type = "conv3d"
-
 
     @staticmethod
     def verify_module_types(param_module, bn):
@@ -178,7 +179,7 @@ class FusedConvBN(nn.Module):
                 momentum = 1. / float(self.bn_mod.num_batches_tracked)
             self.bn_mod.running_mean.mul_(1 - momentum).add_(momentum * biased_batch_mean)
             self.bn_mod.running_var.mul_(1 - momentum).add_(momentum * corrected_var)
-
+        # print(self.bn_mod.num_batches_tracked)
         if self.bn_mod.num_batches_tracked > self.freeze_bn_delay:
             self.freeze()
 
@@ -200,6 +201,7 @@ class FusedConvBN(nn.Module):
         return func(input, w, b, conv.stride, conv.padding, conv.dilation, conv.groups)
 
     def freeze(self):
+        print("Freezing the BN")
         w, b, gamma, beta = self._get_all_parameters()
         with torch.no_grad():
             recip_sigma_running = torch.rsqrt(self.bn_mod.running_var + self.bn_mod.eps)
@@ -230,10 +232,10 @@ class FusedConvBN(nn.Module):
         fused_convbn = cls(conv, bn, freeze_bn_delay=FREEZE_BN_DELAY_DEFAULT)
         return fused_convbn
 
-    def state_dict(self, *args, **kwargs):
-        state = super().state_dict(*args, **kwargs)
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
         # Add 'frozen' attribute to the state_dict
-        state['frozen'] = self.frozen
+        state[prefix+'frozen'] = self.frozen
         return state
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
@@ -241,6 +243,12 @@ class FusedConvBN(nn.Module):
         # Load conv_mod and bn_mod individually
         conv_prefix = prefix + 'conv_mod.'
         bn_prefix = prefix + 'bn_mod.'
+
+        # Handle additional keys if necessary
+        frozen_key = prefix + 'frozen'
+        if frozen_key in state_dict:
+            self.frozen = state_dict[frozen_key]
+        state_dict.pop(frozen_key, None)
 
         # Extract conv_mod parameters
         conv_state_dict = {k[len(conv_prefix):]: v for k, v in state_dict.items() if k.startswith(conv_prefix)}
@@ -251,20 +259,6 @@ class FusedConvBN(nn.Module):
         bn_state_dict = {k[len(bn_prefix):]: v for k, v in state_dict.items() if k.startswith(bn_prefix)}
         self.bn_mod._load_from_state_dict(bn_state_dict, '', local_metadata, strict, missing_keys, unexpected_keys,
                                           error_msgs)
-
-        # Handle additional keys if necessary
-        added_states = ['frozen']
-        for param in added_states:
-            key = prefix + param
-            if key in state_dict:
-                # Update `self.frozen` with the value from the state_dict
-                setattr(self, param, state_dict[key])
-                # Remove the key to prevent it from being processed later
-                state_dict.pop(key, None)
-            else:
-                # If `frozen` is missing, you may want to add it to `missing_keys` if strict loading is desired
-                if strict:
-                    missing_keys.append(key)
 
         super(FusedConvBN, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
                                                        unexpected_keys, error_msgs)

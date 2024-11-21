@@ -181,3 +181,46 @@ class Cifar10DataProvider(DataProvider):
 			transforms.ToTensor(),
 			self.normalize,
 		])
+
+    def build_sub_train_loader(
+        self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None, pin_memory=False
+    ):
+        # used for resetting BN running statistics
+        if self.__dict__.get("sub_train_%d" % self.image_size, None) is None:
+            if num_worker is None:
+                num_worker = 4
+
+            n_samples = len(self.train_loader)
+            g = torch.Generator()
+            g.manual_seed(DataProvider.SUB_SEED)
+            rand_indexes = torch.randperm(n_samples, generator=g).tolist()
+
+            new_train_dataset = self.train_dataset(
+                self.build_train_transform()
+            )
+            chosen_indexes = rand_indexes[:n_images]
+            if num_replicas is not None:
+                sub_sampler = DistributedSampler(
+                    new_train_dataset,
+                    num_replicas,
+                    rank,
+                    True,
+                    np.array(chosen_indexes),
+                )
+            else:
+                sub_sampler = torch.utils.data.sampler.SubsetRandomSampler(
+                    chosen_indexes
+                )
+            sub_data_loader = torch.utils.data.DataLoader(
+                new_train_dataset,
+                batch_size=batch_size,
+                sampler=sub_sampler,
+                num_workers=num_worker,
+                pin_memory=pin_memory,
+            )
+            self.__dict__["sub_train_%d" % self.image_size] = []
+            for images, labels in sub_data_loader:
+                self.__dict__["sub_train_%d" % self.image_size].append(
+                    (images, labels)
+                )
+        return self.__dict__["sub_train_%d" % self.image_size]

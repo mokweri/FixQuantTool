@@ -142,7 +142,6 @@ class TQTQuantizer(FakeQuantizer):
 
         init_scheme = {'weight': _3sd, 'act': _kl_j}
         # init_scheme = {'weight': _max, 'act': _kl_j}
-        # data = x.clone()
         data = x.detach().cpu().numpy()
         th = init_scheme[self.tensor_type](data)
 

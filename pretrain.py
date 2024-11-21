@@ -66,10 +66,7 @@ if __name__ == '__main__':
     model = vgg16()
 
     run_config = RunConfig(**args.__dict__,is_qat=False)
-
-    print("Run configurations:")
-    for k, v in run_config.config.items():
-        print("\t%s: %s" % (k, v))
+    run_config.print_config()
 
     run_manager = RunManager(args.save_dir, model, run_config)
     with torch.autograd.set_detect_anomaly(True):
