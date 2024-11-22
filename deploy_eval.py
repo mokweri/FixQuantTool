@@ -50,16 +50,16 @@ if __name__ == '__main__':
 
     """Imagenet models"""
     ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     """Cifar models"""
     # model = resnet18_cifar10()
 
     model = create_quantized_model(model, verbose=False)
-    freeze(model)
+    # freeze(model)
 
-    checkpoint = torch.load('qat_models/checkpoint/vgg16-imagenet.tar')
+    checkpoint = torch.load('qat_models/checkpoint/resnet18-imagenet.pth.tar')
     model.load_state_dict(checkpoint['state_dict'])
 
     run_config = RunConfig(**args.__dict__, is_qat=False)

@@ -18,7 +18,7 @@ parser.add_argument("--train_batch_size", type=int, default=100)
 parser.add_argument("--test_batch_size", type=int, default=100)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=1, type=int, help='No. of training epochs.')
+                    default=3, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr',type=float,
@@ -56,7 +56,7 @@ parser.add_argument('--dynamic_batch_size',default=1,
                     help='dynamic_batch_size')
 
 # Misc. options
-parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100", "imagenet"])
+parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
                     default="/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet",)
 
@@ -80,27 +80,25 @@ if __name__ == '__main__':
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
     """Calibration Dataset"""
-    # ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
-    # data_provider = ImagenetDataProvider()
-    data_provider = Cifar10DataProvider()
+    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    data_provider = ImagenetDataProvider()
+    # data_provider = Cifar10DataProvider()
 
     calib_loader = data_provider.build_sub_train_loader(24, 24)
 
     """Imagenet models"""
     # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     """cifar models"""
-    model = resnet18_cifar10()
-    checkpoint = torch.load('models/saved_models-FP/resnet18_best90.15_cifar10.pth')
-    model.load_state_dict(checkpoint['state_dict'])
+    # model = resnet18_cifar10()
+    # checkpoint = torch.load('models/saved_models-FP/resnet18_best90.15_cifar10.pth')
+    # model.load_state_dict(checkpoint['state_dict'])
 
     model = create_quantized_model(model, verbose=False)
     # freeze(model)
     calibrate(model, calib_loader)
-
-    print(model)
 
     run_config = RunConfig(**args.__dict__,is_qat=True)
     run_config.print_config()
