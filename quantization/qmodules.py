@@ -207,6 +207,21 @@ class QMaxPool2D(torch.nn.MaxPool2d):
         frac_out = self.quantizer.export_quant_info()[1]
         return frac_out
 
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'quantizer'] = self.quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        quantizer_key = prefix + 'quantizer'
+        if quantizer_key in state_dict:
+            self.quantizer.load_state_dict(state_dict[quantizer_key])
+            state_dict.pop(quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
+
 
 class QAvgPool2d(torch.nn.modules.AvgPool2d):
     def __init__(self, kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override, ):
@@ -240,6 +255,21 @@ class QAvgPool2d(torch.nn.modules.AvgPool2d):
         # "conv1": {"weight": 8, "bias": 7, "in": 5, "out": 6}, # @TODO Format accordingly
         frac_out = self.quantizer.export_quant_info()[1]
         return frac_out
+
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'quantizer'] = self.quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        quantizer_key = prefix + 'quantizer'
+        if quantizer_key in state_dict:
+            self.quantizer.load_state_dict(state_dict[quantizer_key])
+            state_dict.pop(quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
 
 
 class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
@@ -276,6 +306,21 @@ class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
         frac_out = self.quantizer.export_quant_info()[1]
         return frac_out
 
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'quantizer'] = self.quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        quantizer_key = prefix + 'quantizer'
+        if quantizer_key in state_dict:
+            self.quantizer.load_state_dict(state_dict[quantizer_key])
+            state_dict.pop(quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
+
 
 class QElementwiseAdd(nn.Module):
     def __init__(self):
@@ -305,7 +350,52 @@ class QElementwiseAdd(nn.Module):
         frac_out = self.quantizer.export_quant_info()[1]
         return frac_out
 
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'quantizer'] = self.quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        quantizer_key = prefix + 'quantizer'
+        if quantizer_key in state_dict:
+            self.quantizer.load_state_dict(state_dict[quantizer_key])
+            state_dict.pop(quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
+
 
 def QuantStubF(x):
     quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
     return quantizer.forward(x)
+
+
+class QuantStubC(nn.Module):
+    def __init__(self, bitwidth=8, tensor_type='act', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.quantizer = TQTQuantizer(bitwidth=bitwidth, tensor_type=tensor_type)
+
+    def forward(self, x):
+        return self.quantizer.forward(x)
+
+    def export_quant_info(self):
+        # "conv1": {"weight": 8, "bias": 7, "in": 5, "out": 6}, # @TODO Format accordingly
+        frac_out = self.quantizer.export_quant_info()[1]
+        return frac_out
+
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'quantizer'] = self.quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        quantizer_key = prefix + 'quantizer'
+        if quantizer_key in state_dict:
+            self.quantizer.load_state_dict(state_dict[quantizer_key])
+            state_dict.pop(quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
+

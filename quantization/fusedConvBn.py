@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from quantization.emu_modules import FxP_QConv2D
+from quantization.qmodules import QuantizedConv2d
 from quantization.tqt import TQTQuantizer
 
 # Number of steps before freezing the batch norm running average and variance
@@ -273,6 +275,29 @@ class FusedConvBN(nn.Module):
     def __repr__(self):
         return f'QFusedConvBN({self.conv_mod.__repr__()}, Quantizer=TQT)'
 
+    def to_qconv(self):
+        assert self.frozen, 'The BN module is not frozen'
+        conv = QuantizedConv2d(
+            in_channels=self.conv_mod.in_channels,
+            out_channels=self.conv_mod.out_channels,
+            kernel_size=self.conv_mod.kernel_size,
+            stride=self.conv_mod.stride,
+            padding=self.conv_mod.padding,
+            dilation=self.conv_mod.dilation,
+            groups=self.conv_mod.groups,
+            bias=self.conv_mod.bias is not None,
+            padding_mode=self.conv_mod.padding_mode,
+        )
+        conv.weight_quantizer = self.weight_quantizer
+        conv.bias_quantizer = self.bias_quantizer
+        conv.act_quantizer = self.act_quantizer
+        conv._mod_name = self._mod_name
+
+        conv.weight = torch.nn.Parameter(self.conv_mod.weight.detach())
+        conv.bias = torch.nn.Parameter(self.conv_mod.bias.detach())
+
+        return conv
+
 
 
 if __name__ == '__main__':
@@ -318,25 +343,36 @@ if __name__ == '__main__':
     print("mse after freezing:", nn.functional.mse_loss(standard_output, fused_frozen_output))
     print(fused_model.export_quant_info())
 
+    print("--------------")
+    new_conv = fused_model.to_conv()
+    # print(new_conv)
+    with torch.no_grad():
+        newconv_output = new_conv(input_data)
+
+    print("mse after new conv:", nn.functional.mse_loss(standard_output, newconv_output))
+    print(new_conv.export_quant_info())
+
+
+
     # torch.save(fused_model.state_dict(), 'fused_conv_bn_model_model.pt')
     # fused_model.load_state_dict(torch.load('fused_conv_bn_model.pt'))
 
     #print quantizer parameters
-    def quantizer_parameters(model):
-        return [
-            param for name, param in model.named_parameters()
-            if 'log_threshold' in name
-        ]
-
-    def non_quantizer_parameters(model):
-        return [
-            param for name, param in model.named_parameters()
-            if 'log_threshold' not in name
-        ]
-
-    for name, param in fused_model.named_parameters():
-        if 'log_threshold' in name:
-            print(name)
+    # def quantizer_parameters(model):
+    #     return [
+    #         param for name, param in model.named_parameters()
+    #         if 'log_threshold' in name
+    #     ]
+    #
+    # def non_quantizer_parameters(model):
+    #     return [
+    #         param for name, param in model.named_parameters()
+    #         if 'log_threshold' not in name
+    #     ]
+    #
+    # for name, param in fused_model.named_parameters():
+    #     if 'log_threshold' in name:
+    #         print(name)
 
     # # Check if frozen parameters remain constant
     # optimizer = optim.SGD(fused_model.parameters(), lr=1e-3, momentum=0.9)

@@ -5,7 +5,7 @@ import torch
 from data_providers.imagenet import ImagenetDataProvider
 from data_providers.cifar10 import Cifar10DataProvider
 from run_manager import RunConfig, RunManager
-from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate
+from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate,create_compact_model, create_qconfig
 from models.cifar_models import *
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
@@ -61,9 +61,15 @@ if __name__ == '__main__':
 
     checkpoint = torch.load('qat_models/checkpoint/resnet18-imagenet.pth.tar')
     model.load_state_dict(checkpoint['state_dict'])
+    freeze(model)
 
-    run_config = RunConfig(**args.__dict__, is_qat=False)
-    run_config.print_config()
+    create_compact_model(model)
+    print(model)
+    qconfig = create_qconfig(model)
 
-    run_manager = RunManager(args.save_dir, model, run_config)
-    run_manager.validate(0)
+
+    # run_config = RunConfig(**args.__dict__, is_qat=False)
+    # run_config.print_config()
+    #
+    # run_manager = RunManager(args.save_dir, model, run_config)
+    # run_manager.validate(0)

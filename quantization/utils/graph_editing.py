@@ -12,7 +12,8 @@ from quantization.qmodules import (
     QAdaptiveAvgPool2d,
     QAvgPool2d,
     QElementwiseAdd,
-    QuantStubF
+    QuantStubF,
+    QuantStubC
 )
 
 # for testing
@@ -85,17 +86,29 @@ def fuse_convbn(mod, verbose=False):
 def create_quantized_model(mod, verbose=False):
     # fuse the conv bn modules
     gm = fuse_convbn(mod, verbose=verbose)
-    modules = dict(gm.named_modules())
 
+    gm.add_submodule("quant_stub", QuantStubC(bitwidth=8, tensor_type='act'))
+
+    modules = dict(gm.named_modules())
     # Replace other standard modules
     for node in gm.graph.nodes:
+        modules = dict(gm.named_modules())
+        # if node.target == 'x':
+        #     with gm.graph.inserting_after(node):
+        #         # quant_stub = QuantStubC(bitwidth=8, tensor_type='act')
+        #
+        #         quant_stub = gm.graph.call_function(QuantStubF, args=(node,))
+        #         node.replace_all_uses_with(quant_stub)
+        #         quant_stub.name = "QuantStub"
+        #         # node.name = "x"
+        #         quant_stub.replace_input_with(quant_stub, node)
         if node.target == 'x':
             with gm.graph.inserting_after(node):
-                quant_stub = gm.graph.call_function(QuantStubF, args=(node,))
-                node.replace_all_uses_with(quant_stub)
+                quant_stub = gm.graph.call_module("quant_stub", args=(node,))
                 quant_stub.name = "QuantStub"
-                # node.name = "x"
+                node.replace_all_uses_with(quant_stub)
                 quant_stub.replace_input_with(quant_stub, node)
+
 
         elif node.op == "call_module":
             target_module = modules[node.target]
@@ -133,11 +146,19 @@ def create_quantized_model(mod, verbose=False):
                 with gm.graph.inserting_after(node):
                     if verbose:
                         print('{}: Replacing function add with QAdd'.format(str(node.name)))
+                    # QAdd = QElementwiseAdd()
+                    # QAdd.module_name = str(node.name).strip()
+                    # QAdd_node = gm.graph.call_function(QAdd.forward, args=(node.args[0], node.args[1]))
+                    # QAdd_node.name = str(node.name).strip()
+                    # node.replace_all_uses_with(QAdd_node)
                     QAdd = QElementwiseAdd()
                     QAdd.module_name = str(node.name).strip()
-                    QAdd_node = gm.graph.call_function(QAdd.forward, args=(node.args[0], node.args[1]))
+                    QAdd_mod = str(node.name).strip()
+                    gm.add_submodule(QAdd_mod, QAdd)
+                    QAdd_node = gm.graph.call_module(QAdd_mod, args=(node.args[0], node.args[1]))
                     QAdd_node.name = str(node.name).strip()
                     node.replace_all_uses_with(QAdd_node)
+
                 gm.graph.erase_node(node)
 
         gm.graph.lint()
@@ -162,7 +183,43 @@ def calibrate(model, calib_loader):
         input = input.cuda()
         output = model(input)
 
+def create_compact_model(mod, verbose=False):
+    # Check if model is already a GraphModule
+    if isinstance(mod, fx.GraphModule):
+        gm = mod
+    else:
+        gm = fx.GraphModule(mod)
 
+    modules = dict(gm.named_modules())
+    for node in gm.graph.nodes:
+        if node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, FusedConvBN):
+                if verbose:
+                    print('{}: Replacing a FusedConvBN layer with QuantizedConv2d'
+                          .format(str(node.name)))
+                QConv = target_module.to_qconv()
+                replace_node_module(node, modules, QConv)
+
+        gm.graph.lint()
+    gm.recompile()
+    return gm
+
+def create_qconfig(model, verbose=False):
+    if verbose:
+        print('=' * 50)
+        print('> Generating QConfig.........')
+
+    qconfig = {}
+    modules = dict(model.named_modules())
+    for node in model.graph.nodes:
+        if node.name == "QuantStub":
+            target_module = modules[node.target]
+            print(target_module.export_quant_info())
+
+
+
+    return qconfig
 if __name__ == '__main__':
 
 
