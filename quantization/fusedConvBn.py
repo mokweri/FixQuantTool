@@ -7,8 +7,8 @@ from quantization.qmodules import QuantizedConv2d
 from quantization.tqt import TQTQuantizer
 
 # Number of steps before freezing the batch norm running average and variance
-# change if you cahnge dataset
-FREEZE_BN_DELAY_DEFAULT = 93200 #200000
+# change if you change dataset
+FREEZE_BN_DELAY_DEFAULT = 6000 #93200 #200000
 
 
 _conv_meta = {'conv1d': (1, F.conv1d),

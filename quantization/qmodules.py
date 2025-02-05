@@ -38,6 +38,33 @@ class _QuantizedConvNd(nn.modules.conv._ConvNd):
     def extra_repr(self):
         return super().extra_repr() + f", mod_name={self._mod_name}"
 
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'w_quantizer'] = self.weight_quantizer.state_dict()
+        state[prefix + 'b_quantizer'] = self.bias_quantizer.state_dict()
+        state[prefix + 'a_quantizer'] = self.act_quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        w_quantizer_key = prefix + 'w_quantizer'
+        if w_quantizer_key in state_dict:
+            self.weight_quantizer.load_state_dict(state_dict[w_quantizer_key])
+            state_dict.pop(w_quantizer_key)
+
+        b_quantizer_key = prefix + 'b_quantizer'
+        if b_quantizer_key in state_dict:
+            self.bias_quantizer.load_state_dict(state_dict[b_quantizer_key])
+            state_dict.pop(b_quantizer_key)
+
+        a_quantizer_key = prefix + 'a_quantizer'
+        if a_quantizer_key in state_dict:
+            self.act_quantizer.load_state_dict(state_dict[a_quantizer_key])
+            state_dict.pop(a_quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
+
 
 class QuantizedConv2d(_QuantizedConvNd):
     """A Conv2d module attached with FakeQuantizer modules for weight and bias, used for QAT.
@@ -172,6 +199,32 @@ class QuantizedLinear(nn.Linear):
         frac_out = self.act_quantizer.export_quant_info()[1]
         return frac_w, frac_b, frac_out
 
+    def state_dict(self, *args, prefix='', **kwargs):
+        state = super().state_dict(*args, prefix=prefix, **kwargs)
+        state[prefix + 'w_quantizer'] = self.weight_quantizer.state_dict()
+        state[prefix + 'b_quantizer'] = self.bias_quantizer.state_dict()
+        state[prefix + 'a_quantizer'] = self.act_quantizer.state_dict()
+        return state
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        w_quantizer_key = prefix + 'w_quantizer'
+        if w_quantizer_key in state_dict:
+            self.weight_quantizer.load_state_dict(state_dict[w_quantizer_key])
+            state_dict.pop(w_quantizer_key)
+
+        b_quantizer_key = prefix + 'b_quantizer'
+        if b_quantizer_key in state_dict:
+            self.bias_quantizer.load_state_dict(state_dict[b_quantizer_key])
+            state_dict.pop(b_quantizer_key)
+
+        a_quantizer_key = prefix + 'a_quantizer'
+        if a_quantizer_key in state_dict:
+            self.act_quantizer.load_state_dict(state_dict[a_quantizer_key])
+            state_dict.pop(a_quantizer_key)
+
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                                      error_msgs)
 
 class QMaxPool2D(torch.nn.MaxPool2d):
     def __init__(self, kernel_size, stride, padding, dilation, return_indices, ceil_mode,):
