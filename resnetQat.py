@@ -225,8 +225,9 @@ def main():
     # train_loader = getTrainData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
     # val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=args.data_dir)
 
-    data_dir = "/home/obed/Documents/cifar_data"
-    data_dir = "/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet"
+    #data_dir = "/home/obed/Documents/cifar_data"
+    data_dir = "/home/obed/Documents/imagenet-mini"
+    #data_dir = "/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet"
 
     #train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
     val_loader = getValData("imagenet", batch_size=args.train_batch, num_workers=8, path=data_dir)

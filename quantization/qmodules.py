@@ -428,6 +428,11 @@ class QuantStubC(nn.Module):
     def __init__(self, bitwidth=8, tensor_type='act', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.quantizer = TQTQuantizer(bitwidth=bitwidth, tensor_type=tensor_type)
+        self._mod_name = "QuantStubC"
+
+    @property
+    def module_name(self):
+        return self._mod_name
 
     def forward(self, x):
         return self.quantizer.forward(x)

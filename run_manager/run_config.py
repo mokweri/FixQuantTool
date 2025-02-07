@@ -1,5 +1,3 @@
-from fontTools.misc.cython import returns
-
 from utils import calc_learning_rate, build_optimizer
 from data_providers import ImagenetDataProvider
 from data_providers import Cifar10DataProvider

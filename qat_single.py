@@ -9,6 +9,7 @@ from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
 from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate
+from quantization.utils.inference_model import make_inference_model
 from models.cifar_models import *
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
@@ -58,7 +59,7 @@ parser.add_argument('--dynamic_batch_size',default=1,
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
-                    default="/mimer/NOBACKUP/groups/naiss2024-22-1034/PipeCNN_Interface/dataset/imagenet",)
+                    default="/home/obed/Documents/imagenet-mini",)
 
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
@@ -80,7 +81,7 @@ if __name__ == '__main__':
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
     """Calibration Dataset"""
-    ImagenetDataProvider.DEFAULT_PATH = '/home/obed/Documents/imagenet'
+    ImagenetDataProvider.DEFAULT_PATH = "/home/obed/Documents/imagenet-mini"
     data_provider = ImagenetDataProvider()
     # data_provider = Cifar10DataProvider()
 
@@ -93,20 +94,32 @@ if __name__ == '__main__':
 
     """cifar models"""
     # model = resnet18_cifar10()
-    # checkpoint = torch.load('models/saved_models-FP/resnet18_best90.15_cifar10.pth')
-    # model.load_state_dict(checkpoint['state_dict'])
+
+
+    checkpoint = torch.load('qat_models/checkpoint/resnet18_qfp.tar')
 
     model = create_quantized_model(model, verbose=False)
     # freeze(model)
     calibrate(model, calib_loader)
 
-    run_config = RunConfig(**args.__dict__,is_qat=True)
-    run_config.print_config()
+    model.load_state_dict(checkpoint['state_dict'])
+    freeze(model)
 
-    run_manager = RunManager(args.save_dir, model, run_config)
-    with torch.autograd.set_detect_anomaly(True):
-        run_manager.train()
+    # print(model)
+    # trying to save the model
+    # torch.save(model.state_dict(),'qat_models/resnet18_qfp.pth')
+    # example_input = torch.randn(1, 3, 224, 224).cuda()
+    # scripted_gm = torch.jit.trace(model, example_input)
+    # torch.jit.save(scripted_gm, "qat_models/resnet18_qfp.pth")
+    make_inference_model(model)
 
+    # run_config = RunConfig(**args.__dict__,is_qat=True)
+    # run_config.print_config()
+    #
+    # run_manager = RunManager(args.save_dir, model, run_config)
+    # #with torch.autograd.set_detect_anomaly(True):
+    #     #run_manager.train()
+    #
     # run_manager.validate(0)
 
 
