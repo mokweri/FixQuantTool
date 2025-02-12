@@ -202,8 +202,9 @@ class FusedConvBN(nn.Module):
                         (0,) * ndims, conv.dilation, conv.groups)
         return func(input, w, b, conv.stride, conv.padding, conv.dilation, conv.groups)
 
-    def freeze(self):
-        print("Freezing the BN")
+    def freeze(self, verbose=False):
+        if verbose:
+            print("Freezing the BN")
         w, b, gamma, beta = self._get_all_parameters()
         with torch.no_grad():
             recip_sigma_running = torch.rsqrt(self.bn_mod.running_var + self.bn_mod.eps)
