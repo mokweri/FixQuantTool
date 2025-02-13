@@ -2,6 +2,7 @@ import torch
 import torch.fx as fx
 import torch.nn as nn
 import copy
+import onnx
 
 from quantization.fusedConvBn import FusedConvBN
 from quantization.qmodules import QElementwiseAdd
@@ -42,9 +43,10 @@ def make_inference_model(model):
     modules = dict(fx_model.named_modules())
     for node in fx_model.graph.nodes:
         if node.op == "placeholder":  # Input node
-            new_node = new_graph.placeholder(node.name)
             print('input node --')
-        if node.op == "call_module":
+            new_node = new_graph.placeholder(node.name)
+
+        elif node.op == "call_module":
             target_module = modules[node.target]
             if isinstance(target_module, FusedConvBN):
                 print('Fused conv --' + target_module.module_name)
@@ -104,7 +106,7 @@ def make_inference_model(model):
                 print('node args:', node.args)
                 linear_layer = nn.Linear(in_features=target_module.in_features, out_features=target_module.out_features,
                                          bias=target_module.bias is not None)
-
+                print(target_module.in_features,target_module.out_features)
                 # Copy trained weights
                 linear_layer.weight.data.copy_(target_module.weight.data)
                 if target_module.bias is not None:
@@ -153,6 +155,7 @@ def make_inference_model(model):
                 print('Avg pool -- ' + target_module.module_name)
                 print('node args:', node.args)
                 adaptive_avgpool_layer = nn.AdaptiveAvgPool2d(output_size=target_module.output_size)
+
                 adaptive_avgpool_layer.register_buffer("frac_act", torch.tensor(target_module.export_quant_info()))
                 # Register layers
                 inference_model.layers[target_module.module_name] = adaptive_avgpool_layer
@@ -175,17 +178,22 @@ def make_inference_model(model):
                 node_map[node] = new_node
 
             else:
-                    if node.name == "QuantStub":
-                        print('QuantStub skipped')
-                    else:
-                        print('Warning: Some module exists but not handled')
-                    print(node.name)
-                    print('-' * 50)
+                if node.name == "QuantStub":
+                    print('QuantStub skipped')
+                else:
+                    print('Warning: Some module exists but not handled')
+                print(node.name)
+                print('-' * 50)
+
         elif node.op == "call_function":
             if node.target == torch.flatten:
-                print('Flatten --')
+                print('Flatten --', node.name)
                 print('node args:', node.args)
-                new_node = new_graph.call_function(torch.flatten, args=(node_map[node.args[0]],))
+                #new_node = new_graph.call_function(torch.flatten, args=(node_map[node.args[0]],))
+
+                inference_model.layers[node.name] = nn.Flatten()
+                new_node = new_graph.call_module(node.name, args=(node_map[node.args[0]],))
+                node_map[node] = new_node
             else:
                 print('Warning: Some function exists but not handled')
 
@@ -199,21 +207,107 @@ def make_inference_model(model):
     # Recompile graph
     new_graph.lint()
     new_gm = fx.GraphModule(inference_model.layers, new_graph)
-    # ------------------------------------------------
 
-    torch.save(new_gm.state_dict(), "fx_inference_model.pt")
+    export_onnx(new_gm,"inf_resnet18.onnx",True)
+    export_onnx_with_layer_metadata(new_gm,"inf2_resnet18.onnx")
 
-    #--to onnx
+    return new_gm
+
+def export_onnx(model, save_path, with_metadata=False):
+    # collect the metadata, buffers
+
+    buffer_dict = {}
+    for name, module in model.named_modules():
+        for buffer_name, buffer in module.named_buffers():
+            buffer_key = f"{name}.{buffer_name}" if name else buffer_name
+            buffer_dict[buffer_key] = str(buffer.item())  # Convert buffer value to string
+
+    #save the model normally
     dummy_input = torch.randn(1, 3, 224, 224)  # Adjust shape according to your model input
     torch.onnx.export(
-        new_gm,
+        model,
         dummy_input,
-        "fx_inference_model.onnx",
+        save_path,
         opset_version=12,
         input_names=["input"],
         output_names=["output"],
         dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}}
     )
-    print(new_gm)
+    if with_metadata:
+        import onnx
+        onnx_model = onnx.load(save_path)
 
-    #@TODO Add metadata to the onnx model
+        # Option 1: Add metadata normally (not always visible in Netron)
+        for key, value in buffer_dict.items():
+            meta_entry = onnx_model.metadata_props.add()
+            meta_entry.key = key
+            meta_entry.value = value
+
+        # # Option 2: Store metadata in a dummy ONNX node (visible in Netron)
+        # metadata_node = onnx.helper.make_node(
+        #     "Constant",
+        #     inputs=[],
+        #     outputs=["metadata_dummy"],
+        #     value=onnx.helper.make_tensor(
+        #         name="metadata_dummy",
+        #         data_type=onnx.TensorProto.STRING,
+        #         dims=[len(buffer_dict)],
+        #         vals=list(buffer_dict.values()),
+        #     ),
+        # )
+        # # Add the dummy node to the graph
+        # onnx_model.graph.node.append(metadata_node)
+
+        # Save the updated ONNX model
+        onnx.save(onnx_model, save_path)
+
+
+def export_onnx_with_layer_metadata(model, save_path):
+    # Export the model to ONNX
+    dummy_input = torch.randn(1, 3, 224, 224)
+    torch.onnx.export(
+        model,
+        dummy_input,
+        save_path,
+        opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}}
+    )
+
+    # Load the ONNX model
+    onnx_model = onnx.load(save_path)
+
+    # Extract ONNX node names
+    onnx_node_names = [node.name for node in onnx_model.graph.node]
+
+    # Extract PyTorch module names and quantization parameters
+    quant_params = {}
+    for name, module in model.named_modules():
+        if hasattr(module, "bitwidth") or hasattr(module, "frac_w"):
+            quant_params[name] = {
+                "bitwidth": getattr(module, "bitwidth", None),
+                "frac_w": getattr(module, "frac_weight", None),
+                "frac_b": getattr(module, "frac_bias", None),
+                "frac_out": getattr(module, "frac_act", None)
+            }
+
+    # **Match PyTorch layers to ONNX nodes**
+    matched_layers = {}
+    for torch_layer_name in quant_params.keys():
+        for onnx_node_name in onnx_node_names:
+            if torch_layer_name in onnx_node_name:  # Check if ONNX node contains the PyTorch module name
+                matched_layers[onnx_node_name] = quant_params[torch_layer_name]
+                break  # Stop after the first match
+
+    # **Attach quantization parameters to ONNX nodes**
+    for node in onnx_model.graph.node:
+        if node.name in matched_layers:
+            params = matched_layers[node.name]
+            for key, value in params.items():
+                if value is not None:
+                    attr = onnx.helper.make_attribute(key, int(value))  # Convert value to int
+                    node.attribute.append(attr)
+
+    # Save the updated ONNX model
+    onnx.save(onnx_model, save_path)

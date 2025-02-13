@@ -111,12 +111,14 @@ if __name__ == '__main__':
     # example_input = torch.randn(1, 3, 224, 224).cuda()
     # scripted_gm = torch.jit.trace(model, example_input)
     # torch.jit.save(scripted_gm, "qat_models/resnet18_qfp.pth")
-    make_inference_model(model)
+    inf_model = make_inference_model(model)
+
+    # print(inf_model)
 
     # run_config = RunConfig(**args.__dict__,is_qat=True)
     # run_config.print_config()
     #
-    # run_manager = RunManager(args.save_dir, model, run_config)
+    # run_manager = RunManager(args.save_dir, inf_model, run_config)
     # #with torch.autograd.set_detect_anomaly(True):
     #     #run_manager.train()
     #
