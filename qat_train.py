@@ -101,14 +101,14 @@ if __name__ == '__main__':
     """cifar models"""
     # model = resnet18_cifar10()
 
-    # checkpoint = torch.load('qat_models/checkpoint/resnet18-imagenet.tar')
+    checkpoint = torch.load('qat_models/checkpoint/model_best.pth.tar')
 
     model = create_quantized_model(model, verbose=False)
     # freeze(model)
     calibrate(model, calib_loader)
 
-    # model.load_state_dict(checkpoint['state_dict'])
-    # freeze(model)
+    model.load_state_dict(checkpoint['state_dict'])
+    freeze(model)
 
     # print(model)
     # trying to save the model
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     run_config.print_config()
 
     run_manager = RunManager(args.save_dir, model, run_config)
-    with torch.autograd.set_detect_anomaly(True):
-        run_manager.train()
+    # with torch.autograd.set_detect_anomaly(True):
+    #     run_manager.train()
     #
-    # run_manager.validate(0)
+    run_manager.validate(0)
