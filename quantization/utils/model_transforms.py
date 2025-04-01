@@ -9,7 +9,7 @@ from quantization.qmodules import QuantizedLinear, QuantizedConv2d, QMaxPool2D, 
 from quantization.conv_fused import QuantizedConvBatchNorm2d
 from quantization.qmodules import QuantizedConv2d
 from quantization.fix_ops import FixedPointQuantizer, QuantStubF, QuantStubI, QuantStubE
-from quantization.emu_modules import *
+from quantization.FxP_modules import *
 
 
 def create_quantizable_model(model, qconfig):

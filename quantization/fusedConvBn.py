@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from quantization.emu_modules import FxP_QConv2D
+from quantization.FxP_modules import FxP_QConv2D
 from quantization.qmodules import QuantizedConv2d
 from quantization.tqt import TQTQuantizer
 

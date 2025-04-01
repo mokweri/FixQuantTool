@@ -4,11 +4,12 @@ import random
 import torchvision.models as models
 import torch
 from torch.utils.checkpoint import checkpoint
+import platform
 
 from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
-from quantization.utils.graph_editing import create_quantized_model,freeze,calibrate
+from quantization.utils.graph_editing import create_quantized_model, freeze, calibrate
 from quantization.utils.inference_model import make_inference_model
 from models.cifar_models import *
 
@@ -22,7 +23,7 @@ parser.add_argument('--n_epochs',
                     default=2, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
-parser.add_argument('--warmup_lr',type=float,
+parser.add_argument('--warmup_lr', type=float,
                     default=-1, metavar='LR', help='warmup learning rate')
 parser.add_argument('--init_lr', '--learning-rate',
                     default=1e-5, type=float, metavar='LR', help='initial learning rate')
@@ -36,9 +37,9 @@ parser.add_argument('--momentum',
 parser.add_argument('--no_nesterov', default=False)
 parser.add_argument('--weight_decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument("--train_criterion", type=str, default="ce",choices=["ce"])
-parser.add_argument("--test_criterion", type=str, default="ce",choices=["ce"])
-parser.add_argument("--lr_schedule_type", type=str, default="cosine",choices=["cosine"])
+parser.add_argument("--train_criterion", type=str, default="ce", choices=["ce"])
+parser.add_argument("--test_criterion", type=str, default="ce", choices=["ce"])
+parser.add_argument("--lr_schedule_type", type=str, default="cosine", choices=["cosine"])
 
 # Performance options
 parser.add_argument("--n_worker", type=int, default=8,
@@ -51,15 +52,15 @@ parser.add_argument('--gpus',
 # Horovod Settings
 parser.add_argument('--fp16-allreduce', action='store_true', default=False,
                     help='use fp16 compression during allreduce')
-parser.add_argument('--independent_distributed_sampling',default=False,
+parser.add_argument('--independent_distributed_sampling', default=False,
                     help='independent_distributed_sampling')
-parser.add_argument('--dynamic_batch_size',default=1,
+parser.add_argument('--dynamic_batch_size', default=1,
                     help='dynamic_batch_size')
 
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
-                    default="/home/obed/Documents/imagenet-mini",)
+                    default="/home/obed/Documents/imagenet-mini", )
 
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
@@ -72,7 +73,6 @@ parser.add_argument('--output_dir',
 parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
-
 if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
@@ -81,7 +81,13 @@ if __name__ == '__main__':
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
     """Calibration Dataset"""
-    ImagenetDataProvider.DEFAULT_PATH = "/home/obed/Documents/imagenet-mini"
+    if platform.system() == "Windows":
+        ImagenetDataProvider.DEFAULT_PATH = r"C:\Users\oma02\Downloads\imagenet-mini"
+    elif platform.system() == "Linux":
+        ImagenetDataProvider.DEFAULT_PATH = "/home/obed/Documents/imagenet-mini"
+    else:
+        raise RuntimeError("Unsupported OS")
+
     data_provider = ImagenetDataProvider()
     # data_provider = Cifar10DataProvider()
 
@@ -95,33 +101,28 @@ if __name__ == '__main__':
     """cifar models"""
     # model = resnet18_cifar10()
 
-
-    checkpoint = torch.load('qat_models/checkpoint/resnet18_qfp.tar')
+    # checkpoint = torch.load('qat_models/checkpoint/resnet18-imagenet.tar')
 
     model = create_quantized_model(model, verbose=False)
     # freeze(model)
     calibrate(model, calib_loader)
 
-    model.load_state_dict(checkpoint['state_dict'])
-    freeze(model)
+    # model.load_state_dict(checkpoint['state_dict'])
+    # freeze(model)
 
     # print(model)
     # trying to save the model
-    # torch.save(model.state_dict(),'qat_models/resnet18_qfp.pth')
     # example_input = torch.randn(1, 3, 224, 224).cuda()
-    # scripted_gm = torch.jit.trace(model, example_input)
-    # torch.jit.save(scripted_gm, "qat_models/resnet18_qfp.pth")
-    inf_model = make_inference_model(model)
+
+    # inf_model = make_inference_model(model)
 
     # print(inf_model)
 
-    # run_config = RunConfig(**args.__dict__,is_qat=True)
-    # run_config.print_config()
-    #
-    # run_manager = RunManager(args.save_dir, inf_model, run_config)
-    # #with torch.autograd.set_detect_anomaly(True):
-    #     #run_manager.train()
+    run_config = RunConfig(**args.__dict__, is_qat=True)
+    run_config.print_config()
+
+    run_manager = RunManager(args.save_dir, model, run_config)
+    with torch.autograd.set_detect_anomaly(True):
+        run_manager.train()
     #
     # run_manager.validate(0)
-
-

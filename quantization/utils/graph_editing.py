@@ -93,22 +93,13 @@ def create_quantized_model(mod, verbose=False):
     # Replace other standard modules
     for node in gm.graph.nodes:
         modules = dict(gm.named_modules())
-        # if node.target == 'x':
-        #     with gm.graph.inserting_after(node):
-        #         # quant_stub = QuantStubC(bitwidth=8, tensor_type='act')
-        #
-        #         quant_stub = gm.graph.call_function(QuantStubF, args=(node,))
-        #         node.replace_all_uses_with(quant_stub)
-        #         quant_stub.name = "QuantStub"
-        #         # node.name = "x"
-        #         quant_stub.replace_input_with(quant_stub, node)
+
         if node.target == 'x':
             with gm.graph.inserting_after(node):
                 quant_stub = gm.graph.call_module("quant_stub", args=(node,))
                 quant_stub.name = "QuantStub"
                 node.replace_all_uses_with(quant_stub)
                 quant_stub.replace_input_with(quant_stub, node)
-
 
         elif node.op == "call_module":
             target_module = modules[node.target]
@@ -146,11 +137,7 @@ def create_quantized_model(mod, verbose=False):
                 with gm.graph.inserting_after(node):
                     if verbose:
                         print('{}: Replacing function add with QAdd'.format(str(node.name)))
-                    # QAdd = QElementwiseAdd()
-                    # QAdd.module_name = str(node.name).strip()
-                    # QAdd_node = gm.graph.call_function(QAdd.forward, args=(node.args[0], node.args[1]))
-                    # QAdd_node.name = str(node.name).strip()
-                    # node.replace_all_uses_with(QAdd_node)
+
                     QAdd = QElementwiseAdd()
                     QAdd.module_name = str(node.name).strip()
                     QAdd_mod = str(node.name).strip()
@@ -183,6 +170,7 @@ def calibrate(model, calib_loader):
         input = input.cuda()
         output = model(input)
 
+
 def create_compact_model(mod, verbose=False):
     # Check if model is already a GraphModule
     if isinstance(mod, fx.GraphModule):
@@ -205,6 +193,7 @@ def create_compact_model(mod, verbose=False):
     gm.recompile()
     return gm
 
+
 def create_qconfig(model, verbose=False):
     if verbose:
         print('=' * 50)
@@ -217,11 +206,10 @@ def create_qconfig(model, verbose=False):
             target_module = modules[node.target]
             print(target_module.export_quant_info())
 
-
-
     return qconfig
-if __name__ == '__main__':
 
+
+if __name__ == '__main__':
 
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     # model = fuse_convbn(model)
