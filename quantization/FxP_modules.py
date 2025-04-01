@@ -25,10 +25,10 @@ class FxP_QConv2D(nn.Module):
         self._mod_name = None
 
     def forward(self, x):
-        self.frac_in = self.qconfig[self._mod_name]['in']
-        self.frac_w = self.qconfig[self._mod_name]['weight']
-        self.frac_b = self.qconfig[self._mod_name]['bias']
-        self.frac_out = self.qconfig[self._mod_name]['out']
+        self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
+        self.frac_w = self.qconfig[self._mod_name]['frac_w']
+        self.frac_b = self.qconfig[self._mod_name]['frac_b']
+        self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
         output = torch.nn.functional.conv2d(input=x.float(), weight=self.weight.float(), stride=self.stride,
                                             padding=self.padding, dilation=self.dilation, groups=self.groups)
@@ -61,12 +61,12 @@ class FxP_QConv2D(nn.Module):
         self._mod_name = value
 
     def quantize_module(self):
-        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['weight'])
+        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['frac_w'])
         if self.bias is not None:
-            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['bias'])
+            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['frac_b'])
 
     @classmethod
-    def from_float(cls, mod):
+    def from_float(cls, mod, qconfig=None):
         #  weight, bias, stride, padding, dilation, groups, qconfig):
         conv = cls(
             weight=mod.weight,
@@ -75,17 +75,17 @@ class FxP_QConv2D(nn.Module):
             padding=mod.padding,
             dilation=mod.dilation,
             groups=mod.groups,
-            qconfig=mod.qconfig
+            qconfig=qconfig
         )
 
         return conv
 
     def extra_repr(self):
         return super().extra_repr() + (f", mod_name={self._mod_name}, "
-                                       f"frac_w = {self.qconfig[self._mod_name]['weight']}, "
-                                       f"frac_b = {self.qconfig[self._mod_name]['bias']}, "
-                                       f"frac_in = {self.qconfig[self._mod_name]['in']}, "
-                                       f"frac_out = {self.qconfig[self._mod_name]['out']}")
+                                       f"frac_w = {self.qconfig[self._mod_name]['frac_w']}, "
+                                       f"frac_b = {self.qconfig[self._mod_name]['frac_b']}, "
+                                       f"frac_in = {self.qconfig[self._mod_name]['frac_in'][0]}, "
+                                       f"frac_out = {self.qconfig[self._mod_name]['frac_out']}")
 
 
 class FxP_QLinear(nn.Module):
@@ -102,10 +102,10 @@ class FxP_QLinear(nn.Module):
         self._mod_name = None
 
     def forward(self, x):
-        self.frac_in = self.qconfig[self._mod_name]['in']
-        self.frac_w = self.qconfig[self._mod_name]['weight']
-        self.frac_b = self.qconfig[self._mod_name]['bias']
-        self.frac_out = self.qconfig[self._mod_name]['out']
+        self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
+        self.frac_w = self.qconfig[self._mod_name]['frac_w']
+        self.frac_b = self.qconfig[self._mod_name]['frac_b']
+        self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
         output = torch.nn.functional.linear(input=x.float(), weight=self.weight.float())
         output = output.type(torch.int32)
@@ -137,17 +137,17 @@ class FxP_QLinear(nn.Module):
         self._mod_name = value
 
     def quantize_module(self):
-        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['weight'])
+        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['frac_w'])
         if self.bias is not None:
-            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['bias'])
+            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['frac_b'])
 
     @classmethod
-    def from_float(cls, mod):
+    def from_float(cls, mod, qconfig=None):
         # (self, weight, bias, qconfig):
         conv = cls(
             weight=mod.weight,
             bias=mod.bias,
-            qconfig=mod.qconfig
+            qconfig=qconfig
         )
         return conv
 
@@ -170,7 +170,7 @@ class FxP_QMaxPool2D(nn.MaxPool2d):
         self._mod_name = value
 
     @classmethod
-    def from_float(cls, mod):
+    def from_float(cls, mod, qconfig=None):
         maxp = cls(
             kernel_size=mod.kernel_size,
             stride=mod.stride,
@@ -192,9 +192,9 @@ class FxP_QElementwiseAdd(nn.Module):
         self._mod_name = None
 
     def forward(self, x1, x2):
-        self.frac_in1 = self.qconfig[self._mod_name]['in1']
-        self.frac_in2 = self.qconfig[self._mod_name]['in2']
-        self.frac_out = self.qconfig[self._mod_name]['out']
+        self.frac_in1 = self.qconfig[self._mod_name]['frac_in'][0]
+        self.frac_in2 = self.qconfig[self._mod_name]['frac_in'][1]
+        self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
         scale1 = 2 ** (self.frac_out - self.frac_in1)
         scale2 = 2 ** (self.frac_out - self.frac_in2)
@@ -221,8 +221,8 @@ class FxP_QAdaptiveAvgPool2d(nn.AdaptiveAvgPool2d):
 
     def forward(self, x):
 
-        self.frac_in = self.qconfig[self._mod_name]['in']
-        self.frac_out = self.qconfig[self._mod_name]['out']
+        self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
+        self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
         xx = to_float_tensor(x, self.frac_in)
         out = super().forward(xx)
@@ -239,10 +239,10 @@ class FxP_QAdaptiveAvgPool2d(nn.AdaptiveAvgPool2d):
         self._mod_name = value
 
     @classmethod
-    def from_float(cls, mod):
+    def from_float(cls, mod, qconfig=None):
         avgpool = cls(
             output_size=mod.output_size,
-            qconfig=mod.qconfig
+            qconfig=qconfig
         )
         return avgpool
 
@@ -257,8 +257,8 @@ class FxP_QAvgPool2d(nn.AvgPool2d):
         self._mod_name = None
 
     def forward(self, x):
-        self.frac_in = self.qconfig[self._mod_name]['in']
-        self.frac_out = self.qconfig[self._mod_name]['out']
+        self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
+        self.frac_out = self.qconfig[self._mod_name]['frac_out']
         out = super().forward(x.float() * (2 ** self.frac_in)) / (2 ** self.frac_out)
         return out
 
@@ -271,7 +271,7 @@ class FxP_QAvgPool2d(nn.AvgPool2d):
         self._mod_name = value
 
     @classmethod
-    def from_float(cls, mod):
+    def from_float(cls, mod, qconfig=None):
         avgpool = cls(
             kernel_size=mod.kernel_size,
             stride=mod.stride,
@@ -279,7 +279,7 @@ class FxP_QAvgPool2d(nn.AvgPool2d):
             ceil_mode=mod.ceil_mode,
             count_include_pad=mod.count_include_pad,
             divisor_override=mod.divisor_override,
-            qconfig=mod.qconfig
+            qconfig=qconfig
         )
         return avgpool
 
@@ -355,10 +355,10 @@ if __name__ == '__main__':
     # Custom FxP_QConv2D layer
     qconfig = {
         'conv1': {
-            'in': frac_in,
-            'weight': frac_w,
-            'bias': frac_b,
-            'out': frac_out
+            'frac_in': [frac_in],
+            'frac_w': frac_w,
+            'frac_b': frac_b,
+            'frac_out': frac_out
         }
     }
     fxp_qconv_layer = FxP_QConv2D(weight, bias, stride=stride, padding=padding, dilation=dilation, groups=groups,

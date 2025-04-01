@@ -10,7 +10,7 @@ from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
 from quantization.utils.graph_editing import create_quantized_model, freeze, calibrate
-from quantization.utils.inference_model import make_inference_model
+from quantization.utils.inference_model import convert_to_inference_model
 from models.cifar_models import *
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")

@@ -172,6 +172,24 @@ def calibrate(model, calib_loader):
 
 
 def create_compact_model(mod, verbose=False):
+    """
+    Transforms a given model into a compact model by replacing FusedConvBN layers defined in the
+    graph with the compact quantized variant (a QuantizedConv2d
+    layer) if applicable.
+
+    Args:
+        mod: fx.GraphModule or torch.nn.Module
+            The input model to be transformed. If not already a GraphModule, the
+            function will encapsulate the model in an fx.GraphModule first.
+        verbose: bool, optional
+            Indicates whether to print out debugging and transformation information
+            during the process. Defaults to False.
+
+    Returns:
+        fx.GraphModule:
+            The modified compact model with applicable layers replaced by their
+            quantized counterparts.
+    """
     # Check if model is already a GraphModule
     if isinstance(mod, fx.GraphModule):
         gm = mod
@@ -193,20 +211,6 @@ def create_compact_model(mod, verbose=False):
     gm.recompile()
     return gm
 
-
-def create_qconfig(model, verbose=False):
-    if verbose:
-        print('=' * 50)
-        print('> Generating QConfig.........')
-
-    qconfig = {}
-    modules = dict(model.named_modules())
-    for node in model.graph.nodes:
-        if node.name == "QuantStub":
-            target_module = modules[node.target]
-            print(target_module.export_quant_info())
-
-    return qconfig
 
 
 if __name__ == '__main__':

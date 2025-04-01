@@ -1,12 +1,19 @@
 import os
 import platform
+import numpy as np
 
-if platform.system() == "Windows":
-    dataset_path = "D:\\datasets\\imagenet"  # or any Windows-style path
-elif platform.system() == "Linux":
-    dataset_path = "/mnt/datasets/imagenet"  # for Ubuntu/Linux
-else:
-    raise RuntimeError("Unsupported OS")
+#
+# def to_int(x, frac=5):
+#     return int(x * 2**frac)
+#
+# def to_float(x, frac=5):
+#     return x / 2**frac
+#
+# print(to_int(-0.001953125, frac=9))
+# print(to_int(to_int(-0.001953125, frac=9), frac=9))
+# print(to_float(-1, frac=9))
 
-print(f"Running on {platform.system()} → Dataset path set to: {dataset_path}")
-
+# Example to read and reshape the data
+data = np.fromfile("../hw_outputs/test_image.data", dtype=np.float32)  # dtype should match the original
+# data = data.reshape([1,1000])  # Replace `original_shape` with the actual shape
+print(data)

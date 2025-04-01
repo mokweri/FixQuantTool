@@ -9,7 +9,8 @@ from quantization.qmodules import QuantizedLinear, QuantizedConv2d, QMaxPool2D, 
 from quantization.conv_fused import QuantizedConvBatchNorm2d
 from quantization.qmodules import QuantizedConv2d
 from quantization.fix_ops import FixedPointQuantizer, QuantStubF, QuantStubI, QuantStubE
-from quantization.FxP_modules import *
+from quantization.FxP_modules2 import *
+from quantization.utils.inference_model import generate_qconfig, AddWithMetadata
 
 
 def create_quantizable_model(model, qconfig):
@@ -197,6 +198,61 @@ def create_deployable_model(model, qconfig):
     return fx_model
 
 
+def create_emulation_model(model):
+    # Check if model is already a GraphModule
+    if isinstance(model, fx.GraphModule):
+        fx_model = copy.deepcopy(model)
+    else:
+        model = copy.deepcopy(model)
+        fx_model = fx.symbolic_trace(model)
+
+    # Step 1: Extract quantization parameters
+    quant_params = generate_qconfig(fx_model)
+    quant_params['conv1']['frac_in'].append(5)
+
+    # Step 2: Switch modules to the emulation modules
+    modules = dict(fx_model.named_modules())
+    for node in fx_model.graph.nodes:
+        if node.op == "call_module":
+            target_module = modules[node.target]
+            if isinstance(target_module, nn.Conv2d):
+                print(f'{node.name}: Replacing nn.Conv2D with FxP_QConv2D')
+                emuConv = FxP_QConv2D.from_float(target_module, quant_params)
+                emuConv.module_name = str(node.name).strip()
+                # emuConv.quantize_module()
+                replace_node_module(node, modules, emuConv)
+
+            if isinstance(target_module, nn.Linear):
+                print(f'{node.name}: Replacing nn.Linear with FxP_QLinear')
+                emuConv = FxP_QLinear.from_float(target_module, quant_params)
+                emuConv.module_name = str(node.name).strip()
+                # emuConv.quantize_module()
+                replace_node_module(node, modules, emuConv)
+
+            if isinstance(target_module, nn.MaxPool2d):
+                print(f'{node.name}: Replacing nn.MaxPool2D with FxP_QMaxPool2D')
+                emuMax = FxP_QMaxPool2D.from_float(target_module, quant_params)
+                emuMax.module_name = str(node.name).strip()
+                replace_node_module(node, modules, emuMax)
+
+            if isinstance(target_module, nn.AdaptiveAvgPool2d):
+                print(f'{node.name}: Replacing nn.AdaptiveAvgPool2d with FxP_QAdaptiveAvgPool2d')
+                emuAdptAvgP = FxP_QAdaptiveAvgPool2d.from_float(target_module, quant_params)
+                emuAdptAvgP.module_name = str(node.name).strip()
+                replace_node_module(node, modules, emuAdptAvgP)
+
+            if isinstance(target_module, AddWithMetadata):
+                print(f'{node.name}: Replacing AddWithMetadata with FxP_QElementwiseAdd')
+                emuAdd = FxP_QElementwiseAdd(quant_params)
+                emuAdd.module_name = str(node.name).strip()
+                replace_node_module(node, modules, emuAdd)
+
+        fx_model.graph.lint()
+    fx_model.recompile()
+
+    return fx_model
+
+
 def add_stub_at_end(fx_model: fx.GraphModule, stub_fn, qconfig):
     last_node = None
     output_node = None
@@ -265,192 +321,3 @@ def fuse_conv_bn(m: torch.nn.Module):
     gm.recompile()
     gm.delete_all_unused_submodules()
     return gm
-
-
-def create_qconfig(model, valid_loader=None, bitwidth=8):
-    model = fuse_conv_bn(model)
-
-    qconfig = {}
-    node_input = {}
-    modules = dict(model.named_modules())
-
-    # Initialize the qconfig
-    for node in model.graph.nodes:
-        qconfig[node.name] = dict()
-        node_input[node.name] = dict()
-
-    print("Generating QConfig......")
-    # Go over the model - perform PTQ
-    for node in model.graph.nodes:
-        if node.target == 'x':
-            quantizer = FixedPointQuantizer(bitwidth)
-            images, classes = next(iter(valid_loader))
-            q_image = quantizer.get_weight_quantizer('out')(images)
-            qconfig[node.name][node.next.name] = int(quantizer.get_frac_out)
-            quantizer = None
-            for user in node.users:
-                node_input[node.name][user.name] = q_image
-
-        elif node.op == 'call_module':
-            if hasattr(modules[node.target], "weight"):
-                if isinstance(modules[node.target], nn.Conv2d) or isinstance(modules[node.target], nn.Linear):
-                    print("QConfig::{} is a conv - Conv2d or Linear".format(str(node.name)))
-                    quantizer = FixedPointQuantizer(bitwidth)
-                    q_weight = quantizer.get_weight_quantizer('weight')(modules[node.target].weight.data)
-                    qconfig[node.name]["weight"] = int(quantizer.get_frac_w)
-                    if modules[node.target].bias !=None:
-                        q_bias = quantizer.get_weight_quantizer('bias')(modules[node.target].bias.data)
-                        qconfig[node.name]["bias"] = int(quantizer.get_frac_b)
-                    else:
-                        q_bias = None
-                        qconfig[node.name]["bias"] = int(8)
-                    # forward
-                    with torch.no_grad():
-                        modules[node.target].weight.copy_(q_weight)
-                        if modules[node.target].bias != None:
-                            modules[node.target].bias.copy_(q_bias)
-
-                    act_i = modules[node.target](node_input[node.args[0].name][node.name])
-                    q_act = quantizer.get_weight_quantizer('out')(act_i)
-                    for ar in node.args:
-                        qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
-                    for no in node.users:
-                        qconfig[node.name][no.name] = int(quantizer.get_frac_out)
-                    quantizer = None
-                    # prepare input for next layer
-                    for user in node.users:
-                        node_input[node.name][user.name] = q_act
-                else:
-                    print("QConfig::{} has has weight but not a conv - eg bn".format(str(node.name)))
-                    # forward
-                    quantizer = FixedPointQuantizer(bitwidth)
-                    act_i = modules[node.target](node_input[node.args[0].name][node.name])
-                    q_act = quantizer.get_weight_quantizer('out')(act_i)
-                    for ar in node.args:
-                        qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
-                    for no in node.users:
-                        qconfig[node.name][no.name] = int(quantizer.get_frac_out)
-                    quantizer = None
-                    # prepare input for next layer
-                    for user in node.users:
-                        node_input[node.name][user.name] = q_act
-            else:
-                print("QConfig::{} has no weight - eg maxpool".format(str(node.name)))
-                for ar in node.args:
-                    if type(ar) != int and type(ar) != tuple and type(ar) != immutable_list:
-                        qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
-                quantizer = FixedPointQuantizer(bitwidth)
-                act_i = modules[node.target](node_input[node.args[0].name][node.name])
-                q_act = quantizer.get_weight_quantizer('out')(act_i)
-                for no in node.users:
-                    qconfig[node.name][no.name] = int(quantizer.get_frac_out)
-                quantizer = None
-                # prepare input for next layer
-                for user in node.users:
-                    node_input[node.name][user.name] = q_act
-        elif node.op == 'call_function':
-            if node.target.__name__ == "add":
-                print("QConfig::{} is an add function".format(str(node.name)))
-                act_i = node.target(node_input[node.args[0].name][node.name], node_input[node.args[1].name][node.name])
-            elif node.target.__name__ == "flatten":
-                print("QConfig::{} is a flatten function".format(str(node.name)))
-                act_i = node.target(act_i, start_dim=1)
-            else:
-                print("QConfig::{} is a call function".format(str(node.name)))
-                act_i = node.target(act_i)
-            quantizer = FixedPointQuantizer(bitwidth)
-            q_act = quantizer.get_weight_quantizer('out')(act_i)
-            for ar in node.args:
-                if type(ar) != int and type(ar) != tuple and type(ar) != immutable_list:
-                    qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
-            for no in node.users:
-                if "flatten" in node.name:
-                    qconfig[node.name][no.name] = qconfig[node.prev.name][node.name]
-                else:
-                    qconfig[node.name][no.name] = int(quantizer.get_frac_out)
-            quantizer = None
-            # prepare input for next layer
-            for user in node.users:
-                node_input[node.name][user.name] = q_act
-        else:
-            print("QConfig::{} is not a conv mod, not a call functiom --".format(str(node.name)))
-            for ar in node.args:
-                if type(ar) != int and type(ar) != tuple and type(ar) != immutable_list:
-                    qconfig[node.name][ar.name] = qconfig[ar.name][node.name]
-            for no in node.users:
-                qconfig[node.name][no.name] = qconfig[node.prev.name][node.name]
-
-    print("Standardizing the QConfig......")
-    qconfig = standardize_qconfig(qconfig)
-    print("Done!! QConfig Generated!!.....")
-    return qconfig
-
-
-def standardize_qconfig(qconfig):
-    standardized_qconfig = {}
-
-    # Iterate through each module's qconfig (outer key)
-    for module_name, inner_dict in qconfig.items():
-        # Separate weights and biases from other items in the dict
-        standardized_inner_dict = {}
-        weights_biases = {}
-        other_items = {}
-
-        # Step 1: Separate weight, bias, and other items
-        for key, value in inner_dict.items():
-            if key in ["weight", "bias"]:
-                weights_biases[key] = value
-            else:
-                other_items[key] = value
-
-        # Special case for modules with 'add' in the name
-        if "add" in module_name:
-            # Ensure there are exactly three items for "add" modules
-            other_keys = list(other_items.keys())
-            if len(other_keys) >= 2:  # Need at least 2 inputs for add operation
-                standardized_inner_dict["in1"] = other_items[other_keys[0]]
-                standardized_inner_dict["in2"] = other_items[other_keys[1]]
-                # If there's a third item, treat it as "out"
-                if len(other_keys) > 2:
-                    standardized_inner_dict["out"] = other_items[other_keys[2]]
-                else:  # Use a default value for "out" if only two items are available
-                    standardized_inner_dict["out"] = other_items[other_keys[1]]
-        else:
-            # Handle standard modules (same as the previous approach)
-            other_keys = list(other_items.keys())
-
-            if len(other_keys) == 1:  # If there's only one key, it's the "out"
-                standardized_inner_dict["out"] = other_items[other_keys[0]]
-            elif len(other_keys) >= 2:
-                # The first key is considered the "in"
-                standardized_inner_dict["in"] = other_items[other_keys[0]]
-
-                # Check if the remaining keys have the same value
-                remaining_items = {key: other_items[key] for key in other_keys[1:]}
-                unique_values = set(remaining_items.values())
-
-                if len(unique_values) == 1:  # If all remaining values are the same, group them as "out"
-                    standardized_inner_dict["out"] = unique_values.pop()
-                else:  # If not, add each one individually as a separate entry
-                    for key, value in remaining_items.items():
-                        standardized_inner_dict[key] = value
-
-        # Step 2: Create the final ordered dictionary with weight, bias, in, and out
-        ordered_inner_dict = {}
-
-        # Add weight and bias if they exist, in the specified order
-        if "weight" in weights_biases:
-            ordered_inner_dict["weight"] = weights_biases["weight"]
-        if "bias" in weights_biases:
-            ordered_inner_dict["bias"] = weights_biases["bias"]
-
-        # Add "in" and "out" or "in1", "in2", and "out" entries, ensuring they are added after weight and bias
-        for key in ["in1", "in2", "in", "out"]:
-            if key in standardized_inner_dict:
-                ordered_inner_dict[key] = standardized_inner_dict[key]
-
-        # Update the standardized qconfig with the new inner dict in the specified order
-        standardized_qconfig[module_name] = ordered_inner_dict
-
-    return standardized_qconfig
-

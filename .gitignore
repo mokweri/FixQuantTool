@@ -36,6 +36,7 @@ ENV/
 logs/
 *.out
 *.tar
+*.onnx
 
 
 # idea folder

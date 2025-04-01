@@ -4,12 +4,13 @@ import torch.nn as nn
 import copy
 import onnx
 
+from quantization.fix_ops import fake_quantize_tensor, to_int_tensor
 from quantization.fusedConvBn import FusedConvBN
 from quantization.qmodules import QElementwiseAdd
 
 
 class StandardModel(nn.Module):
-    """New model composed from standard PyTorch modules"""
+    """New model composed of standard PyTorch modules"""
     def __init__(self):
         super(StandardModel, self).__init__()
         self.layers = nn.ModuleDict()
@@ -27,7 +28,34 @@ class AddWithMetadata(nn.Module):
         return torch.add(x, y)
 
 
-def make_inference_model(model):
+def convert_to_inference_model(model):
+    """
+    Transforms a given neural network model into an inference-ready model by converting it into a quantizable format.
+    This involves converting the model into a symbolic graph representation, creating a new graph with standard layers,
+    and mapping these modules back into an inference model structure.
+
+    The function replicates required layers, registers quantization metadata to manage fixed-point quantization parameters,
+    and adds modules with associated quantization information to a standardized model representation.
+    It uses PyTorch's symbolic tracing capabilities and facilitates export to ONNX formats with metadata.
+
+    Arguments:
+        model: The trained QAT-Aware network model.
+
+    Returns:
+        fx.GraphModule: The converted inference model represented as a new GraphModule with standard layers.
+
+    Raises:
+        RuntimeError: If a node in the graph attempts to use another node that has not been created
+        or registered during processing.
+
+    Notes:
+        1. The function handles different types of modules, such as convolutional layers, linear layers, pooling layers,
+           activation functions, and element-wise operations. Unsupported modules or functions are logged as warnings.
+        2. Quantization metadata is registered to relevant layers to support fixed-point quantization.
+        3. Final exported ONNX models contain quantization metadata.
+        4. The input model is deep-copied to ensure the original structure is preserved.
+    """
+
     # Check if model is already a GraphModule
     if isinstance(model, fx.GraphModule):
         fx_model = copy.deepcopy(model)
@@ -37,7 +65,7 @@ def make_inference_model(model):
 
     # Declare a new model - with standard pytorch modules
     inference_model = StandardModel()
-    new_graph = fx.Graph() # new graph
+    new_graph = fx.Graph()  # new graph
     node_map = {}  # Map original nodes to new nodes
 
     modules = dict(fx_model.named_modules())
@@ -52,14 +80,21 @@ def make_inference_model(model):
                 print('Fused conv --' + target_module.module_name)
                 print('node args:', node.args)
                 conv_layer = nn.Conv2d(
-                    in_channels=target_module.conv_mod.in_channels, out_channels=target_module.conv_mod.out_channels,
+                    in_channels=target_module.conv_mod.in_channels,
+                    out_channels=target_module.conv_mod.out_channels,
                     kernel_size=target_module.conv_mod.kernel_size, stride=target_module.conv_mod.stride,
                     padding=target_module.conv_mod.padding, dilation=target_module.conv_mod.dilation,
                     groups=target_module.conv_mod.groups, bias=target_module.conv_mod.bias is not None)
                 # Copy trained weights
-                conv_layer.weight.data.copy_(target_module.conv_mod.weight.data)
+                # conv_layer.weight.data.copy_(target_module.conv_mod.weight.data)
+                conv_layer.weight.data.copy_(fake_quantize_tensor(target_module.conv_mod.weight.data,
+                                                                  signed=True, n_bits=8,
+                                                                  n_frac=int(target_module.export_quant_info()[0])))
                 if target_module.conv_mod.bias is not None:
-                    conv_layer.bias.data.copy_(target_module.conv_mod.bias.data)
+                    # conv_layer.bias.data.copy_(target_module.conv_mod.bias.data)
+                    conv_layer.bias.data.copy_(fake_quantize_tensor(target_module.conv_mod.bias.data,
+                                                                    signed=True, n_bits=8,
+                                                                    n_frac=int(target_module.export_quant_info()[1])))
 
                 # **Register fixed-point quantization parameters as buffers**
                 conv_layer.register_buffer("bitwidth", torch.tensor(8))
@@ -75,7 +110,7 @@ def make_inference_model(model):
                 print(target_module.export_quant_info())
                 print('-' * 50)
             elif isinstance(target_module, nn.Conv2d):
-                print( 'Normal conv -- '+ target_module.module_name)
+                print('Normal conv -- ' + target_module.module_name)
                 print('node args:', node.args)
                 conv_layer = nn.Conv2d(
                     in_channels=target_module.in_channels, out_channels=target_module.out_channels,
@@ -83,9 +118,16 @@ def make_inference_model(model):
                     padding=target_module.padding, dilation=target_module.dilation,
                     groups=target_module.groups, bias=target_module.bias is not None)
                 # Copy trained weights
-                conv_layer.weight.data.copy_(target_module.weight.data)
+                # conv_layer.weight.data.copy_(target_module.weight.data)
+                conv_layer.weight.data.copy_(fake_quantize_tensor(target_module.weight.data,
+                                                                  signed=True, n_bits=8,
+                                                                  n_frac=int(target_module.export_quant_info()[0])))
+
                 if target_module.bias is not None:
-                    conv_layer.bias.data.copy_(target_module.bias.data)
+                    # conv_layer.bias.data.copy_(target_module.bias.data)
+                    conv_layer.bias.data.copy_(fake_quantize_tensor(target_module.bias.data,
+                                                                    signed=True, n_bits=8,
+                                                                    n_frac=int(target_module.export_quant_info()[1])))
 
                 # Register fixed-point quantization parameters as buffers**
                 conv_layer.register_buffer("bitwidth", torch.tensor(8))
@@ -104,13 +146,21 @@ def make_inference_model(model):
             elif isinstance(target_module, nn.Linear):
                 print('Linear conv -- ' + target_module.module_name)
                 print('node args:', node.args)
-                linear_layer = nn.Linear(in_features=target_module.in_features, out_features=target_module.out_features,
+                linear_layer = nn.Linear(in_features=target_module.in_features,
+                                         out_features=target_module.out_features,
                                          bias=target_module.bias is not None)
-                print(target_module.in_features,target_module.out_features)
+                print(target_module.in_features, target_module.out_features)
                 # Copy trained weights
-                linear_layer.weight.data.copy_(target_module.weight.data)
+                # linear_layer.weight.data.copy_(target_module.weight.data)
+                linear_layer.weight.data.copy_(fake_quantize_tensor(target_module.weight.data,
+                                                                signed=True, n_bits=8,
+                                                                n_frac=int(target_module.export_quant_info()[0])))
                 if target_module.bias is not None:
-                    linear_layer.bias.data.copy_(target_module.bias.data)
+                    # linear_layer.bias.data.copy_(target_module.bias.data)
+                    linear_layer.bias.data.copy_(fake_quantize_tensor(target_module.bias.data,
+                                                                        signed=True, n_bits=8,
+                                                                        n_frac=int(
+                                                                            target_module.export_quant_info()[1])))
 
                 # **Register fixed-point quantization parameters as buffers**
                 linear_layer.register_buffer("bitwidth", torch.tensor(8))
@@ -166,15 +216,18 @@ def make_inference_model(model):
                 print('Addd')
                 print('node args:', node.args)
 
-                #-- just add function without metadata
+                # -- just add function without metadata
                 # new_node = new_graph.call_function(torch.add, args=(node_map[node.args[0]], node_map[node.args[1]]))
                 # node_map[node] = new_node
 
-                #--add as a module with metadata included
+                # --add as a module with metadata included
                 add_layer = AddWithMetadata()
+                # add_layer.register_buffer("frac_in1", torch.tensor(node.args[0].export_quant_info()))
+                # add_layer.register_buffer("frac_in2", torch.tensor(target_module.export_quant_info()))
                 add_layer.register_buffer("frac_act", torch.tensor(target_module.export_quant_info()))
                 inference_model.layers[target_module.module_name] = add_layer
-                new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]], node_map[node.args[1]]))
+                new_node = new_graph.call_module(target_module.module_name,
+                                                 args=(node_map[node.args[0]], node_map[node.args[1]]))
                 node_map[node] = new_node
 
             else:
@@ -189,7 +242,7 @@ def make_inference_model(model):
             if node.target == torch.flatten:
                 print('Flatten --', node.name)
                 print('node args:', node.args)
-                #new_node = new_graph.call_function(torch.flatten, args=(node_map[node.args[0]],))
+                # new_node = new_graph.call_function(torch.flatten, args=(node_map[node.args[0]],))
 
                 inference_model.layers[node.name] = nn.Flatten()
                 new_node = new_graph.call_module(node.name, args=(node_map[node.args[0]],))
@@ -208,10 +261,103 @@ def make_inference_model(model):
     new_graph.lint()
     new_gm = fx.GraphModule(inference_model.layers, new_graph)
 
-    export_onnx(new_gm,"inf_resnet18.onnx",True)
-    export_onnx_with_layer_metadata(new_gm,"inf2_resnet18.onnx")
+    export_onnx(new_gm, "inf_resnet18.onnx", True)
+    export_onnx_with_layer_metadata(new_gm, "resnet18.onnx")
 
     return new_gm
+
+
+def generate_qconfig(model):
+    # Generate qconfig
+    qconfig = {}
+    for name, module in model.named_modules():
+        if hasattr(module, "bitwidth") or hasattr(module, "frac_w") or hasattr(module, "frac_act"):
+            frac_in = []
+            for node in model.graph.nodes:
+                if node.target == name and node.op == "call_module":
+                    for arg in node.args:
+                        input_node = next((n for n in model.graph.nodes if n.name == arg.name), None)
+                        while input_node:
+                            if input_node.target in dict(model.named_modules()):
+                                prev_module = dict(model.named_modules())[input_node.target]
+                                if hasattr(prev_module, "frac_act"):
+                                    frac_in.append(int(prev_module.frac_act))
+                                    break
+                                else:
+                                    input_node = next(
+                                        (n for n in model.graph.nodes if n.name == input_node.args[0].name), None)
+                            else:
+                                break
+                    break
+
+            qconfig[name] = {
+                "bitwidth": int(module.bitwidth) if hasattr(module, "bitwidth") else None,
+                "frac_in": frac_in,
+                "frac_w": int(module.frac_weight) if hasattr(module, "frac_weight") else None,
+                "frac_b": int(module.frac_bias) if hasattr(module, "frac_bias") else None,
+                "frac_out": int(module.frac_act) if hasattr(module, "frac_act") else None
+            }
+    # Append frac of the first layer which is 5 for imagenet
+    # @TODO correctly get frac_n of in for a given dataset
+    first_layer_name = next(
+        (name for name, module in model.named_modules() if isinstance(module, (nn.Conv2d, nn.Linear))),
+        next(iter(model.named_modules()))[0])
+    qconfig[first_layer_name] = {
+        "bitwidth": 8,
+        "frac_in": [5],
+        "frac_w": 8,
+        "frac_b": 8,
+        "frac_out": 8
+        }
+
+    print("Successfully Generated qconfig:")
+    return qconfig
+
+
+def standardize_qconfig(qconfig):
+    """
+    Convert a qconfig dictionary into the standard format.
+    
+    Args:
+        qconfig (dict): The original qconfig dictionary. Example format:
+                        {
+                            'conv1': {'bitwidth': 8, 'frac_in': [], 'frac_w': 9, 'frac_b': 6, 'frac_out': 5},
+                            'maxpool': {'bitwidth': None, 'frac_in': [5], 'frac_w': None, 'frac_b': None, 'frac_out': 5},
+                            ...
+                        }
+                        
+    Returns:
+        dict: The standardized dictionary in the required format.
+              Example: 
+              {
+                  "x": {"out": 5},
+                  "conv1": {"weight": 8, "bias": 6, "in": 5, "out": 5},
+                  ...
+              }
+    """
+    standardized = {}
+
+    # Extracting "x" settings from the input frac of the first layer
+    first_layer = next(iter(qconfig))
+    first_frac_in = qconfig.get(first_layer, {}).get("frac_in", [])
+    standardized["x"] = {"out": first_frac_in[0] if first_frac_in else None}
+
+    for layer, params in qconfig.items():
+        layer_config = {}
+        if "frac_w" in params and params["frac_w"] is not None:
+            layer_config["weight"] = params["frac_w"]
+        if "frac_b" in params and params["frac_b"] is not None:
+            layer_config["bias"] = params["frac_b"]
+        if "frac_in" in params and params["frac_in"]:
+            layer_config["in"] = params["frac_in"]
+        if "frac_out" in params and params["frac_out"] is not None:
+            layer_config["out"] = params["frac_out"]
+
+        if layer_config:  # Only add layers with valid configuration
+            standardized[layer] = layer_config
+
+    return standardized
+
 
 def export_onnx(model, save_path, with_metadata=False):
     # collect the metadata, buffers
@@ -284,7 +430,7 @@ def export_onnx_with_layer_metadata(model, save_path):
     # Extract PyTorch module names and quantization parameters
     quant_params = {}
     for name, module in model.named_modules():
-        if hasattr(module, "bitwidth") or hasattr(module, "frac_w"):
+        if hasattr(module, "bitwidth") or hasattr(module, "frac_w") or hasattr(module, "frac_act"):
             quant_params[name] = {
                 "bitwidth": getattr(module, "bitwidth", None),
                 "frac_w": getattr(module, "frac_weight", None),
