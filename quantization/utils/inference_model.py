@@ -261,7 +261,7 @@ def convert_to_inference_model(model):
     new_graph.lint()
     new_gm = fx.GraphModule(inference_model.layers, new_graph)
 
-    export_onnx(new_gm, "inf_resnet18.onnx", True)
+    # export_onnx(new_gm, "inf_resnet18.onnx", True)
     export_onnx_with_layer_metadata(new_gm, "resnet18.onnx")
 
     return new_gm
@@ -431,12 +431,20 @@ def export_onnx_with_layer_metadata(model, save_path):
     quant_params = {}
     for name, module in model.named_modules():
         if hasattr(module, "bitwidth") or hasattr(module, "frac_w") or hasattr(module, "frac_act"):
-            quant_params[name] = {
-                "bitwidth": getattr(module, "bitwidth", None),
-                "frac_w": getattr(module, "frac_weight", None),
-                "frac_b": getattr(module, "frac_bias", None),
-                "frac_out": getattr(module, "frac_act", None)
-            }
+            if name == 'fc':
+                quant_params[name] = {
+                    "bitwidth": getattr(module, "bitwidth", None),
+                    "frac_B": getattr(module, "frac_weight", None),
+                    "frac_C": getattr(module, "frac_bias", None),
+                    "frac_out": getattr(module, "frac_act", None)
+                }
+            else:
+                quant_params[name] = {
+                    "bitwidth": getattr(module, "bitwidth", None),
+                    "frac_W": getattr(module, "frac_weight", None),
+                    "frac_B": getattr(module, "frac_bias", None),
+                    "frac_out": getattr(module, "frac_act", None)
+                }
 
     # **Match PyTorch layers to ONNX nodes**
     matched_layers = {}

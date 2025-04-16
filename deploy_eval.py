@@ -101,29 +101,30 @@ if __name__ == '__main__':
     print(std_qconfig)
 
     emu_model = create_emulation_model(inf_model)
-    print(emu_model)
-    torch.save(emu_model.state_dict(), "testemu.pth")
-    torch.save(inf_model.state_dict(), "testinf.pth")
+    # print(emu_model)
+    # torch.save(emu_model.state_dict(), "testemu.pth")
+    # torch.save(inf_model.state_dict(), "testinf.pth")
 
     test_image = preprocess_image("new.JPEG")
     # test_image = to_int_tensor(test_image, signed=True, n_bits=8, n_frac=5)
     test_image = fake_quantize_tensor(test_image, signed=True, n_bits=8, n_frac=5)
 
-    print(test_image.shape)
+    print(test_image)
 
     # Save processed test image to a .data file
-    test_image.numpy().tofile("hw_outputs/test_image.data")
+    # test_image.numpy().astype('int8').tofile("hw_outputs/test_image.data")
 
     # print(test_image)
     pred = emu_model(test_image)
 
     # Save model's output to a .data file
     # pred = to_float_tensor(pred,n_frac=2)
+    pred = to_int_tensor(pred, n_frac=2)
     # pred = fake_quantize_tensor(pred, signed=True, n_bits=8, n_frac=2)
-    pred.detach().numpy().tofile("hw_outputs/ref_output.data")
+    pred.detach().numpy().astype('int8').tofile("hw_outputs/ref_output.data")
 
-    print(pred)
-    print(torch.argmax(pred))
+    # print(pred)
+    # print(torch.argmax(pred))
 
     # print(inf_model)
 
