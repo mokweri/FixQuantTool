@@ -4,17 +4,16 @@ import torch
 import platform
 from PIL import Image
 import torchvision.transforms as transforms
-from quantization.fix_ops import to_int_tensor, to_float_tensor, fake_quantize_tensor
 
+from models.cifar_models import *
+from quantization.utils.inference_model import convert_to_inference_model, generate_qconfig, standardize_qconfig
+from quantization.utils.model_transforms import create_emulation_model
+from quantization.fix_ops import to_int_tensor, to_float_tensor, fake_quantize_tensor
 
 from data_providers.imagenet import ImagenetDataProvider
 from data_providers.cifar10 import Cifar10DataProvider
 from run_manager import RunConfig, RunManager
-from quantization.utils.graph_editing import (create_quantized_model,freeze,calibrate,
-                                              create_compact_model)
-from quantization.utils.inference_model import convert_to_inference_model, generate_qconfig, standardize_qconfig
-from quantization.utils.model_transforms import create_emulation_model
-from models.cifar_models import *
+
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
 

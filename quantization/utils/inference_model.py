@@ -6,7 +6,7 @@ import onnx
 
 from quantization.fix_ops import fake_quantize_tensor, to_int_tensor
 from quantization.fusedConvBn import FusedConvBN
-from quantization.qmodules import QElementwiseAdd
+from quantization.qat_modules import QElementwiseAdd
 
 
 class StandardModel(nn.Module):
@@ -226,6 +226,7 @@ def convert_to_inference_model(model):
                 # add_layer.register_buffer("frac_in2", torch.tensor(target_module.export_quant_info()))
                 add_layer.register_buffer("frac_act", torch.tensor(target_module.export_quant_info()))
                 inference_model.layers[target_module.module_name] = add_layer
+                print(node.args[0] in node_map)
                 new_node = new_graph.call_module(target_module.module_name,
                                                  args=(node_map[node.args[0]], node_map[node.args[1]]))
                 node_map[node] = new_node

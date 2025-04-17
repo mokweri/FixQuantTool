@@ -5,11 +5,13 @@ import torchvision.models as models
 import torch
 from torch.utils.checkpoint import checkpoint
 import platform
+import yaml
+import logging
 
 from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
-from quantization.utils.graph_editing import create_quantized_model, freeze, calibrate
+from quantization.utils.graph_trace import QatProcessor
 from quantization.utils.inference_model import convert_to_inference_model
 from models.cifar_models import *
 
@@ -74,6 +76,7 @@ parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)  # Set desired logging level
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
@@ -97,30 +100,33 @@ if __name__ == '__main__':
     # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
-
     """cifar models"""
     # model = resnet18_cifar10()
+    # ----
+    with open("quantization/utils/quant_config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+    Qatprocessor = QatProcessor(model, config)
+    model = Qatprocessor.quantize()
+    Qatprocessor.calibrate(calib_loader, device=device)
+    Qatprocessor.load_qat_weights('qat_models/checkpoint/model_best.pth.tar')
+    Qatprocessor.freeze()
 
-    checkpoint = torch.load('qat_models/checkpoint/model_best.pth.tar')
+    # ----
 
-    model = create_quantized_model(model, verbose=False)
+    # checkpoint = torch.load('qat_models/checkpoint/model_best.pth.tar')
+    # model = create_quantized_model(model, verbose=False)
+    # calibrate(model, calib_loader)
+    # model.load_state_dict(checkpoint['state_dict'])
     # freeze(model)
-    calibrate(model, calib_loader)
-
-    model.load_state_dict(checkpoint['state_dict'])
-    freeze(model)
 
     # print(model)
     # trying to save the model
     # example_input = torch.randn(1, 3, 224, 224).cuda()
-
     # inf_model = make_inference_model(model)
-
     # print(inf_model)
 
     run_config = RunConfig(**args.__dict__, is_qat=True)
     run_config.print_config()
-
     run_manager = RunManager(args.save_dir, model, run_config)
     # with torch.autograd.set_detect_anomaly(True):
     #     run_manager.train()

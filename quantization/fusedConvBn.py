@@ -3,8 +3,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from quantization.FxP_modules import FxP_QConv2D
-from quantization.qmodules import QuantizedConv2d
-from quantization.tqt import TQTQuantizer
+from quantization.qat_modules import QuantizedConv2d
+from quantization.tqt_quantizer import TQTQuantizer
 
 # Number of steps before freezing the batch norm running average and variance
 # change if you change dataset

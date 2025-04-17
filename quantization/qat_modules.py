@@ -6,7 +6,7 @@ import warnings
 
 from torch.nn.modules.utils import _pair
 from typing import Optional, List, Tuple, Union
-from quantization.tqt import TQTQuantizer
+from quantization.tqt_quantizer import TQTQuantizer
 
 
 class _QuantizedConvNd(nn.modules.conv._ConvNd):
@@ -417,11 +417,6 @@ class QElementwiseAdd(nn.Module):
 
         super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
                                       error_msgs)
-
-
-def QuantStubF(x):
-    quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
-    return quantizer.forward(x)
 
 
 class QuantStubC(nn.Module):
