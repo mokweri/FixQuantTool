@@ -4,7 +4,7 @@ import torch.nn as nn
 import copy
 import onnx
 import logging
-from typing import Dict, Any
+from typing import Optional
 
 from quantization.fix_ops import fake_quantize_tensor, to_int_tensor
 from quantization.fusedConvBn import FusedConvBN
@@ -34,11 +34,10 @@ class AddWithMetadata(nn.Module):
 
 
 def _copy_and_quantize_params(
-    target_module: nn.Module, new_layer: nn.Module
+        target_module: nn.Module, new_layer: nn.Module
 ) -> None:
     """Copies weights/bias from target_module to new_layer and quantizes them."""
     if hasattr(target_module, "weight") and target_module.weight is not None:
-
         new_layer.weight.data.copy_(
             fake_quantize_tensor(
                 target_module.weight.data,
@@ -58,13 +57,13 @@ def _copy_and_quantize_params(
             )
         )
 
+
 def _copy_and_quantize_fused_params(
-    target_module: nn.Module, new_layer: nn.Module
+        target_module: nn.Module, new_layer: nn.Module
 ) -> None:
     """Copies weights/bias from target_module to new_layer and quantizes them."""
     """This function is used for fusedConvBN layers."""
     if hasattr(target_module, "weight") and target_module.weight is not None:
-
         new_layer.weight.data.copy_(
             fake_quantize_tensor(
                 target_module.conv_mod.weight.data,
@@ -93,9 +92,7 @@ def _register_quant_metadata(new_layer: nn.Module, quant_info: list) -> None:
     new_layer.register_buffer("frac_act", torch.tensor(quant_info[2]))
 
 
-def _handle_fused_conv_bn(
-    target_module: FusedConvBN,
-) -> nn.Conv2d:
+def _handle_fused_conv_bn(target_module: FusedConvBN,) -> nn.Conv2d:
     """Handles FusedConvBN modules."""
 
     conv_layer = nn.Conv2d(
@@ -161,9 +158,7 @@ def _handle_maxpool2d(target_module: nn.MaxPool2d) -> nn.MaxPool2d:
     return maxpool_layer
 
 
-def _handle_adaptiveavgpool2d(
-    target_module: nn.AdaptiveAvgPool2d,
-) -> nn.AdaptiveAvgPool2d:
+def _handle_adaptiveavgpool2d(target_module: nn.AdaptiveAvgPool2d,) -> nn.AdaptiveAvgPool2d:
     """Handles AdaptiveAvgPool2d modules."""
 
     adaptive_avgpool_layer = nn.AdaptiveAvgPool2d(
@@ -174,24 +169,26 @@ def _handle_adaptiveavgpool2d(
     )
     return adaptive_avgpool_layer
 
+
 def _handle_Relu(target_module: nn.ReLU) -> nn.ReLU:
     """Handles ReLU modules."""
     relu_layer = copy.deepcopy(target_module)
     return relu_layer
+
 
 def _handle_QuantStub(target_module):
     """Handles ReLU modules."""
     stub = copy.deepcopy(target_module)
     return stub
 
+
 def _handle_Dropout(target_module: nn.Dropout) -> nn.Dropout:
     """Handles ReLU modules."""
     stub = copy.deepcopy(target_module)
     return stub
 
-def _handle_qelementwiseadd(
-    target_module: QElementwiseAdd,
-) -> AddWithMetadata:
+
+def _handle_qelementwiseadd(target_module: QElementwiseAdd,) -> AddWithMetadata:
     """Handles QElementwiseAdd modules."""
 
     add_layer = AddWithMetadata()
@@ -237,8 +234,7 @@ class InferProcessor:
         self.std_model: Optional[fx.GraphModule] = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
-
-    def convert_to_inference_model(self) -> fx.GraphModule:
+    def convert_to_std_model(self) -> fx.GraphModule:
         """
         Transforms a QAT-trained model into an inference-ready model.
 
@@ -334,52 +330,154 @@ class InferProcessor:
         # Recompile graph
         new_graph.lint()
         new_gm = fx.GraphModule(inference_model.layers, new_graph)
+        self.std_model = new_gm
         return new_gm
 
+    def export_onnx_with_layer_metadata(self, save_path):
+        # Export the model to ONNX
+        assert self.std_model is not None
 
-def export_onnx(model: torch.nn.Module, filename: str, dynamic_axes: bool = False):
-    """
-    Exports a PyTorch model to ONNX format.
+        dummy_input = torch.randn(1, 3, 224, 224)
+        torch.onnx.export(
+            self.std_model,
+            dummy_input,
+            save_path,
+            opset_version=12,
+            input_names=["input"],
+            output_names=["output"],
+            dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}}
+        )
 
-    Args:
-        model: The PyTorch model to export.
-        filename: The name of the output ONNX file.
-        dynamic_axes: Whether to use dynamic axes for input/output.
-    """
-    dummy_input = torch.randn(
-        1, 3, 224, 224
-    )  # Example input, adjust as needed
-    torch.onnx.export(
-        model,
-        dummy_input,
-        filename,
-        opset_version=11,  # Choose an appropriate opset version
-        export_params=True,  # Include model parameters
-        do_constant_folding=True,  # Optimize constants
-        input_names=["input"],  # Name the input tensor
-        output_names=["output"],  # Name the output tensor
-        dynamic_axes={
-            "input": {0: "batch_size"},
-            "output": {0: "batch_size"},
+        # Load the exported ONNX model
+        onnx_model = onnx.load(save_path)
+
+        # Create a dictionary to store quantization parameters based on PyTorch module names
+        quant_params_by_torch_name = {}
+        for name, module in self.std_model.named_modules():
+            if hasattr(module, "bitwidth") or hasattr(module, "frac_w") or hasattr(module, "frac_act"):
+                if name == 'fc':
+                    quant_params_by_torch_name[name] = {
+                        "bitwidth": getattr(module, "bitwidth", None),
+                        "frac_B": getattr(module, "frac_weight", None),
+                        "frac_C": getattr(module, "frac_bias", None),
+                        "frac_out": getattr(module, "frac_act", None)
+                    }
+                else:
+                    quant_params_by_torch_name[name] = {
+                        "bitwidth": getattr(module, "bitwidth", None),
+                        "frac_W": getattr(module, "frac_weight", None),
+                        "frac_B": getattr(module, "frac_bias", None),
+                        "frac_out": getattr(module, "frac_act", None)
+                    }
+
+        # Match PyTorch layers to ONNX nodes**
+        matched_layers = {}
+        for torch_layer_name in quant_params_by_torch_name.keys():
+            for onnx_node_name in [node.name for node in onnx_model.graph.node]:
+                if torch_layer_name in onnx_node_name:  # Check if ONNX node contains the PyTorch module name
+                    matched_layers[onnx_node_name] = quant_params_by_torch_name[torch_layer_name]
+                    break  # Stop after the first match
+
+        # Attach quantization parameters to ONNX nodes**
+        for node in onnx_model.graph.node:
+            if node.name in matched_layers:
+                params = matched_layers[node.name]
+                for key, value in params.items():
+                    if value is not None:
+                        attr = onnx.helper.make_attribute(key, int(value))  # Convert value to int
+                        node.attribute.append(attr)
+
+        # Save the updated ONNX model
+        onnx.save(onnx_model, save_path)
+
+    def generate_qconfig(self):
+        # Generate qconfig
+
+        qconfig = {}
+        for name, module in self.std_model.named_modules():
+            if hasattr(module, "bitwidth") or hasattr(module, "frac_w") or hasattr(module, "frac_act"):
+                frac_in = []
+                for node in self.std_model.graph.nodes:
+                    if node.target == name and node.op == "call_module":
+                        for arg in node.args:
+                            input_node = next((n for n in self.std_model.graph.nodes if n.name == arg.name), None)
+                            while input_node:
+                                if input_node.target in dict(self.std_model.named_modules()):
+                                    prev_module = dict(self.std_model.named_modules())[input_node.target]
+                                    if hasattr(prev_module, "frac_act"):
+                                        frac_in.append(int(prev_module.frac_act))
+                                        break
+                                    else:
+                                        input_node = next(
+                                            (n for n in self.std_model.graph.nodes if n.name == input_node.args[0].name), None)
+                                else:
+                                    break
+                        break
+
+                qconfig[name] = {
+                    "bitwidth": int(module.bitwidth) if hasattr(module, "bitwidth") else None,
+                    "frac_in": frac_in,
+                    "frac_w": int(module.frac_weight) if hasattr(module, "frac_weight") else None,
+                    "frac_b": int(module.frac_bias) if hasattr(module, "frac_bias") else None,
+                    "frac_out": int(module.frac_act) if hasattr(module, "frac_act") else None
+                }
+        # Append frac of the first layer which is 5 for imagenet
+        # @TODO correctly get frac_n of in for a given dataset
+        first_layer_name = next(
+            (name for name, module in self.std_model.named_modules() if isinstance(module, (nn.Conv2d, nn.Linear))),
+            next(iter(self.std_model.named_modules()))[0])
+        qconfig[first_layer_name] = {
+            "bitwidth": 8,
+            "frac_in": [5],
+            "frac_w": 8,
+            "frac_b": 8,
+            "frac_out": 8
         }
-        if dynamic_axes
-        else None,  # Set dynamic axes if needed
-    )
-    print(f"Model exported to ONNX as '{filename}'")
 
+        self.logger.info("Successfully Generated qconfig:")
 
-def export_onnx_with_layer_metadata(model: torch.nn.Module, filename: str):
-    """
-    Exports a PyTorch model to ONNX with custom operator and metadata
-    (This is a placeholder; actual metadata embedding in ONNX is complex)
+        return self._standardize_qconfig(qconfig)
 
-    Args:
-        model: The PyTorch model.
-        filename: The output ONNX filename.
-    """
+    def _standardize_qconfig(self, qconfig):
+        """
+        Convert a qconfig dictionary into the standard format.
 
-    export_onnx(model, filename)  # For now, just do a standard export
-    print(
-        "Warning: export_onnx_with_layer_metadata is a placeholder. "
-        "ONNX metadata embedding requires further implementation."
-    )
+        Args:
+            qconfig (dict): The original qconfig dictionary. Example format:
+                            {
+                                'conv1': {'bitwidth': 8, 'frac_in': [], 'frac_w': 9, 'frac_b': 6, 'frac_out': 5},
+                                'maxpool': {'bitwidth': None, 'frac_in': [5], 'frac_w': None, 'frac_b': None, 'frac_out': 5},
+                                ...
+                            }
+
+        Returns:
+            dict: The standardized dictionary in the required format.
+                  Example:
+                  {
+                      "x": {"out": 5},
+                      "conv1": {"weight": 8, "bias": 6, "in": 5, "out": 5},
+                      ...
+                  }
+        """
+        standardized = {}
+
+        # Extracting "x" settings from the input frac of the first layer
+        first_layer = next(iter(qconfig))
+        first_frac_in = qconfig.get(first_layer, {}).get("frac_in", [])
+        standardized["x"] = {"out": first_frac_in[0] if first_frac_in else None}
+
+        for layer, params in qconfig.items():
+            layer_config = {}
+            if "frac_w" in params and params["frac_w"] is not None:
+                layer_config["weight"] = params["frac_w"]
+            if "frac_b" in params and params["frac_b"] is not None:
+                layer_config["bias"] = params["frac_b"]
+            if "frac_in" in params and params["frac_in"]:
+                layer_config["in"] = params["frac_in"]
+            if "frac_out" in params and params["frac_out"] is not None:
+                layer_config["out"] = params["frac_out"]
+
+            if layer_config:  # Only add layers with valid configuration
+                standardized[layer] = layer_config
+
+        return standardized

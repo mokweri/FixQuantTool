@@ -9,7 +9,6 @@ from quantization.qat_modules import QuantizedLinear, QuantizedConv2d, QMaxPool2
 from quantization.qat_modules import QuantizedConv2d
 from quantization.fix_ops import FixedPointQuantizer, QuantStubF, QuantStubI, QuantStubE
 from quantization.FxP_modules2 import *
-from quantization.utils.inference_model import generate_qconfig, AddWithMetadata
 
 
 def create_emulation_model(model):

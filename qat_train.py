@@ -12,7 +12,6 @@ from data_providers import Cifar10DataProvider
 from data_providers.imagenet import ImagenetDataProvider
 from run_manager import RunConfig, RunManager
 from quantization.utils.graph_trace import QatProcessor
-from quantization.utils.inference_model import convert_to_inference_model
 from models.cifar_models import *
 
 parser = argparse.ArgumentParser(description="FixQuant Tool")
@@ -102,28 +101,15 @@ if __name__ == '__main__':
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
     """cifar models"""
     # model = resnet18_cifar10()
-    # ----
+
     with open("quantization/utils/quant_config.yaml", "r") as f:
         config = yaml.safe_load(f)
+
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.calibrate(calib_loader, device=device)
+    Qatprocessor.calibrate(calib_loader, device)
     Qatprocessor.load_qat_weights('qat_models/checkpoint/model_best.pth.tar')
     Qatprocessor.freeze()
-
-    # ----
-
-    # checkpoint = torch.load('qat_models/checkpoint/model_best.pth.tar')
-    # model = create_quantized_model(model, verbose=False)
-    # calibrate(model, calib_loader)
-    # model.load_state_dict(checkpoint['state_dict'])
-    # freeze(model)
-
-    # print(model)
-    # trying to save the model
-    # example_input = torch.randn(1, 3, 224, 224).cuda()
-    # inf_model = make_inference_model(model)
-    # print(inf_model)
 
     run_config = RunConfig(**args.__dict__, is_qat=True)
     run_config.print_config()

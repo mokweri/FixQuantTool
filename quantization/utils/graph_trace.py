@@ -5,10 +5,10 @@ import copy
 
 from sympy.physics.units import electronvolt
 from torch.fx.experimental.optimization import matches_module_pattern, replace_node_module
-from quantization.qat_modules import QuantizedLinear, QuantizedConv2d, QMaxPool2D, QAdaptiveAvgPool2d, QElementwiseAdd, QuantStubC
+from quantization.qat_modules import (QuantizedLinear, QuantizedConv2d, QMaxPool2D, QAdaptiveAvgPool2d,
+                                      QElementwiseAdd, QuantStubC)
 from quantization.fusedConvBn import FusedConvBN
 from quantization.utils.inference_mod import InferProcessor
-from quantization.utils.inference_model import convert_to_inference_model
 from quantization.FxP_modules2 import *
 import yaml
 import logging
@@ -16,6 +16,7 @@ from typing import Sequence, Callable, Dict, Any, Optional
 
 # for testing
 import torchvision.models as models
+
 
 # --- Configuration ---
 # with open("quant_config.yaml", "r") as f:
@@ -66,6 +67,7 @@ class BaseQuantizationPass:
         """Optional: Filter nodes to process."""
         return graph_module.graph.nodes
 
+
 class ConvBnFusionPass(BaseQuantizationPass):
     def __init__(self, config):
         super().__init__(config)
@@ -103,17 +105,18 @@ class ConvBnFusionPass(BaseQuantizationPass):
         graph_module.graph.lint()
         self.logger.debug(f"Fused {get_node_name(conv_node)} with {get_node_name(node)}.")
 
+
 class ModuleReplacementPass(BaseQuantizationPass):
-    def __init__(self, replacement_type,config):
+    def __init__(self, replacement_type, config):
         super().__init__(config)
         assert replacement_type
         self.replacement_type = replacement_type
         self.module_replacement_maps = {
-            'quant' : {nn.Conv2d: QuantizedConv2d,
-                       nn.Linear: QuantizedLinear,
-                       nn.MaxPool2d: QMaxPool2D,
-                       nn.AdaptiveAvgPool2d: QAdaptiveAvgPool2d,},
-            'compact': {FusedConvBN:QuantizedConv2d},
+            'quant': {nn.Conv2d: QuantizedConv2d,
+                      nn.Linear: QuantizedLinear,
+                      nn.MaxPool2d: QMaxPool2D,
+                      nn.AdaptiveAvgPool2d: QAdaptiveAvgPool2d, },
+            'compact': {FusedConvBN: QuantizedConv2d},
 
         }
         self.replacement_map = self.module_replacement_maps[replacement_type]
@@ -137,12 +140,13 @@ class ModuleReplacementPass(BaseQuantizationPass):
         target_module = modules[node.target]
         replacement_class = self.replacement_map[type(target_module)]
         if self.replacement_type == 'compact':
-            new_module = target_module.to_qconv() # to preserve qconfig parameters
+            new_module = target_module.to_qconv()  # to preserve qconfig parameters
         else:
             new_module = replacement_class.from_float(target_module)
         new_module.module_name = get_node_name(node)
         replace_module(node, graph_module, modules, new_module)
         self.logger.debug(f"Replaced {get_node_name(node)} with {type(new_module).__name__}.")
+
 
 class ReplaceAddPass(BaseQuantizationPass):
     def __init__(self, config):
@@ -195,6 +199,7 @@ class QuantizeLayerPass(BaseQuantizationPass):
         replace_module(node, graph_module, modules, new_module)
         self.logger.debug(f"Replaced {get_node_name(node)} with {type(new_module).__name__}.")
 
+
 class InputQuantStubPass(BaseQuantizationPass):
     def __init__(self, config):
         super().__init__(config)
@@ -212,6 +217,7 @@ class InputQuantStubPass(BaseQuantizationPass):
     def _add_input_stub(self, node: fx.Node, graph_module: fx.GraphModule):
         stub = insert_stub(node, graph_module, QuantStubC, args=(node,))
         self.logger.debug(f"Added input quant stub before {get_node_name(node)}.")
+
 
 class OutputQuantStubPass(BaseQuantizationPass):
     def __init__(self, config):
@@ -235,6 +241,7 @@ class OutputQuantStubPass(BaseQuantizationPass):
         stub.name = 'qfloat_output'
         self.logger.debug(f"Added output quant stub before {get_node_name(node)}.")
 
+
 class FreezeModulesPass(BaseQuantizationPass):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
@@ -255,6 +262,7 @@ class FreezeModulesPass(BaseQuantizationPass):
         target_module.freeze()
         self.logger.debug(f"Frozen module: {get_node_name(node)}.")
 
+
 # --- Model Quantizer for QAT ---
 class QatProcessor:
     def __init__(self, model: nn.Module, config: dict):
@@ -268,7 +276,7 @@ class QatProcessor:
     def _create_qat_passes(self):
         return [
             ConvBnFusionPass(self.config),
-            ModuleReplacementPass("quant",self.config),
+            ModuleReplacementPass("quant", self.config),
             ReplaceAddPass(self.config),
             InputQuantStubPass(self.config)
         ]
@@ -295,7 +303,7 @@ class QatProcessor:
         self.qat_model.recompile()
         self.logger.info("Model frozen.")
 
-    def calibrate(self, calib_loader: torch.utils.data.DataLoader, device: torch.device) -> None:
+    def calibrate(self, calib_loader, device) -> None:
         if self.qat_model is None:
             raise ValueError("Quantize the model first before calibration.")
 
@@ -319,7 +327,6 @@ class QatProcessor:
         checkpoint = torch.load(checkpoint_path)
         self.qat_model.load_state_dict(checkpoint["state_dict"])
         self.logger.info(f"Loaded QAT weights from {checkpoint_path}")
-        return self.qat_model
 
     def compact_model(self):
         if self.qat_model is None:
@@ -349,8 +356,8 @@ if __name__ == "__main__":
 
     cmode = quantizer.compact_model()
 
-    infer_processor = InferProcessor(quantized_model, config)
-    stdm = infer_processor.convert_to_inference_model()
+    InferProcessor = InferProcessor(quantized_model, config)
+    stdm = InferProcessor.convert_to_std_model()
     # stdm = convert_to_inference_model(quantized_model)
 
     print(stdm)
