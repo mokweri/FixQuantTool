@@ -1,8 +1,10 @@
 import argparse
 import torchvision.models as models
 import torch
+import torch.nn as nn
 import platform
 from PIL import Image
+from pathlib import Path
 import torchvision.transforms as transforms
 import yaml
 
@@ -61,6 +63,47 @@ if __name__ == '__main__':
         return tensor
 
 
+    @torch.no_grad()
+    def save_layer_params(layer: nn.Module, path: str | Path) -> None:
+        """
+        layer : module that *still* holds float weights / bias produced by a fake-quant pass.  It also exposes
+                       layer.frac_weight   (# fractional bits for weights)
+                       layer.frac_bias     (# fractional bits for bias)
+        path  : destination file (e.g. "conv_int8.pth")
+
+        The function converts W/B to signed INT8 according to the (Qm.n) format, then serialises:
+            { weight_int8, bias_int8?, frac_w, frac_b }
+        """
+
+        # -------- 1.  fetch frac parameters --------------------------------
+        def _to_int(x):
+            return int(x.item()) if torch.is_tensor(x) else int(x)
+
+        frac_w = _to_int(layer.frac_weight)
+        frac_b = _to_int(layer.frac_bias) if hasattr(layer, "frac_bias") else 0
+        frac_act = _to_int(layer.frac_act)
+
+        # -------- 2.  convert float → int8  ----------------
+        w_int8 = to_int_tensor( layer.weight.detach(), signed=True, n_bits=8, n_frac=frac_w).to(torch.int8).cpu().clone()
+
+        if layer.bias is not None:
+            b_int8 = to_int_tensor( layer.bias.detach(), signed=True, n_bits=8, n_frac=frac_b).to(torch.int8).cpu().clone()
+        else:
+            b_int8 = None
+
+        # -------- 3.  build payload & save ---------------------------------
+        payload: Dict[str, Any] = {
+            "weight_int8": w_int8,
+            "frac_w": frac_w,
+            "frac_out": frac_act
+        }
+        if b_int8 is not None:
+            payload.update({"bias_int8": b_int8, "frac_b": frac_b})
+
+        torch.save(payload, path)
+        print(f"[save_layer_params] wrote quantised params to {path}")
+
+
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
@@ -88,7 +131,7 @@ if __name__ == '__main__':
     model = Qatprocessor.quantize()
     Qatprocessor.load_qat_weights('qat_models/checkpoint/model_best.pth.tar')
     Qatprocessor.freeze()
-    # freeze(model)
+
     # @TODO - the model doesnt freeze during training
 
     infer_processor = InferProcessor(model, config)
@@ -96,6 +139,18 @@ if __name__ == '__main__':
     infer_processor.export_onnx_with_layer_metadata("res.onnx")
     qconfig = infer_processor.generate_qconfig()
     print(qconfig)
+
+    #print(stdm)
+
+    # for name, _ in stdm.named_modules():
+    #     print(name)
+    layer_name = "conv1"  # pick any name visible in .named_modules()
+    conv_q = dict(stdm.named_modules())[layer_name]
+    print(conv_q)
+    save_layer_params(conv_q, "hw_fxp/conv1.pth")
+
+
+
 
     # create_compact_model(model)
     # qconfig = create_qconfig(model)
@@ -130,5 +185,5 @@ if __name__ == '__main__':
     # run_config = RunConfig(**args.__dict__, is_qat=False)
     # run_config.print_config()
     #
-    # run_manager = RunManager(args.save_dir, inf_model, run_config)
+    # run_manager = RunManager(args.save_dir, stdm, run_config)
     # run_manager.validate(0)

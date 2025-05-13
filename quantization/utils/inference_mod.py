@@ -33,55 +33,54 @@ class AddWithMetadata(nn.Module):
         return torch.add(x, y)
 
 
+# ----------------------------------------------------------------------
+def _get_src_param(mod: nn.Module, name: str) -> Optional[torch.Tensor]:
+    """
+    Return the tensor `weight` / `bias` from either
+        • plain module (mod.weight)
+        • fused module (mod.conv_mod.weight)
+    """
+    if hasattr(mod, name):                         # plain layer
+        t = getattr(mod, name)
+    elif hasattr(mod, "conv_mod") and hasattr(mod.conv_mod, name):
+        t = getattr(mod.conv_mod, name)            # fused layer
+    else:
+        t = None
+    return t.detach() if isinstance(t, torch.Tensor) else None
+
+
+def _quantize_det(t: torch.Tensor, n_bits: int, n_frac: int, signed: bool):
+    """Deterministic fake-quant wrapper (assumes fake_quantize_tensor is pure)."""
+    return fake_quantize_tensor(t, signed=signed, n_bits=n_bits, n_frac=n_frac)
+
+
+@torch.no_grad()
 def _copy_and_quantize_params(
-        target_module: nn.Module, new_layer: nn.Module
+        src: nn.Module, dst: nn.Module
 ) -> None:
-    """Copies weights/bias from target_module to new_layer and quantizes them."""
-    if hasattr(target_module, "weight") and target_module.weight is not None:
-        new_layer.weight.data.copy_(
-            fake_quantize_tensor(
-                target_module.weight.data,
-                signed=True,
-                n_bits=8,
-                n_frac=int(target_module.export_quant_info()[0]),
-            )
-        )
+    """
+    Copy weight/bias from `src` to `dst`, quantising them with the
+    frac bits stored in `src.export_quant_info()`.
+    Works for both “plain” and fused Conv-BN containers.
+    """
 
-    if hasattr(target_module, "bias") and target_module.bias is not None:
-        new_layer.bias.data.copy_(
-            fake_quantize_tensor(
-                target_module.bias.data,
-                signed=True,
-                n_bits=8,
-                n_frac=int(target_module.export_quant_info()[1]),
-            )
-        )
+    # ---- 1. Weight ----------------------------------------------------
+    w_src = _get_src_param(src, "weight")
+    if w_src is None:
+        print(f"[copy-quant]  No weight found in {src.__class__.__name__}")
+    else:
+        w_fake= _quantize_det(
+                    w_src,
+                    n_bits=8, signed=True,
+                    n_frac=int(src.export_quant_info()[0]))
+        dst.weight.copy_(w_fake.to(dst.weight.dtype))
 
-
-def _copy_and_quantize_fused_params(
-        target_module: nn.Module, new_layer: nn.Module
-) -> None:
-    """Copies weights/bias from target_module to new_layer and quantizes them."""
-    """This function is used for fusedConvBN layers."""
-    if hasattr(target_module, "weight") and target_module.weight is not None:
-        new_layer.weight.data.copy_(
-            fake_quantize_tensor(
-                target_module.conv_mod.weight.data,
-                signed=True,
-                n_bits=8,
-                n_frac=int(target_module.export_quant_info()[0]),
-            )
-        )
-
-    if hasattr(target_module, "bias") and target_module.bias is not None:
-        new_layer.bias.data.copy_(
-            fake_quantize_tensor(
-                target_module.conv_mod.bias.data,
-                signed=True,
-                n_bits=8,
-                n_frac=int(target_module.export_quant_info()[1]),
-            )
-        )
+    # ---- 2. Bias  (only if both sides have it) ------------------------
+    if hasattr(dst, "bias") and dst.bias is not None:
+        b_src = _get_src_param(src, "bias")
+        if b_src is not None:
+            b_fake = _quantize_det(b_src, n_bits=8, signed=True, n_frac=int(src.export_quant_info()[1]))
+            dst.bias.copy_(b_fake.to(dst.bias.dtype))
 
 
 def _register_quant_metadata(new_layer: nn.Module, quant_info: list) -> None:
@@ -105,7 +104,7 @@ def _handle_fused_conv_bn(target_module: FusedConvBN,) -> nn.Conv2d:
         groups=target_module.conv_mod.groups,
         bias=target_module.conv_mod.bias is not None,
     )
-    _copy_and_quantize_fused_params(target_module, conv_layer)
+    _copy_and_quantize_params(target_module, conv_layer)
     _register_quant_metadata(conv_layer, target_module.export_quant_info())
     return conv_layer
 
@@ -429,9 +428,9 @@ class InferProcessor:
         qconfig[first_layer_name] = {
             "bitwidth": 8,
             "frac_in": [5],
-            "frac_w": 8,
-            "frac_b": 8,
-            "frac_out": 8
+            "frac_w": int(dict(self.std_model.named_modules())[first_layer_name].frac_weight),
+            "frac_b": int(dict(self.std_model.named_modules())[first_layer_name].frac_bias),
+            "frac_out": int(dict(self.std_model.named_modules())[first_layer_name].frac_act)
         }
 
         self.logger.info("Successfully Generated qconfig:")

@@ -76,7 +76,7 @@ def to_int_tensor(tensor, signed=True, n_bits=8, n_frac=0):
 
         int_tensor = round_tensor(int_tensor*scale, 'HALF_UP')
         int_tensor = torch.clamp(int_tensor, min_v, max_v)
-        int_tensor = int_tensor.to(torch.int32)  # You can change to int8 if needed
+        int_tensor = int_tensor.to(torch.int8)  # You can change to int32 if needed
 
     return int_tensor
 
