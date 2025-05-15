@@ -37,7 +37,7 @@ logs/
 *.out
 *.tar
 *.onnx
-
+*.data
 
 # idea folder
 .idea
