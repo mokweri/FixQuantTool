@@ -4,9 +4,13 @@ import torch
 import torch.nn as nn
 import platform
 from PIL import Image
+from collections import OrderedDict
+from typing import Dict, Any
 from pathlib import Path
 import torchvision.transforms as transforms
 import yaml
+import logging
+from torch.utils.data.datapipes.gen_pyi import iterDP_files_to_exclude
 
 from models.cifar_models import *
 from quantization.fix_ops import to_int_tensor, to_float_tensor, fake_quantize_tensor
@@ -51,6 +55,8 @@ parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)  # Set desired logging level
+
     def preprocess_image(image_path):
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -61,48 +67,6 @@ if __name__ == '__main__':
         tensor = transform(image).unsqueeze(0)
 
         return tensor
-
-
-    @torch.no_grad()
-    def save_layer_params(layer: nn.Module, path: str | Path) -> None:
-        """
-        layer : module that *still* holds float weights / bias produced by a fake-quant pass.  It also exposes
-                       layer.frac_weight   (# fractional bits for weights)
-                       layer.frac_bias     (# fractional bits for bias)
-        path  : destination file (e.g. "conv_int8.pth")
-
-        The function converts W/B to signed INT8 according to the (Qm.n) format, then serialises:
-            { weight_int8, bias_int8?, frac_w, frac_b }
-        """
-
-        # -------- 1.  fetch frac parameters --------------------------------
-        def _to_int(x):
-            return int(x.item()) if torch.is_tensor(x) else int(x)
-
-        frac_w = _to_int(layer.frac_weight)
-        frac_b = _to_int(layer.frac_bias) if hasattr(layer, "frac_bias") else 0
-        frac_act = _to_int(layer.frac_act)
-
-        # -------- 2.  convert float → int8  ----------------
-        w_int8 = to_int_tensor( layer.weight.detach(), signed=True, n_bits=8, n_frac=frac_w).to(torch.int8).cpu().clone()
-
-        if layer.bias is not None:
-            b_int8 = to_int_tensor( layer.bias.detach(), signed=True, n_bits=8, n_frac=frac_b).to(torch.int8).cpu().clone()
-        else:
-            b_int8 = None
-
-        # -------- 3.  build payload & save ---------------------------------
-        payload: Dict[str, Any] = {
-            "weight_int8": w_int8,
-            "frac_w": frac_w,
-            "frac_out": frac_act
-        }
-        if b_int8 is not None:
-            payload.update({"bias_int8": b_int8, "frac_b": frac_b})
-
-        torch.save(payload, path)
-        print(f"[save_layer_params] wrote quantised params to {path}")
-
 
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
@@ -119,51 +83,53 @@ if __name__ == '__main__':
         raise RuntimeError("Unsupported OS")
 
     """Imagenet models"""
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+
     """Cifar models"""
     # model = resnet18_cifar10()
 
+    """ ---- QUANTIZATION PROCESSING -----"""
     with open("quantization/utils/quant_config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.load_qat_weights('qat_models/checkpoint/model_best.pth.tar')
     Qatprocessor.freeze()
+    Qatprocessor.load_qat_weights('qat_models/checkpoint/resnet50_best.pth.tar')
+    """ NOTE:
+            Call Qatprocessor.freeze() before loading resnet50weights 
+            - it behaves normal - frozen during training -- resnet18 and vgg16 does not behave
+            Call Qatprocessor.freeze() after loading vgg16/resnet18weights 
+        """
+    # Qatprocessor.freeze()
 
-    # @TODO - the model doesnt freeze during training
-
+    """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
     stdm = infer_processor.convert_to_std_model()
-    infer_processor.export_onnx_with_layer_metadata("res.onnx")
+    # infer_processor.export_onnx_with_layer_metadata("res.onnx")
     qconfig = infer_processor.generate_qconfig()
     print(qconfig)
 
-    #print(stdm)
+    infer_processor.export_weights_to_file()
 
-    # for name, _ in stdm.named_modules():
-    #     print(name)
-    layer_name = "conv1"  # pick any name visible in .named_modules()
-    conv_q = dict(stdm.named_modules())[layer_name]
-    print(conv_q)
-    save_layer_params(conv_q, "hw_fxp/conv1.pth")
+    """ ---- TEST GENERATION  -----"""
+    """Extract a subset of a layer"""
+    layer_name = "conv1"
+    subset_shape = (16, 3, 2, 2)  # (out_channels, in_channels, H, W)
 
+    fp_w, fp_b, frac_w, frac_b = infer_processor.extract_and_subset_layer_parameters(
+        layer_name=layer_name,
+        output_filename=f"{layer_name}_subset.data",
+        target_weight_shape=subset_shape
+    )
+    if fp_w is not None:
+        print(f"Returned FP Weight for '{layer_name}': shape={fp_w.shape}, dtype={fp_w.dtype}")
+    if fp_b is not None:
+        print(f"Returned FP Bias for '{layer_name}': shape={fp_b.shape}, dtype={fp_b.dtype}")
 
-
-
-    # create_compact_model(model)
-    # qconfig = create_qconfig(model)
-    """ NOTE: dont use compact_model with make_inference_model"""
     # ---------------------------------------------
-    # inf_model = convert_to_inference_model(model)
-    # gconfig = generate_qconfig(inf_model)
-    # std_qconfig = standardize_qconfig(gconfig)
-    # print(gconfig)
-    # print(std_qconfig)
-    #
-    # emu_model = create_emulation_model(inf_model)
-    #
     # test_image = preprocess_image("new.JPEG")
     # # test_image = to_int_tensor(test_image, signed=True, n_bits=8, n_frac=5)
     # test_image = fake_quantize_tensor(test_image, signed=True, n_bits=8, n_frac=5)

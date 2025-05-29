@@ -5,6 +5,7 @@ import copy
 import onnx
 import logging
 from typing import Optional
+import numpy as np
 
 from quantization.fix_ops import fake_quantize_tensor, to_int_tensor
 from quantization.fusedConvBn import FusedConvBN
@@ -480,3 +481,284 @@ class InferProcessor:
                 standardized[layer] = layer_config
 
         return standardized
+
+    def export_weights_to_file(self, output_filename="weights.data", n_bits_out=8, pad_last_layer_dim_to=1024):
+        """
+        Extracts weights and biases, quantizes them, optionally pads the last layer,
+        concatenates as NumPy arrays, and saves to a binary file.
+        """
+        self.logger.info(f"Starting extraction of quantized parameters to '{output_filename}' (n_bits={n_bits_out}).")
+        if pad_last_layer_dim_to:
+            self.logger.info(f"Padding output dimension of the last Conv/Linear layer to {pad_last_layer_dim_to}.")
+
+        all_quantized_numpy_arrays = []
+
+        # First, identify the name of the last Conv2d or Linear layer
+        last_conv_linear_layer_name = None
+        for name, module in self.std_model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                last_conv_linear_layer_name = name
+
+        if last_conv_linear_layer_name:
+            self.logger.info(
+                f"Identified last Conv/Linear layer for potential padding: '{last_conv_linear_layer_name}'")
+        else:
+            self.logger.warning("No Conv/Linear layer found in the model. Padding will not be applied.")
+
+        for name, module in self.std_model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                self.logger.debug(f"Processing layer: {name} ({type(module).__name__})")
+                is_last_layer_to_pad = (name == last_conv_linear_layer_name and pad_last_layer_dim_to is not None)
+
+                # --- Process Weights ---
+                if hasattr(module, 'weight') and module.weight is not None:
+                    if not hasattr(module, 'frac_weight'):
+                        self.logger.warning(f"Layer '{name}' has weights but no 'frac_weight'. Skipping weights.")
+                    else:
+                        frac_w = int(module.frac_weight)
+                        int_weights_tensor = to_int_tensor(
+                            module.weight.data.detach().clone(),
+                            signed=True, n_bits=n_bits_out, n_frac=frac_w
+                        )
+                        if int_weights_tensor is not None:
+                            # --- Apply Padding if this is the last layer and padding is enabled ---
+                            if is_last_layer_to_pad:
+                                current_dim0_size = int_weights_tensor.shape[0]
+                                if current_dim0_size < pad_last_layer_dim_to:
+                                    if isinstance(module, nn.Linear):  # Weights shape (out_features, in_features)
+                                        pad_rows = pad_last_layer_dim_to - current_dim0_size
+                                        padding = torch.zeros((pad_rows, int_weights_tensor.shape[1]),
+                                                              dtype=int_weights_tensor.dtype,
+                                                              device=int_weights_tensor.device)
+                                        int_weights_tensor = torch.cat((int_weights_tensor, padding), dim=0)
+                                        self.logger.info(
+                                            f"  Padded weights of Linear layer '{name}' (dim 0) from {current_dim0_size} to {pad_last_layer_dim_to}.")
+                                    elif isinstance(module,
+                                                    nn.Conv2d):  # Weights shape (out_channels, in_channels, kH, kW)
+                                        pad_channels = pad_last_layer_dim_to - current_dim0_size
+                                        padding_shape = (pad_channels,) + int_weights_tensor.shape[1:]
+                                        padding = torch.zeros(padding_shape,
+                                                              dtype=int_weights_tensor.dtype,
+                                                              device=int_weights_tensor.device)
+                                        int_weights_tensor = torch.cat((int_weights_tensor, padding), dim=0)
+                                        self.logger.info(
+                                            f"  Padded weights of Conv2d layer '{name}' (dim 0: out_channels) from {current_dim0_size} to {pad_last_layer_dim_to}.")
+                                elif current_dim0_size > pad_last_layer_dim_to:
+                                    self.logger.warning(
+                                        f"  Weights of last layer '{name}' dim 0 ({current_dim0_size}) is already > target pad size ({pad_last_layer_dim_to}). No padding done.")
+
+                            numpy_weights = int_weights_tensor.cpu().numpy().flatten()
+                            all_quantized_numpy_arrays.append(numpy_weights)
+                            self.logger.debug(
+                                f"  Quantized weights for '{name}' added (elements: {numpy_weights.size})")
+
+                # --- Process Biases ---
+                if hasattr(module, 'bias') and module.bias is not None:
+                    if not hasattr(module, 'frac_bias'):
+                        self.logger.warning(f"Layer '{name}' has bias but no 'frac_bias'. Skipping bias.")
+                    else:
+                        frac_b = int(module.frac_bias)
+                        int_bias_tensor = to_int_tensor(
+                            module.bias.data.detach().clone(),
+                            signed=True, n_bits=n_bits_out, n_frac=frac_b
+                        )
+                        if int_bias_tensor is not None:
+                            # --- Apply Padding if this is the last layer and padding is enabled ---
+                            if is_last_layer_to_pad:
+                                current_bias_size = int_bias_tensor.shape[0]
+                                if current_bias_size < pad_last_layer_dim_to:
+                                    pad_elements = pad_last_layer_dim_to - current_bias_size
+                                    padding = torch.zeros(pad_elements,
+                                                          dtype=int_bias_tensor.dtype,
+                                                          device=int_bias_tensor.device)
+                                    int_bias_tensor = torch.cat((int_bias_tensor, padding), dim=0)
+                                    self.logger.info(
+                                        f"  Padded bias of layer '{name}' from {current_bias_size} to {pad_last_layer_dim_to} elements.")
+                                elif current_bias_size > pad_last_layer_dim_to:
+                                    self.logger.warning(
+                                        f"  Bias of last layer '{name}' ({current_bias_size}) is already > target pad size ({pad_last_layer_dim_to}). No padding done.")
+
+                            numpy_bias = int_bias_tensor.cpu().numpy().flatten()
+                            all_quantized_numpy_arrays.append(numpy_bias)
+                            self.logger.debug(f"  Quantized bias for '{name}' added (elements: {numpy_bias.size})")
+
+        if not all_quantized_numpy_arrays:
+            self.logger.warning("No parameters collected. Output file will be empty or not created.")
+            try:
+                with open(output_filename, 'wb') as f:
+                    pass
+                self.logger.info(f"Created empty file '{output_filename}'.")
+            except IOError as e:
+                self.logger.error(f"Failed to create empty file: {e}")
+            return
+
+        try:
+            final_numpy_array = np.concatenate(all_quantized_numpy_arrays)
+        except ValueError as e:
+            self.logger.error(f"NumPy concatenation failed: {e}")
+            for i, arr in enumerate(all_quantized_numpy_arrays): self.logger.error(
+                f"Arr {i}: shape={arr.shape}, dtype={arr.dtype}")
+            raise
+
+        self.logger.info(
+            f"Concatenated parameters. Total elements: {final_numpy_array.size}, dtype: {final_numpy_array.dtype}")
+
+        try:
+            final_numpy_array.tofile(output_filename)
+            self.logger.info(f"Successfully wrote {final_numpy_array.size} params to '{output_filename}'.")
+        except IOError as e:
+            self.logger.error(f"Failed to write to file '{output_filename}': {e}")
+            raise
+
+    def extract_and_subset_layer_parameters(
+            self,
+            layer_name: str,
+            output_filename: str,
+            target_weight_shape: tuple = None,  # e.g., (16, original_C_in, 32, 32) or (16, original_C_in)
+            n_bits_out: int = 8
+    ):
+        """
+         Extracts weights and (if present) bias from a specific layer,
+         optionally takes a subset, quantizes them, saves to file, and
+         returns the original floating-point (potentially subsetted) tensors.
+
+         Args:
+             layer_name (str): The name of the layer.
+             output_filename (str): Path to save the quantized parameters.
+             target_weight_shape (tuple, optional): Desired shape for the subset of weights.
+             n_bits_out (int): Number of bits for output quantized integers.
+
+         Returns:
+             tuple[torch.Tensor | None, torch.Tensor | None]:
+                 A tuple containing:
+                 - The original floating-point (potentially subsetted) weight tensor. None if no weights.
+                 - The original floating-point (potentially subsetted) bias tensor. None if no bias.
+         """
+        self.logger.info(f"Extracting parameters from layer '{layer_name}' to '{output_filename}'.")
+        if target_weight_shape:
+            self.logger.info(f"  Target subset weight shape: {target_weight_shape}")
+
+        module_to_extract = dict(self.std_model.named_modules()).get(layer_name)
+
+        if module_to_extract is None:
+            self.logger.error(f"Layer '{layer_name}' not found.")
+            raise ValueError(f"Layer '{layer_name}' not found.")
+        if not isinstance(module_to_extract, (nn.Conv2d, nn.Linear)):
+            self.logger.error(f"Layer '{layer_name}' is {type(module_to_extract).__name__}, not Conv2d/Linear.")
+            raise TypeError(f"Layer '{layer_name}' is not a Conv2d or Linear layer.")
+
+        quantized_params_for_file = []
+        return_fp_weight: torch.Tensor | None = None
+        return_fp_bias: torch.Tensor | None = None
+
+        # --- Process Weights ---
+        if hasattr(module_to_extract, 'weight') and module_to_extract.weight is not None:
+            original_fp_weights = module_to_extract.weight.data.detach().clone()
+            self.logger.debug(f"  Original FP weight shape: {original_fp_weights.shape}")
+
+            # Determine the final FP weights (full or subset) to be returned and quantized
+            current_fp_weights_to_process = original_fp_weights
+            if target_weight_shape:
+                if len(target_weight_shape) != original_fp_weights.ndim:
+                    msg = (f"Target weight shape {target_weight_shape} (rank {len(target_weight_shape)}) "
+                           f"mismatches original rank {original_fp_weights.ndim}.")
+                    self.logger.error(msg)
+                    raise ValueError(msg)
+
+                slicing_indices = []
+                valid_subset = True
+                for i, dim_size in enumerate(target_weight_shape):
+                    if not (0 < dim_size <= original_fp_weights.shape[i]):  # dim_size must be positive
+                        msg = (f"Target dim {i} size {dim_size} is invalid or exceeds "
+                               f"original size {original_fp_weights.shape[i]}.")
+                        self.logger.error(msg)
+                        valid_subset = False
+                        break
+                    slicing_indices.append(slice(0, dim_size))
+
+                if not valid_subset:
+                    raise ValueError("Invalid target_weight_shape.")
+
+                current_fp_weights_to_process = original_fp_weights[tuple(slicing_indices)]
+                self.logger.info(f"  Subsetted FP weights to shape: {current_fp_weights_to_process.shape}")
+
+            return_fp_weight = current_fp_weights_to_process  # This is the float tensor to return
+
+            # Now quantize these (potentially subsetted) FP weights
+            frac_w = int(getattr(module_to_extract, 'frac_weight', 0))  # Default frac to 0 if not found
+            if not hasattr(module_to_extract, 'frac_weight'):
+                self.logger.warning(f"Layer '{layer_name}' weights missing 'frac_weight', using default 0.")
+
+            quantized_weights = to_int_tensor(
+                return_fp_weight, signed=True, n_bits=n_bits_out, n_frac=frac_w
+            )
+            if quantized_weights is not None:
+                quantized_params_for_file.append(quantized_weights.cpu().numpy().flatten())
+                self.logger.debug(f"  Quantized weights added (elements: {quantized_params_for_file[-1].size})")
+            else:
+                self.logger.error(f"Quantization of weights for '{layer_name}' resulted in None.")
+        else:
+            self.logger.warning(f"Layer '{layer_name}' has no 'weight' or it's None.")
+
+        # --- Process Biases ---
+        if hasattr(module_to_extract, 'bias') and module_to_extract.bias is not None:
+            original_fp_bias = module_to_extract.bias.data.detach().clone()
+            self.logger.debug(f"  Original FP bias shape: {original_fp_bias.shape}")
+
+            current_fp_bias_to_process = original_fp_bias
+            # Bias subsetting is dependent on the first dimension of the processed weights
+            if return_fp_weight is not None and target_weight_shape is not None:  # Implying weights were subsetted
+                target_bias_len_from_weights = return_fp_weight.shape[0]
+                if target_bias_len_from_weights < original_fp_bias.shape[0]:
+                    if original_fp_bias.ndim == 1:
+                        current_fp_bias_to_process = original_fp_bias[:target_bias_len_from_weights]
+                        self.logger.info(f"  Subsetted FP bias to length: {current_fp_bias_to_process.shape[0]}")
+                    else:
+                        self.logger.warning("  Bias is not 1D. Auto-subsetting based on weights not applied robustly.")
+                elif target_bias_len_from_weights > original_fp_bias.shape[0]:
+                    self.logger.warning(f"  Target bias length from weights ({target_bias_len_from_weights}) "
+                                        f"> original bias length ({original_fp_bias.shape[0]}). Using original bias length.")
+
+            return_fp_bias = current_fp_bias_to_process  # This is the float tensor to return
+
+            # Now quantize these (potentially subsetted) FP biases
+            frac_b = int(getattr(module_to_extract, 'frac_bias', 0))  # Default frac to 0 if not found
+            if not hasattr(module_to_extract, 'frac_bias'):
+                self.logger.warning(f"Layer '{layer_name}' bias missing 'frac_bias', using default 0.")
+
+            quantized_bias = to_int_tensor(
+                return_fp_bias, signed=True, n_bits=n_bits_out, n_frac=frac_b
+            )
+            if quantized_bias is not None:
+                quantized_params_for_file.append(quantized_bias.cpu().numpy().flatten())
+                self.logger.debug(f"  Quantized bias added (elements: {quantized_params_for_file[-1].size})")
+            else:
+                self.logger.error(f"Quantization of bias for '{layer_name}' resulted in None.")
+        elif isinstance(module_to_extract, (nn.Conv2d, nn.Linear)):
+            self.logger.debug(f"  Layer '{layer_name}' has no 'bias' or it's None.")
+
+        # --- Save to File ---
+        if not quantized_params_for_file:
+            self.logger.warning(f"No parameters (weights or bias) processed for file output from '{layer_name}'.")
+            try:
+                with open(output_filename, 'wb') as f:
+                    pass  # Create empty file
+                self.logger.info(f"Created empty file '{output_filename}'.")
+            except IOError as e:
+                self.logger.error(f"Failed to create empty file: {e}")
+        else:
+            try:
+                final_numpy_array = np.concatenate(quantized_params_for_file)
+                self.logger.info(
+                    f"Concatenated quantized params for '{layer_name}'. Total elements for file: {final_numpy_array.size}")
+                final_numpy_array.tofile(output_filename)
+                self.logger.info(
+                    f"Successfully wrote {final_numpy_array.size} quantized params from '{layer_name}' to '{output_filename}'.")
+            except ValueError as e:
+                self.logger.error(f"NumPy concatenation failed for '{layer_name}': {e}")
+                raise
+            except IOError as e:
+                self.logger.error(f"Failed to write to file '{output_filename}': {e}")
+                raise
+
+        return return_fp_weight, return_fp_bias, frac_w, frac_b

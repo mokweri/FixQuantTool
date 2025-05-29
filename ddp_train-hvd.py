@@ -14,8 +14,6 @@ import torch.multiprocessing as mp
 import torch.utils.data.distributed
 import horovod.torch as hvd
 
-from quantization.utils.model_transforms import create_quantizable_model, create_qconfig, create_deployable_model
-
 parser = argparse.ArgumentParser(description="Trains a ResNet-50 on ImageNet-1k")
 
 # Hyperparameters

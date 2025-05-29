@@ -55,6 +55,9 @@ parser.add_argument('--save_dir',
 parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
+"""
+    This script is used to train models on various datasets such as CIFAR10, CIFAR100, and ImageNet. 
+"""
 
 if __name__ == '__main__':
     args = parser.parse_args()

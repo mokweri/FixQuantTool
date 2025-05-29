@@ -174,6 +174,8 @@ if __name__ == "__main__":
     fp_conv = build_fp_conv(w_int8, b_int8, stride=2, padding=3, frac_w=frac_w, frac_b=frac_b)
     y_ref_i8 = to_int_tensor(torch.clamp_min(fp_conv(to_float_tensor(x_i8, 5)), 0.),
                              signed=True, n_bits=8, n_frac=frac_out)
+    print(y_i8)
+    y_i8.numpy().astype("int8").tofile("ref_output2.data")
 
     diff = (y_i8.to(torch.int16) - y_ref_i8.to(torch.int16)).abs()
     print("max |Δ| :", diff.max().item(),

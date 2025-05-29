@@ -178,7 +178,7 @@ if __name__ == '__main__':
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"
 
-    train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=False, path=data_dir)
+    train_loader = getTrainData("cifar10", batch_size=args.train_batch, num_workers=8, download=True, path=data_dir)
     val_loader = getValData("cifar10", batch_size=args.train_batch, num_workers=8, path=data_dir)
 
     # model = resnet18_cifar10(num_classes=10)
