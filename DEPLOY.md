@@ -23,7 +23,7 @@ The script (`deploy_eval.py`) orchestrates the process of taking a pre-trained P
     *   Pillow (PIL)
     *   PyYAML
     *   NumPy
-    A `requirements.txt` file would be beneficial. You can generate one using `pip freeze > requirements.txt`.
+    A `requirements.txt` is available.
 
 2.  **Custom Modules:** Ensure the following custom modules are in your `PYTHONPATH` or accessible from the script's directory:
     *   `models.cifar_models`
@@ -44,7 +44,7 @@ The script (`deploy_eval.py`) orchestrates the process of taking a pre-trained P
 5.  **Pre-trained QAT Weights:**
     *   The script expects QAT-finetuned weights, for example, at `qat_models/checkpoint/resnet50_best.pth.tar`. Update this path if necessary.
 
-## Directory Structure (Assumed)
+## Directory Structure
 `````
 ├── deploy_eval.py # The deployment script
 ├── quantization/

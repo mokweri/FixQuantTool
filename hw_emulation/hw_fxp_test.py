@@ -1,72 +1,14 @@
-#!/usr/bin/env python3
-"""
-Creates all assets needed by the HW testing:
-    • conv1_with_frac.onnx      (Conv layer + frac_* attributes)
-    • test_image.data           (input tensor  INT8 binary)
-    • ref_output.data           (golden output INT8 binary)
-    • weights.data              (raw INT8 weights)
-    • biases.data               (raw INT8 biases)
-The script also performs a self-check: INT8 kernel vs. fp32 reference
-(max |Δ| == 0 / 1 LSB).
-"""
 import torch, onnx, numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 from onnx import helper, TensorProto
 from pathlib import Path
 from PIL import Image
+
 import torchvision.transforms as transforms
 from quantization.fix_ops import to_int_tensor, to_float_tensor
 
-from hls_conv import HLSConv2d
-
-torch.backends.quantized.engine = "fbgemm"      # use 'qnnpack' on ARM/Apple
-torch.manual_seed(0)
-
-# ======================================================================
-#   Classes / functions
-# ======================================================================
-class FXPConv2dTorch(nn.Module):
-    """INT8-in / INT8-out Conv2d that re-uses PyTorch’s quantised kernel."""
-    def __init__(self, weight_int8, bias_int8=None,
-                 stride=1, padding=1, dilation=1, groups=1,
-                 frac_din=7, frac_w=7, frac_b=7, frac_out=7,
-                 relu=True):
-        super().__init__()
-
-        self.scale_in  = 2.0 ** (-frac_din)
-        self.scale_w   = 2.0 ** (-frac_w)
-        self.scale_out = 2.0 ** (-frac_out)
-        self.z_act  = 128                     # QUInt8 [0…255]
-        self.z_wt   = 0                       # QInt8
-        self.z_out  = 128
-
-        self.register_buffer("w_int8", weight_int8.contiguous())
-        w_q = torch.quantize_per_tensor(weight_int8.float()*self.scale_w,
-                                        scale=self.scale_w, zero_point=self.z_wt,
-                                        dtype=torch.qint8)
-
-        if bias_int8 is None:
-            bias_int8 = torch.zeros(weight_int8.size(0), dtype=torch.int8)
-        self.register_buffer("bias_int8", bias_int8.contiguous())
-        bias_fp32 = bias_int8.float() * (2.0**(-frac_b))
-
-        stride   = stride   if isinstance(stride,   tuple) else (stride,   stride)
-        padding  = padding  if isinstance(padding,  tuple) else (padding,  padding)
-        dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
-
-        self.packed_w = torch.ops.quantized.conv2d_prepack(
-                            w_q, bias_fp32, stride, padding, dilation, groups)
-        self.relu = relu
-
-    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
-        assert x_int8.dtype == torch.int8
-        x_q = torch.quantize_per_tensor(x_int8.float()*self.scale_in,
-                                        scale=self.scale_in, zero_point=self.z_act,
-                                        dtype=torch.quint8)
-        y_q = torch.ops.quantized.conv2d(x_q, self.packed_w,
-                                         self.scale_out, self.z_out)
-        y_i8 = (y_q.int_repr().to(torch.int16) - self.z_out).to(torch.int8)
-        return torch.clamp_min(y_i8, 0) if self.relu else y_i8
+from FxP_emu_modules import HLSConv2d, FXPConv2dTorch
 
 
 def build_fp_conv(w_int8, b_int8, stride=1, padding=1, dilation=1, groups=1,
@@ -139,6 +81,16 @@ def export_conv_to_onnx(conv: nn.Conv2d,
 
 
 if __name__ == "__main__":
+    """
+    Creates all assets needed by the HW testing:
+        • conv1_with_frac.onnx      (Conv layer + frac_* attributes)
+        • test_image.data           (input tensor  INT8 binary)
+        • ref_output.data           (golden output INT8 binary)
+        • weights.data              (raw INT8 weights)
+        • biases.data               (raw INT8 biases)
+    The script also performs a self-check: INT8 kernel vs. fp32 reference
+    (max |Δ| == 0 / 1 LSB).
+    """
 
     # ----------------------------------------------------- load data
     w_int8, b_int8, frac_w, frac_b, frac_out = load_layer_params("conv1.pth")

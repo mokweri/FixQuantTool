@@ -1,15 +1,13 @@
 import torch.fx as fx
-import torch
 import torch.nn as nn
 import copy
 
-from sympy.physics.units import electronvolt
 from torch.fx.experimental.optimization import matches_module_pattern, replace_node_module
 from quantization.qat_modules import (QuantizedLinear, QuantizedConv2d, QMaxPool2D, QAdaptiveAvgPool2d,
                                       QElementwiseAdd, QuantStubC)
 from quantization.fusedConvBn import FusedConvBN
 from quantization.utils.inference_mod import InferProcessor
-from quantization.FxP_modules2 import *
+from quantization.FxP_modules import *
 import yaml
 import logging
 from typing import Sequence, Callable, Dict, Any, Optional

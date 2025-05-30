@@ -1,5 +1,10 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+
+torch.backends.quantized.engine = "fbgemm"      # use 'qnnpack' on ARM/Apple
+torch.manual_seed(0)
+
 
 def sat_int(value, bits):
     """
@@ -19,17 +24,61 @@ def sign_extend(value, src_bits, dst_bits=32):
     sign  = 1 << (src_bits - 1)
     return (value ^ sign) - sign                 # textbook sign-extension
 
+
+class FXPConv2dTorch(nn.Module):
+    """INT8-in / INT8-out Conv2d that re-uses PyTorch’s quantised kernel."""
+    def __init__(self, weight_int8, bias_int8=None,
+                 stride=1, padding=1, dilation=1, groups=1,
+                 frac_din=7, frac_w=7, frac_b=7, frac_out=7,
+                 relu=True):
+        super().__init__()
+
+        self.scale_in  = 2.0 ** (-frac_din)
+        self.scale_w   = 2.0 ** (-frac_w)
+        self.scale_out = 2.0 ** (-frac_out)
+        self.z_act  = 128                     # QUInt8 [0…255]
+        self.z_wt   = 0                       # QInt8
+        self.z_out  = 128
+
+        self.register_buffer("w_int8", weight_int8.contiguous())
+        w_q = torch.quantize_per_tensor(weight_int8.float()*self.scale_w,
+                                        scale=self.scale_w, zero_point=self.z_wt,
+                                        dtype=torch.qint8)
+
+        if bias_int8 is None:
+            bias_int8 = torch.zeros(weight_int8.size(0), dtype=torch.int8)
+        self.register_buffer("bias_int8", bias_int8.contiguous())
+        bias_fp32 = bias_int8.float() * (2.0**(-frac_b))
+
+        stride   = stride   if isinstance(stride,   tuple) else (stride,   stride)
+        padding  = padding  if isinstance(padding,  tuple) else (padding,  padding)
+        dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
+
+        self.packed_w = torch.ops.quantized.conv2d_prepack(
+                            w_q, bias_fp32, stride, padding, dilation, groups)
+        self.relu = relu
+
+    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
+        assert x_int8.dtype == torch.int8
+        x_q = torch.quantize_per_tensor(x_int8.float()*self.scale_in,
+                                        scale=self.scale_in, zero_point=self.z_act,
+                                        dtype=torch.quint8)
+        y_q = torch.ops.quantized.conv2d(x_q, self.packed_w,
+                                         self.scale_out, self.z_out)
+        y_i8 = (y_q.int_repr().to(torch.int16) - self.z_out).to(torch.int8)
+        return torch.clamp_min(y_i8, 0) if self.relu else y_i8
+
+
 class HLSConv2d(torch.nn.Module):
     """
     Bit-true emulation of PipeCNN conv_pipe.cl (integer part only).
-
-      Parameters
-      ----------
-      weight_int8 : (C_out, C_in, kH, kW)  torch.int8
-      bias_int8   : (C_out,)               torch.int8   (may pass None)
-      stride, padding, dilation, groups : as in nn.Conv2d
-      frac_w, frac_b, frac_din, frac_dout : number of fractional bits in each quantity
-      relu :  if True reproduce the (contol & 0x01) ReLU in the kernel
+    Parameters
+    ----------
+      weight_int8           : (C_out, C_in, kH, kW)  torch.int8
+      bias_int8             : (C_out,)               torch.int8   (may pass None)
+      stride, padding, dilation, groups     : as in nn.Conv2d
+      frac_w, frac_b, frac_din, frac_dout   : number of fractional bits in each quantity
+      relu                  :  if True reproduce the (contol & 0x01) ReLU in the kernel
     """
     def __init__(self, weight_int8, bias_int8,
                  stride=1, padding=0, dilation=1, groups=1,
@@ -117,25 +166,3 @@ class HLSConv2d(torch.nn.Module):
         out_h = (H + 2*self.padding - self.dilation*(kH - 1) - 1)//self.stride + 1
         out_w = (W + 2*self.padding - self.dilation*(kW - 1) - 1)//self.stride + 1
         return y_int8.view(N, C_out, out_h, out_w)
-
-if __name__ == "__main__":
-    torch.manual_seed(0)
-
-    N, Cin, Cout, H, W = 1, 3, 5, 8, 8
-    kH = kW = 3
-
-    # random INT8 tensors --------------------------------------------------
-    x_int8  = torch.randint(-128, 128, (N, Cin, H, W),  dtype=torch.int8)
-    w_int8  = torch.randint(-128, 128, (Cout, Cin, kH, kW), dtype=torch.int8)
-    b_int8  = torch.randint(-128, 128, (Cout,), dtype=torch.int8)
-
-    layer = HLSConv2d(w_int8, b_int8,
-                      padding=1,
-                      frac_w=7, frac_b=7, frac_din=7, frac_dout=7,
-                      relu=True)
-
-    y_int8 = layer(x_int8)
-
-    print("output shape :", y_int8.shape)
-    print("dtype        :", y_int8.dtype)
-    print("value range  :", y_int8.min().item(), y_int8.max().item())

@@ -112,22 +112,22 @@ if __name__ == '__main__':
     qconfig = infer_processor.generate_qconfig()
     print(qconfig)
 
-    infer_processor.export_weights_to_file()
+    # infer_processor.export_weights_to_file(output_filename="hw_data_files/resnet50_weights.data")
 
     """ ---- TEST GENERATION  -----"""
     """Extract a subset of a layer"""
-    layer_name = "conv1"
-    subset_shape = (16, 3, 2, 2)  # (out_channels, in_channels, H, W)
-
-    fp_w, fp_b, frac_w, frac_b = infer_processor.extract_and_subset_layer_parameters(
-        layer_name=layer_name,
-        output_filename=f"{layer_name}_subset.data",
-        target_weight_shape=subset_shape
-    )
-    if fp_w is not None:
-        print(f"Returned FP Weight for '{layer_name}': shape={fp_w.shape}, dtype={fp_w.dtype}")
-    if fp_b is not None:
-        print(f"Returned FP Bias for '{layer_name}': shape={fp_b.shape}, dtype={fp_b.dtype}")
+    # layer_name = "conv1"
+    # subset_shape = (16, 3, 2, 2)  # (out_channels, in_channels, H, W)
+    #
+    # fp_w, fp_b, frac_w, frac_b = infer_processor.extract_and_subset_layer_parameters(
+    #     layer_name=layer_name,
+    #     output_filename=f"{layer_name}_subset.data",
+    #     target_weight_shape=subset_shape
+    # )
+    # if fp_w is not None:
+    #     print(f"Returned FP Weight for '{layer_name}': shape={fp_w.shape}, dtype={fp_w.dtype}")
+    # if fp_b is not None:
+    #     print(f"Returned FP Bias for '{layer_name}': shape={fp_b.shape}, dtype={fp_b.dtype}")
 
     # ---------------------------------------------
     # test_image = preprocess_image("new.JPEG")

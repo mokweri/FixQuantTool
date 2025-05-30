@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple
 
-from quantization.fix_ops import FixedPointQuantizer, round_tensor, find_fix_pos, to_int_tensor, fake_quantize_tensor, \
-    to_float_tensor
+from quantization.fix_ops import FixedPointQuantizer, find_fix_pos, to_int_tensor, fake_quantize_tensor
 
 
 class FxP_QConv2D(nn.Module):
@@ -30,26 +29,16 @@ class FxP_QConv2D(nn.Module):
         self.frac_b = self.qconfig[self._mod_name]['frac_b']
         self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
-        output = torch.nn.functional.conv2d(input=x.float(), weight=self.weight.float(), stride=self.stride,
-                                            padding=self.padding, dilation=self.dilation, groups=self.groups)
-        output = output.type(torch.int32)
-        output = output / (2 ** (self.frac_w + self.frac_in - self.frac_out))
-        output = round_tensor(output, mode='HALF_UP')
+        output = torch.nn.functional.conv2d(input=fake_quantize_tensor(x,True,8,self.frac_in),
+                                            weight=fake_quantize_tensor(self.weight,True,8,self.frac_w),
+                                            stride=self.stride, padding=self.padding, dilation=self.dilation, groups=self.groups)
 
         # Add bias
         if self.bias is not None:
-            if self.frac_b == self.frac_out:
-                bias = self.bias.type(torch.int32)
-            elif self.frac_b > self.frac_out:
-                bias = self.bias.type(torch.int32) / (2 ** (self.frac_b - self.frac_out))
-                bias = round_tensor(bias, mode='HALF_UP')
-            else:
-                bias = self.bias.type(torch.int32) / (2 ** (self.frac_out - self.frac_b))
-                bias = round_tensor(bias, mode='HALF_UP')
             # Add
-            output = output + bias.view(1, -1, 1, 1)
+            fbias = fake_quantize_tensor(self.bias,True,8,self.frac_b)
+            output = output + fbias.view(1, -1, 1, 1)
 
-        output = torch.clamp(output, -128, 127)
         return output
 
     @property
@@ -59,11 +48,6 @@ class FxP_QConv2D(nn.Module):
     @module_name.setter
     def module_name(self, value):
         self._mod_name = value
-
-    def quantize_module(self):
-        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['frac_w'])
-        if self.bias is not None:
-            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['frac_b'])
 
     @classmethod
     def from_float(cls, mod, qconfig=None):
@@ -79,13 +63,6 @@ class FxP_QConv2D(nn.Module):
         )
 
         return conv
-
-    def extra_repr(self):
-        return super().extra_repr() + (f", mod_name={self._mod_name}, "
-                                       f"frac_w = {self.qconfig[self._mod_name]['frac_w']}, "
-                                       f"frac_b = {self.qconfig[self._mod_name]['frac_b']}, "
-                                       f"frac_in = {self.qconfig[self._mod_name]['frac_in'][0]}, "
-                                       f"frac_out = {self.qconfig[self._mod_name]['frac_out']}")
 
 
 class FxP_QLinear(nn.Module):
@@ -107,25 +84,15 @@ class FxP_QLinear(nn.Module):
         self.frac_b = self.qconfig[self._mod_name]['frac_b']
         self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
-        output = torch.nn.functional.linear(input=x.float(), weight=self.weight.float())
-        output = output.type(torch.int32)
-        output = output / (2 ** (self.frac_w + self.frac_in - self.frac_out))
-        output = round_tensor(output, mode='HALF_UP')
+        output = torch.nn.functional.linear(input=fake_quantize_tensor(x,True,8,self.frac_in),
+                                            weight=fake_quantize_tensor(self.weight,True,8,self.frac_w))
 
         # Add bias
         if self.bias is not None:
-            if self.frac_b == self.frac_out:
-                bias = self.bias.type(torch.int32)
-            elif self.frac_b > self.frac_out:
-                bias = self.bias.type(torch.int32) / (2 ** (self.frac_b - self.frac_out))
-                bias = round_tensor(bias, mode='HALF_UP')
-            else:
-                bias = self.bias.type(torch.int32) / (2 ** (self.frac_out - self.frac_b))
-                bias = round_tensor(bias, mode='HALF_UP')
+            bias = fake_quantize_tensor(self.bias,True,8,self.frac_b)
             # Add
             output = output + bias
 
-        output = torch.clamp(output, -128, 127)
         return output
 
     @property
@@ -136,10 +103,6 @@ class FxP_QLinear(nn.Module):
     def module_name(self, value):
         self._mod_name = value
 
-    def quantize_module(self):
-        self.weight = to_int_tensor(self.weight, n_frac=self.qconfig[self._mod_name]['frac_w'])
-        if self.bias is not None:
-            self.bias = to_int_tensor(self.bias, n_frac=self.qconfig[self._mod_name]['frac_b'])
 
     @classmethod
     def from_float(cls, mod, qconfig=None):
@@ -159,7 +122,7 @@ class FxP_QMaxPool2D(nn.MaxPool2d):
         self.qconfig = qconfig
 
     def forward(self, x):
-        return super().forward(x.float())
+        return super().forward(fake_quantize_tensor(x,True,8,self.qconfig[self._mod_name]['frac_in'][0]))
 
     @property
     def module_name(self):
@@ -177,7 +140,8 @@ class FxP_QMaxPool2D(nn.MaxPool2d):
             padding=mod.padding,
             dilation=mod.dilation,
             return_indices=mod.return_indices,
-            ceil_mode=mod.ceil_mode
+            ceil_mode=mod.ceil_mode,
+            qconfig=qconfig
         )
         return maxp
 
@@ -196,9 +160,8 @@ class FxP_QElementwiseAdd(nn.Module):
         self.frac_in2 = self.qconfig[self._mod_name]['frac_in'][1]
         self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
-        scale1 = 2 ** (self.frac_out - self.frac_in1)
-        scale2 = 2 ** (self.frac_out - self.frac_in2)
-        out = x1.float() * scale1 + x2.float() * scale2
+        out = (fake_quantize_tensor(x1,True,8,self.frac_in1) +
+               fake_quantize_tensor(x2,True,8,self.frac_in2))
 
         return out
 
@@ -224,9 +187,8 @@ class FxP_QAdaptiveAvgPool2d(nn.AdaptiveAvgPool2d):
         self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
         self.frac_out = self.qconfig[self._mod_name]['frac_out']
 
-        xx = to_float_tensor(x, self.frac_in)
+        xx = fake_quantize_tensor(x,True,8,self.frac_in)
         out = super().forward(xx)
-        out = to_int_tensor(out, n_frac=self.frac_out)
 
         return out
 
@@ -259,7 +221,7 @@ class FxP_QAvgPool2d(nn.AvgPool2d):
     def forward(self, x):
         self.frac_in = self.qconfig[self._mod_name]['frac_in'][0]
         self.frac_out = self.qconfig[self._mod_name]['frac_out']
-        out = super().forward(x.float() * (2 ** self.frac_in)) / (2 ** self.frac_out)
+        out = super().forward(fake_quantize_tensor(x,True,8,self.frac_in))
         return out
 
     @property
@@ -364,7 +326,7 @@ if __name__ == '__main__':
     fxp_qconv_layer = FxP_QConv2D(weight, bias, stride=stride, padding=padding, dilation=dilation, groups=groups,
                                   qconfig=qconfig)
     fxp_qconv_layer.module_name = 'conv1'
-    fxp_qconv_layer.quantize_module()
+    # fxp_qconv_layer.quantize_module()
 
     output_custom = fxp_qconv_layer(qin).detach()
 

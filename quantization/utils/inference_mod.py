@@ -265,13 +265,16 @@ class InferProcessor:
                     if isinstance(target_module, FusedConvBN):
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
-                    elif isinstance(target_module, nn.Conv2d):
+                    elif isinstance(target_module, QuantizedConv2d):
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
-                    elif isinstance(target_module, nn.Linear):
+                    elif isinstance(target_module, QuantizedLinear):
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
-                    elif isinstance(target_module, nn.MaxPool2d):
+                    elif isinstance(target_module, QMaxPool2D):
+                        inference_model.layers[target_module.module_name] = new_module
+                        new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
+                    elif isinstance(target_module, QAdaptiveAvgPool2d):
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
                     elif isinstance(target_module, nn.ReLU):

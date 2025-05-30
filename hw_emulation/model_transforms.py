@@ -8,7 +8,7 @@ from torch.nn.utils.fusion import fuse_conv_bn_weights
 from quantization.qat_modules import QuantizedLinear, QuantizedConv2d, QMaxPool2D, QAdaptiveAvgPool2d, QElementwiseAdd
 from quantization.qat_modules import QuantizedConv2d
 from quantization.fix_ops import FixedPointQuantizer, QuantStubF, QuantStubI, QuantStubE
-from quantization.FxP_modules2 import *
+from quantization.FxP_modules import *
 
 
 def create_emulation_model(model):
