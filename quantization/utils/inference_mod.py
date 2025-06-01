@@ -485,7 +485,8 @@ class InferProcessor:
 
         return standardized
 
-    def export_weights_to_file(self, output_filename="weights.data", n_bits_out=8, pad_last_layer_dim_to=1024):
+    def export_weights_to_file(self, layer_order, output_filename="weights.data", n_bits_out=8,
+                               pad_last_layer_dim_to=1024):
         """
         Extracts weights and biases, quantizes them, optionally pads the last layer,
         concatenates as NumPy arrays, and saves to a binary file.
@@ -496,24 +497,26 @@ class InferProcessor:
 
         all_quantized_numpy_arrays = []
 
-        # First, identify the name of the last Conv2d or Linear layer
+        # Determine the last layer for potential padding
         last_conv_linear_layer_name = None
-        for name, module in self.std_model.named_modules():
-            if isinstance(module, (nn.Conv2d, nn.Linear)):
+        for name in reversed(layer_order):
+            if isinstance(self.std_model.get_submodule(name), (nn.Conv2d, nn.Linear)):
                 last_conv_linear_layer_name = name
+                break
 
         if last_conv_linear_layer_name:
             self.logger.info(
                 f"Identified last Conv/Linear layer for potential padding: '{last_conv_linear_layer_name}'")
         else:
-            self.logger.warning("No Conv/Linear layer found in the model. Padding will not be applied.")
+            self.logger.warning("No Conv/Linear layer found in the specified layer order. Padding will not be applied.")
 
-        for name, module in self.std_model.named_modules():
+        for name in layer_order:
+            module = self.std_model.get_submodule(name)
             if isinstance(module, (nn.Conv2d, nn.Linear)):
                 self.logger.debug(f"Processing layer: {name} ({type(module).__name__})")
                 is_last_layer_to_pad = (name == last_conv_linear_layer_name and pad_last_layer_dim_to is not None)
 
-                # --- Process Weights ---
+                # Process Weights
                 if hasattr(module, 'weight') and module.weight is not None:
                     if not hasattr(module, 'frac_weight'):
                         self.logger.warning(f"Layer '{name}' has weights but no 'frac_weight'. Skipping weights.")
@@ -524,7 +527,7 @@ class InferProcessor:
                             signed=True, n_bits=n_bits_out, n_frac=frac_w
                         )
                         if int_weights_tensor is not None:
-                            # --- Apply Padding if this is the last layer and padding is enabled ---
+                            # Apply Padding if this is the last layer and padding is enabled
                             if is_last_layer_to_pad:
                                 current_dim0_size = int_weights_tensor.shape[0]
                                 if current_dim0_size < pad_last_layer_dim_to:
@@ -555,7 +558,7 @@ class InferProcessor:
                             self.logger.debug(
                                 f"  Quantized weights for '{name}' added (elements: {numpy_weights.size})")
 
-                # --- Process Biases ---
+                # Process Biases
                 if hasattr(module, 'bias') and module.bias is not None:
                     if not hasattr(module, 'frac_bias'):
                         self.logger.warning(f"Layer '{name}' has bias but no 'frac_bias'. Skipping bias.")
@@ -566,7 +569,7 @@ class InferProcessor:
                             signed=True, n_bits=n_bits_out, n_frac=frac_b
                         )
                         if int_bias_tensor is not None:
-                            # --- Apply Padding if this is the last layer and padding is enabled ---
+                            # Apply Padding if this is the last layer and padding is enabled
                             if is_last_layer_to_pad:
                                 current_bias_size = int_bias_tensor.shape[0]
                                 if current_bias_size < pad_last_layer_dim_to:
@@ -599,8 +602,8 @@ class InferProcessor:
             final_numpy_array = np.concatenate(all_quantized_numpy_arrays)
         except ValueError as e:
             self.logger.error(f"NumPy concatenation failed: {e}")
-            for i, arr in enumerate(all_quantized_numpy_arrays): self.logger.error(
-                f"Arr {i}: shape={arr.shape}, dtype={arr.dtype}")
+            for i, arr in enumerate(all_quantized_numpy_arrays):
+                self.logger.error(f"Arr {i}: shape={arr.shape}, dtype={arr.dtype}")
             raise
 
         self.logger.info(

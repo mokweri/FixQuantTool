@@ -108,11 +108,69 @@ if __name__ == '__main__':
     """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
     stdm = infer_processor.convert_to_std_model()
-    # infer_processor.export_onnx_with_layer_metadata("res.onnx")
+    # infer_processor.export_onnx_with_layer_metadata("res50.onnx")
     qconfig = infer_processor.generate_qconfig()
     print(qconfig)
 
-    # infer_processor.export_weights_to_file(output_filename="hw_data_files/resnet50_weights.data")
+    """You need to define a list of layer names in the order the HW expects it"""
+    resnet50_layer_order = [
+        "conv1",
+        "layer1_0_downsample_0",
+        "layer1_0_conv1",
+        "layer1_0_conv2",
+        "layer1_0_conv3",  # --> followed by add
+        "layer1_1_conv1",
+        "layer1_1_conv2",
+        "layer1_1_conv3",  # --> followed by add_1
+        "layer1_2_conv1",
+        "layer1_2_conv2",
+        "layer1_2_conv3",  # --> followed by add_2
+        "layer2_0_downsample_0",
+        "layer2_0_conv1",
+        "layer2_0_conv2",
+        "layer2_0_conv3",  # --> followed by add_3
+        "layer2_1_conv1",
+        "layer2_1_conv2",
+        "layer2_1_conv3",  # --> followed by add_4
+        "layer2_2_conv1",
+        "layer2_2_conv2",
+        "layer2_2_conv3",  # --> followed by add_5
+        "layer2_3_conv1",
+        "layer2_3_conv2",
+        "layer2_3_conv3",  # --> followed by add_6
+        "layer3_0_downsample_0",
+        "layer3_0_conv1",
+        "layer3_0_conv2",
+        "layer3_0_conv3",  # --> followed by add_7
+        "layer3_1_conv1",
+        "layer3_1_conv2",
+        "layer3_1_conv3",  # --> followed by add_8
+        "layer3_2_conv1",
+        "layer3_2_conv2",
+        "layer3_2_conv3",  # --> followed by add_9
+        "layer3_3_conv1",
+        "layer3_3_conv2",
+        "layer3_3_conv3",  # --> followed by add_10
+        "layer3_4_conv1",
+        "layer3_4_conv2",
+        "layer3_4_conv3",  # --> followed by add_11
+        "layer3_5_conv1",
+        "layer3_5_conv2",
+        "layer3_5_conv3",  # --> followed by add_12
+        "layer4_0_downsample_0",
+        "layer4_0_conv1",
+        "layer4_0_conv2",
+        "layer4_0_conv3",  # --> followed by add_13
+        "layer4_1_conv1",
+        "layer4_1_conv2",
+        "layer4_1_conv3",  # --> followed by add_14
+        "layer4_2_conv1",
+        "layer4_2_conv2",
+        "layer4_2_conv3",  # --> followed by add_15 -> avgpool
+        "fc"
+    ]
+
+    infer_processor.export_weights_to_file( layer_order=resnet50_layer_order,output_filename="hw_data_files/resnet50_weights.data")
 
     """ ---- TEST GENERATION  -----"""
     """Extract a subset of a layer"""
