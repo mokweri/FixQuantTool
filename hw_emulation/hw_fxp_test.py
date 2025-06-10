@@ -1,14 +1,15 @@
-import torch, onnx, numpy as np
+import os, torch, onnx, numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from onnx import helper, TensorProto
 from pathlib import Path
 from PIL import Image
+from typing import Tuple, Optional
 
 import torchvision.transforms as transforms
 from quantization.fix_ops import to_int_tensor, to_float_tensor
 
-from FxP_emu_modules import HLSConv2d, FXPConv2dTorch
+from FxP_emu_modules import HLSConv2d, FXPConv2dTorch, HLSConv2dInt
 
 
 def build_fp_conv(w_int8, b_int8, stride=1, padding=1, dilation=1, groups=1,
@@ -79,6 +80,91 @@ def export_conv_to_onnx(conv: nn.Conv2d,
     onnx.save(model, onnx_path)
     print(f"ONNX saved  →  {onnx_path}")
 
+def _subset_tensor(tensor: torch.Tensor, target_shape) -> torch.Tensor:
+    """Helper function to subset a tensor based on target shape."""
+    if target_shape is None:
+        return tensor
+
+    if len(target_shape) != tensor.ndim:
+        raise ValueError(f"Target shape rank {len(target_shape)} mismatches tensor rank {tensor.ndim}")
+
+    slicing_indices = []
+    for i, dim_size in enumerate(target_shape):
+        if not (0 < dim_size <= tensor.shape[i]):
+            raise ValueError(f"Target dim {i} size {dim_size} exceeds original size {tensor.shape[i]}")
+        slicing_indices.append(slice(0, dim_size))
+
+    subset_tensor = tensor[tuple(slicing_indices)]
+    print(f"Subsetted tensor from {tensor.shape} to {subset_tensor.shape}")
+    return subset_tensor
+
+
+def read_quantized_parameters(
+        weights_filepath: str,
+        bias_filepath: str,
+        weights_shape: Tuple[int, ...],
+        bias_shape: Optional[Tuple[int, ...]] = None,
+        dtype: np.dtype = np.int8
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """
+    Reads quantized weights and biases from binary files and reconstructs them into PyTorch tensors.
+
+    Args:
+        weights_filepath (str): The file path for the quantized weights.
+        bias_filepath (str): The file path for the quantized biases.
+        weights_shape (Tuple[int, ...]): The target shape to reconstruct the weights tensor.
+        bias_shape (Optional[Tuple[int, ...]], optional): The target shape for the bias tensor.
+                                                          If the layer has no bias, this can be None.
+                                                          Defaults to None.
+        dtype (np.dtype, optional): The numpy data type of the stored parameters.
+                                    Defaults to np.int8.
+
+    Returns:
+        Tuple[torch.Tensor, Optional[torch.Tensor]]: A tuple containing the reconstructed
+        weights tensor and the bias tensor. The bias tensor is None if its file is empty
+        or bias_shape is not provided.
+
+    Raises:
+        ValueError: If the number of elements in a file does not match the
+                    number of elements expected by its corresponding shape.
+        FileNotFoundError: If a specified file path does not exist.
+    """
+
+    def _read_and_reshape(filepath: str, shape: Optional[Tuple[int, ...]]) -> Optional[torch.Tensor]:
+        """Helper to read a single binary file and reshape it."""
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"The file was not found: {filepath}")
+
+        # Handle layers with no parameters (e.g., no bias) where an empty file is created.
+        if shape is None or os.path.getsize(filepath) == 0:
+            return None
+
+        # Read the raw binary data from the file
+        data_flat = np.fromfile(filepath, dtype=dtype)
+
+        # Verify that the number of elements read matches the expected shape
+        expected_elements = np.prod(shape)
+        if data_flat.size != expected_elements:
+            raise ValueError(
+                f"Shape mismatch in {filepath}. "
+                f"Expected {expected_elements} elements for shape {shape}, "
+                f"but file contained {data_flat.size} elements."
+            )
+
+        # Reshape the numpy array and convert to a PyTorch tensor
+        reconstructed_tensor = torch.from_numpy(data_flat.reshape(shape))
+        return reconstructed_tensor
+
+    # Read and reconstruct weights and biases using the helper
+    weights_tensor = _read_and_reshape(weights_filepath, weights_shape)
+    bias_tensor = _read_and_reshape(bias_filepath, bias_shape)
+
+    # Ensure a tensor is returned for weights, as layers always have them.
+    if weights_tensor is None:
+        raise ValueError(f"Weight file '{weights_filepath}' is empty or could not be read.")
+
+    return weights_tensor, bias_tensor
+
 
 if __name__ == "__main__":
     """
@@ -92,22 +178,45 @@ if __name__ == "__main__":
     (max |Δ| == 0 / 1 LSB).
     """
 
-    # ----------------------------------------------------- load data
-    w_int8, b_int8, frac_w, frac_b, frac_out = load_layer_params("conv1.pth")
+    """---- Load Data/Weights ------------------------"""
+    # -----conv data from a full layer
+    # w_int8, b_int8, frac_w, frac_b, frac_out = load_layer_params("conv1.pth")
+    # STRIDE =2
+    # PADDING=3
+
+    # -----conv data from a saved small layer
+    w_file = "../hw_data_files/weights_8x3x3x3.data"
+    b_file = "../hw_data_files/biases_1x8.data"
+    frac_w = 5
+    frac_b=2
+    frac_out=1
+    STRIDE = 1
+    PADDING = 1
+
+    w_shape = (8, 3, 3, 3)
+    b_shape = (8)
+    w_int8, b_int8 = read_quantized_parameters(
+        weights_filepath=w_file,
+        bias_filepath=b_file,
+        weights_shape=w_shape,
+        bias_shape=b_shape,
+        dtype=np.int8
+    )
+
 
     fxp_conv = FXPConv2dTorch(w_int8, b_int8,
-                              stride=2, padding=3,
-                              frac_din=5, frac_w=frac_w,
-                              frac_b=frac_b, frac_out=frac_out,
+                              stride=STRIDE, padding=PADDING,
+                              frac_din=5, frac_w=frac_w, frac_b=frac_b, frac_out=frac_out,
                               relu=True)
 
     hls_conv = HLSConv2d(w_int8, b_int8,
-                         stride=2, padding=3,
-                         frac_din=5, frac_w=frac_w,
-                         frac_b=frac_b, frac_dout=frac_out,
+                         stride=STRIDE, padding=PADDING,
+                         frac_din=5, frac_w=frac_w, frac_b=frac_b, frac_dout=frac_out,
                          relu=True)
 
-    # ----------------------------------------------------- test image
+    conv_int = HLSConv2dInt(w_int8, b_int8, stride=STRIDE, padding=PADDING,relu=True)
+
+    """---- Input Image ------------------------"""
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -117,32 +226,39 @@ if __name__ == "__main__":
     img = Image.open("new.JPEG").convert("RGB")
     x_fp  = transform(img).unsqueeze(0)
     x_i8  = to_int_tensor(x_fp, signed=True, n_bits=8, n_frac=5)
+    # subset input..
+    print(x_i8.shape)
+    sm_input_shape = (1,3, 64,64)  # (N,in_channels, H, W)
+    x_i8 = _subset_tensor(x_i8, sm_input_shape)
+    print(x_i8.shape)
 
-    # ----------------------------------------------------- INT8 run
+    """---- INT Convd Run ------------------------"""
     # y_i8 = fxp_conv(x_i8)
     y_i8 = hls_conv(x_i8)
+    #y_i32 = conv_int(x_i8)
 
-    # ----------------------------------------------------- fp32 reference
-    fp_conv = build_fp_conv(w_int8, b_int8, stride=2, padding=3, frac_w=frac_w, frac_b=frac_b)
-    y_ref_i8 = to_int_tensor(torch.clamp_min(fp_conv(to_float_tensor(x_i8, 5)), 0.),
-                             signed=True, n_bits=8, n_frac=frac_out)
-    print(y_i8)
-    y_i8.numpy().astype("int8").tofile("ref_output2.data")
+    print(f"Output shape: {y_i8.shape}")
 
-    diff = (y_i8.to(torch.int16) - y_ref_i8.to(torch.int16)).abs()
-    print("max |Δ| :", diff.max().item(),
-          "  non-zero :", (diff != 0).sum().item())
+    """---- Float CONVD Reference ------------------------"""
+    # fp_conv = build_fp_conv(w_int8, b_int8, stride=2, padding=3, frac_w=frac_w, frac_b=frac_b)
+    # y_ref_i8 = to_int_tensor(torch.clamp_min(fp_conv(to_float_tensor(x_i8, 5)), 0.),
+    #                          signed=True, n_bits=8, n_frac=frac_out)
+    #
+    # diff = (y_i8.to(torch.int16) - y_ref_i8.to(torch.int16)).abs()
+    # print("max |Δ| :", diff.max().item(),
+    #       "  non-zero :", (diff != 0).sum().item())
 
-    # ----------------------------------------------------- export
+    """---- ONNX Export ------------------------"""
     # export_conv_to_onnx(fp_conv,
     #                     frac_din=5, frac_w=frac_w,
     #                     frac_b=frac_b, frac_out=frac_out,
     #                     onnx_path="conv1_with_frac.onnx",
     #                     store_int8_wb=True)
 
-    # ----------------------------------------------------- binaries
-    # x_i8.numpy().astype("int8").tofile("test_image.data")
-    # y_i8.numpy().astype("int8").tofile("ref_output.data")
-    # w_int8.numpy().astype("int8").tofile("weights.data")
-    # b_int8.numpy().astype("int8").tofile("biases.data")
+    """---- Data files export ------------------------"""
+    x_i8.numpy().astype("int8").tofile("t1_input.data")
+    y_i8.numpy().astype("int8").tofile("t1_ref_output.data")
+    w_int8.numpy().astype("int8").tofile("t1_weights.data")
+    b_int8.numpy().astype("int8").tofile("t1_biases.data")
+    # print(y_i32[0])
     # print("Binary blobs written.")

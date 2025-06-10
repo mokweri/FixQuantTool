@@ -166,3 +166,69 @@ class HLSConv2d(torch.nn.Module):
         out_h = (H + 2*self.padding - self.dilation*(kH - 1) - 1)//self.stride + 1
         out_w = (W + 2*self.padding - self.dilation*(kW - 1) - 1)//self.stride + 1
         return y_int8.view(N, C_out, out_h, out_w)
+
+class HLSConv2dInt(torch.nn.Module):
+    """
+    INT ONLY Conv2d - NO fixed point quantization
+    Parameters
+    ----------
+      weight_int8           : (C_out, C_in, kH, kW)  torch.int8
+      bias_int8             : (C_out,)               torch.int8   (may pass None)
+      stride, padding, dilation, groups   : as in nn.Conv2d
+      relu                  :  if True do relu activation
+    """
+    def __init__(self, weight_int8, bias_int8,
+                 stride=1, padding=0, dilation=1, groups=1,
+                 relu=True):
+        super().__init__()
+        self.register_buffer('w_int8', weight_int8.clone().contiguous())
+        self.register_buffer('b_int8', torch.zeros(weight_int8.size(0), dtype=torch.int8) if bias_int8 is None
+                             else bias_int8.clone().contiguous())
+
+        self.stride, self.padding = stride, padding
+        self.dilation, self.groups = dilation, groups
+        self.relu = relu
+
+        # widen bias once (same as HLS: sign-extend to 32b)
+        self.register_buffer('bias_i32',self.b_int8.to(torch.int32))   # raw INT8 pattern in int32 vessel
+
+    # ---------------------------------------------------------------------
+    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
+        """
+        x_int8 : (N, C_in, H, W)  torch.int8
+        returns : torch.int32
+        """
+        assert x_int8.dtype == torch.int8
+        N, C_in, H, W = x_int8.shape
+        C_out, _, kH, kW = self.w_int8.shape
+
+        # ------------------ 1.  int-32 convolution -----------------------
+        patches = F.unfold(
+            x_int8.float(),  # ←  float32 view
+            (kH, kW),
+            dilation=self.dilation,
+            padding=self.padding,
+            stride=self.stride
+        ).to(torch.int32)  # ←  convert back to int32
+
+        # weights -> (C_out, C_in*kH*kW)
+        w_mat = self.w_int8.view(C_out, -1).to(torch.int32)
+
+        # gemm : (N, C_out, L)
+        acc = torch.matmul(w_mat, patches)        # INT32
+        acc = acc.view(N, C_out, -1)              # (N, C_out, L)
+
+        # broadcast bias over spatial dimension
+        bias = self.bias_i32.view(1, C_out, 1)
+        y_int32 = acc + bias
+
+        # ------------------ 5.  optional ReLU ----------------------------
+        if self.relu:
+            y_int32 = torch.where(y_int32 < 0,
+                                 torch.zeros_like(y_int32, dtype=torch.int32),
+                                 y_int32)
+
+        # reshape back to (N, C_out, H_out, W_out)
+        out_h = (H + 2*self.padding - self.dilation*(kH - 1) - 1)//self.stride + 1
+        out_w = (W + 2*self.padding - self.dilation*(kW - 1) - 1)//self.stride + 1
+        return y_int32.view(N, C_out, out_h, out_w)

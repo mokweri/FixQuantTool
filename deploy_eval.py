@@ -10,12 +10,12 @@ from pathlib import Path
 import torchvision.transforms as transforms
 import yaml
 import logging
-from torch.utils.data.datapipes.gen_pyi import iterDP_files_to_exclude
 
 from models.cifar_models import *
 from quantization.fix_ops import to_int_tensor, to_float_tensor, fake_quantize_tensor
 from quantization.utils.graph_trace import QatProcessor
 from quantization.utils.inference_mod import InferProcessor
+from hw_emulation.Param_extractor import ModelParameterExtractor
 
 from data_providers.imagenet import ImagenetDataProvider
 from data_providers.cifar10 import Cifar10DataProvider
@@ -170,13 +170,18 @@ if __name__ == '__main__':
         "fc"
     ]
 
-    infer_processor.export_weights_to_file( layer_order=resnet50_layer_order,output_filename="hw_data_files/resnet50_weights.data")
+    # infer_processor.export_weights_to_file( layer_order=resnet50_layer_order,output_filename="hw_data_files/resnet50_weights.data")
 
     """ ---- TEST GENERATION  -----"""
-    """Extract a subset of a layer"""
-    # layer_name = "conv1"
-    # subset_shape = (16, 3, 2, 2)  # (out_channels, in_channels, H, W)
-    #
+    """Extract a subset of a standard layer"""
+    layer_name = "conv1"
+    subset_shape = (8, 3, 3, 3)  # (out_channels, in_channels, H, W)
+    w_file = "hw_data_files/weights_8x3x3x3.data"
+    b_file = "hw_data_files/biases_1x8.data"
+    Extractor = ModelParameterExtractor(stdm)
+    frac_w, frac_b = Extractor.extract_and_subset_layer_parameters(layer_name, w_file,b_file, subset_shape,8)
+    print(frac_w, frac_b)
+
     # fp_w, fp_b, frac_w, frac_b = infer_processor.extract_and_subset_layer_parameters(
     #     layer_name=layer_name,
     #     output_filename=f"{layer_name}_subset.data",

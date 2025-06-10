@@ -489,7 +489,7 @@ class InferProcessor:
                                pad_last_layer_dim_to=1024):
         """
         Extracts weights and biases, quantizes them, optionally pads the last layer,
-        concatenates as NumPy arrays, and saves to a binary file.
+        rearranges them to HWCM format, and saves to a binary file.
         """
         self.logger.info(f"Starting extraction of quantized parameters to '{output_filename}' (n_bits={n_bits_out}).")
         if pad_last_layer_dim_to:
@@ -527,6 +527,10 @@ class InferProcessor:
                             signed=True, n_bits=n_bits_out, n_frac=frac_w
                         )
                         if int_weights_tensor is not None:
+                            # Transpose weights to HWCM format
+                            if isinstance(module, nn.Conv2d):
+                                int_weights_tensor = int_weights_tensor.permute(2, 3, 1, 0)  # NCHW to HWCM
+
                             # Apply Padding if this is the last layer and padding is enabled
                             if is_last_layer_to_pad:
                                 current_dim0_size = int_weights_tensor.shape[0]
