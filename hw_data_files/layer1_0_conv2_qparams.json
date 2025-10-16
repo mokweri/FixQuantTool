@@ -1,0 +1,32 @@
+{
+  "layer": "layer1_0_conv2",
+  "frac_w": 8,
+  "frac_b": 3,
+  "frac_in": 5,
+  "frac_out": 2,
+  "activation_in_dims": [
+    64,
+    56,
+    56
+  ],
+  "weights_dim": [
+    64,
+    64,
+    3,
+    3
+  ],
+  "conv_params": {
+    "padding": [
+      1,
+      1
+    ],
+    "stride": [
+      1,
+      1
+    ],
+    "kernel_size": [
+      3,
+      3
+    ]
+  }
+}

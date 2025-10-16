@@ -1,68 +1,100 @@
-# Reference files
-The `ref_output.data` and `test_image.data` files are raw binary files created from numpy arrays.
-These files contain the input image and the numerical outputs from the model in a machine-readable binary format.
+# Hardware test artifacts (binary + metadata)
 
-#### **File Contents**
-- The file stores a **raw binary representation** of the numpy array's data.
-- It does not include any metadata, such as: `Shape` or `dtype`
+This folder contains binary blobs for hardware/FPGA tests and compact metadata to reconstruct and interpret them.
+All tensors are saved as raw int8 bytes (no embedded metadata).
 
+Contents (typical)
+- test_image_*.data — quantized activation for a chosen layer (int8)
+- weights_*.data — quantized Conv/Linear weights (int8)
+- biases_*.data — quantized bias (int8)
+- <layer>_qparams.json — quantization + shape + layer attributes for that test
+- model_graph.txt — human-readable summary of the standard model graph (types, shapes, quant params)
+- model_graph.json — machine-readable dump of the graph (nodes + edges and details)
 
-#### **Key Specifications**
-1. **Binary Format**:
-The data is stored in the memory layout of the numpy array (row-major order/**C-contiguous**).
-2. **Element Size**:
-Now the values is stored as `int8` hence the following file sizes:
-    - `test_image.data` has ``IMAGE_FILE_SIZE = (224x224x3) `` bytes
-    - `ref_output.data` has ``REF_FILE_SIZE = (1000x1) `` bytes
+How these files are generated
+- Use hw_emulation/hw_layer_test_gen.py to export weights/biases, capture a real activation, and write <layer>_qparams.json.
+- Use hw_emulation/print_model_graph.py to print/dump the full standard-model graph with shapes and quant info.
 
-#### **How to Interpret the File**
-To interpret the data correctly, you need the following additional information:
-1. The `test_image.data` has the shape `[batch_size, height, width, channels]` -> [1,224,224,3]
-2. The `ref_output.data` has the shape `[batch_size, classes]` -> [1,1000]
+Binary format (all .data files)
+- dtype: int8, raw bytes
+- layout: contiguous (row-major / C order)
+- no header or metadata; use the accompanying JSON to infer shapes and quantization parameters
 
-- The `test_image.data` is quantized with `frac_input=5`
-- The `ref_output.data` is quantized with `frac_out=2`
+File specifics
+1) test_image_... .data
+- Content: input activation to the selected layer, captured from a real forward pass, quantized to int8 using frac_in
+- Shape: activation_in_dims from <layer>_qparams.json
+  - Usually CHW after removing the single batch dim, e.g., [C, H, W]
+- Size in bytes: product(C, H, W)
 
+2) weights_... .data
+- Content: quantized weights of the selected layer, saved as int8 using frac_w
+- Layout:
+  - Conv2d: OIHW (out_channels, in_channels, kernel_h, kernel_w)
+  - Linear: (out_features, in_features)
+- Shape: weights_dim from <layer>_qparams.json (may be a subset of the original weights)
 
-#### **Reconstructing the Array**
-The data in the binary files is in contigous format (row-major order), so you need to reshape for use as input to the model.
-To read and recreate the array for processing, you can use python or C/C++:
+3) biases_... .data
+- Content: quantized bias (int8) using frac_b
+- Shape: [out_channels] (Conv2d) or [out_features] (Linear)
+  - If weights were subset, bias length matches the subset out_channels
 
-``` python
-import numpy as np
+4) <layer>_qparams.json (example keys)
+{
+  "layer": "layer1_0_conv2",
+  "frac_w": 9,
+  "frac_b": 5,
+  "frac_in": 5,
+  "frac_out": 4,
+  "activation_in_dims": [64, 64, 64],
+  "weights_dim": [64, 64, 3, 3],
+  "conv_params": { "padding": [1, 1], "stride": [1, 1], "kernel_size": [3, 3] }
+}
+- Meaning:
+  - frac_w, frac_b: fractional bits for weights/bias
+  - frac_in: fractional bits used to quantize the input activation saved to test_image_*.data
+  - frac_out: layer output fractional bits
+  - activation_in_dims: shape of the saved activation (most often CHW)
+  - weights_dim: effective saved weight shape (after any subsetting)
+  - conv_params: only for Conv2d layers; stride/padding/kernel_size as integer tuples
 
-data = np.fromfile("ref_output.data", dtype=np.int8)
-data = data.reshape(original_shape)  # Replace `original_shape` with the actual shape
+Interpreting the data
+- Reconstruct from .data with numpy:
+  - Activation: shape = activation_in_dims from JSON (e.g., [C, H, W])
+  - Weights: shape = weights_dim from JSON (Conv: OIHW; Linear: [out_features, in_features])
+  - Bias: length equals weights_dim[0]
+- De-quantize to approximate float: real ≈ int_value / (2^frac)
+  - Use frac_in for activations, frac_w for weights, frac_b for biases, frac_out for layer outputs
+
+Python snippets
+```python
+import numpy as np, json
+
+# Load metadata
+with open("layer1_0_conv2_qparams.json") as f:
+    meta = json.load(f)
+
+# Activation (int8 -> int array -> reshape)
+act = np.fromfile("test_image_64x64x64.data", dtype=np.int8)
+act = act.reshape(meta["activation_in_dims"])  # CHW
+act_f = act.astype(np.float32) / (2 ** meta["frac_in"])  # optional de-quant
+
+# Weights
+w = np.fromfile("weights_64x64x3x3.data", dtype=np.int8)
+w = w.reshape(meta["weights_dim"])  # Conv: OIHW
+w_f = w.astype(np.float32) / (2 ** meta["frac_w"])  # optional de-quant
+
+# Bias
+b = np.fromfile("biases_1x64.data", dtype=np.int8)
+b_f = b.astype(np.float32) / (2 ** meta["frac_b"])  # optional de-quant
 ```
-I have also provided a `CPP` file to read the files
 
-### Fixed point Arithmetic
-The onnx file provided has quantized weights but in floating point format.
-The conversion to int is based on the parameters 
-1. `frac_W` - for weights
-2. `frac_B` - for biases
-3. `frac_out` - for activations
+Graph dumps
+- model_graph.txt: ordered list of modules with predecessors/successors, quant params, and observed input/output shapes.
+- model_graph.json: nodes array with detailed per-layer info plus edges [{from,to}].
+  - Use hw_emulation/print_model_graph.py to regenerate.
 
-The conversion formulas between floating-point and integer values are as follows:
-
-1. **Float to Integer Conversion**:
-
-    ```
-    int_value = round(float_value * (2 ** frac_))
-    ```
-
-    - `float_value` is the input floating-point number.
-    - `frac_` is the fractional scaling factor which determines the scaling of the fixed-point representation.
-
-2. **Integer to Float Conversion**:
-
-    ```
-    float_value = int_value / (2 ** frac_)
-    ```
-
-    - `int_value` is the quantized integer representation.
-    - `frac_` is the same fractional scaling factor used during the conversion to integer.
-
-### Reference Hardware Accelerator
-To have a look at how this has been implemented  in a HLS-OpenCL accelerator targeting Xilinx FPGAs you may check out
-this repository (https://github.com/doonny/PipeCNN)
+Notes
+- All values are int8; ensure your downstream pipeline interprets shapes and frac_* correctly.
+- If you subset weights (e.g., to smaller O/I/kH/kW), weights_dim reflects the subset, and biases are trimmed to match O.
+- Additional reference outputs (e.g., classification logits) may appear as .data files; interpret with the corresponding frac_out and shape for that head.

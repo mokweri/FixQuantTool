@@ -1,0 +1,611 @@
+Model Graph Summary:
+
+- conv1 [Conv2d]
+  preds: []  succs: ['relu_0']
+  quant: in=[5] w=5 b=2 out=1
+  shapes: in=[(1, 3, 224, 224)] out=(1, 64, 112, 112) weight=(64, 3, 7, 7) bias=(64,)
+
+- relu_0 [ReLU]
+  preds: ['conv1']  succs: ['maxpool']
+  quant: in=[1] w=None b=None out=None
+  shapes: in=[(1, 64, 112, 112)] out=(1, 64, 112, 112) weight=None bias=None
+
+- maxpool [MaxPool2d]
+  preds: ['relu_0']  succs: ['layer1_0_conv1', 'layer1_0_downsample_0']
+  quant: in=[5] w=None b=None out=1
+  shapes: in=[(1, 64, 112, 112)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_0_conv1 [Conv2d]
+  preds: ['maxpool']  succs: ['layer1_0_relu_0']
+  quant: in=[1] w=7 b=3 out=3
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=(64, 64, 1, 1) bias=(64,)
+
+- layer1_0_downsample_0 [Conv2d]
+  preds: ['maxpool']  succs: ['add']
+  quant: in=[1] w=8 b=3 out=2
+  shapes: in=[(1, 64, 56, 56)] out=(1, 256, 56, 56) weight=(256, 64, 1, 1) bias=(256,)
+
+- layer1_0_relu_0 [ReLU]
+  preds: ['layer1_0_conv1']  succs: ['layer1_0_conv2']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_0_conv2 [Conv2d]
+  preds: ['layer1_0_relu_0']  succs: ['layer1_0_relu_1']
+  quant: in=[5] w=8 b=3 out=2
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=(64, 64, 3, 3) bias=(64,)
+
+- layer1_0_relu_1 [ReLU]
+  preds: ['layer1_0_conv2']  succs: ['layer1_0_conv3']
+  quant: in=[2] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_0_conv3 [Conv2d]
+  preds: ['layer1_0_relu_1']  succs: ['add']
+  quant: in=[5] w=7 b=3 out=3
+  shapes: in=[(1, 64, 56, 56)] out=(1, 256, 56, 56) weight=(256, 64, 1, 1) bias=(256,)
+
+- add [AddWithMetadata]
+  preds: ['layer1_0_conv3', 'layer1_0_downsample_0']  succs: ['layer1_0_relu_2']
+  quant: in=[3, 2] w=None b=None out=4
+  shapes: in=[(1, 256, 56, 56), (1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer1_0_relu_2 [ReLU]
+  preds: ['add']  succs: ['layer1_1_conv1', 'add_1']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer1_1_conv1 [Conv2d]
+  preds: ['layer1_0_relu_2']  succs: ['layer1_1_relu_0']
+  quant: in=[5] w=8 b=3 out=3
+  shapes: in=[(1, 256, 56, 56)] out=(1, 64, 56, 56) weight=(64, 256, 1, 1) bias=(64,)
+
+- layer1_1_relu_0 [ReLU]
+  preds: ['layer1_1_conv1']  succs: ['layer1_1_conv2']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_1_conv2 [Conv2d]
+  preds: ['layer1_1_relu_0']  succs: ['layer1_1_relu_1']
+  quant: in=[5] w=8 b=5 out=3
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=(64, 64, 3, 3) bias=(64,)
+
+- layer1_1_relu_1 [ReLU]
+  preds: ['layer1_1_conv2']  succs: ['layer1_1_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_1_conv3 [Conv2d]
+  preds: ['layer1_1_relu_1']  succs: ['add_1']
+  quant: in=[5] w=6 b=5 out=4
+  shapes: in=[(1, 64, 56, 56)] out=(1, 256, 56, 56) weight=(256, 64, 1, 1) bias=(256,)
+
+- add_1 [AddWithMetadata]
+  preds: ['layer1_1_conv3', 'layer1_0_relu_2']  succs: ['layer1_1_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 256, 56, 56), (1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer1_1_relu_2 [ReLU]
+  preds: ['add_1']  succs: ['layer1_2_conv1', 'add_2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer1_2_conv1 [Conv2d]
+  preds: ['layer1_1_relu_2']  succs: ['layer1_2_relu_0']
+  quant: in=[5] w=8 b=5 out=4
+  shapes: in=[(1, 256, 56, 56)] out=(1, 64, 56, 56) weight=(64, 256, 1, 1) bias=(64,)
+
+- layer1_2_relu_0 [ReLU]
+  preds: ['layer1_2_conv1']  succs: ['layer1_2_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_2_conv2 [Conv2d]
+  preds: ['layer1_2_relu_0']  succs: ['layer1_2_relu_1']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=(64, 64, 3, 3) bias=(64,)
+
+- layer1_2_relu_1 [ReLU]
+  preds: ['layer1_2_conv2']  succs: ['layer1_2_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 64, 56, 56)] out=(1, 64, 56, 56) weight=None bias=None
+
+- layer1_2_conv3 [Conv2d]
+  preds: ['layer1_2_relu_1']  succs: ['add_2']
+  quant: in=[5] w=6 b=3 out=4
+  shapes: in=[(1, 64, 56, 56)] out=(1, 256, 56, 56) weight=(256, 64, 1, 1) bias=(256,)
+
+- add_2 [AddWithMetadata]
+  preds: ['layer1_2_conv3', 'layer1_1_relu_2']  succs: ['layer1_2_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 256, 56, 56), (1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer1_2_relu_2 [ReLU]
+  preds: ['add_2']  succs: ['layer2_0_conv1', 'layer2_0_downsample_0']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 56, 56)] out=(1, 256, 56, 56) weight=None bias=None
+
+- layer2_0_conv1 [Conv2d]
+  preds: ['layer1_2_relu_2']  succs: ['layer2_0_relu_0']
+  quant: in=[5] w=7 b=4 out=3
+  shapes: in=[(1, 256, 56, 56)] out=(1, 128, 56, 56) weight=(128, 256, 1, 1) bias=(128,)
+
+- layer2_0_downsample_0 [Conv2d]
+  preds: ['layer1_2_relu_2']  succs: ['add_3']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 256, 56, 56)] out=(1, 512, 28, 28) weight=(512, 256, 1, 1) bias=(512,)
+
+- layer2_0_relu_0 [ReLU]
+  preds: ['layer2_0_conv1']  succs: ['layer2_0_conv2']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 128, 56, 56)] out=(1, 128, 56, 56) weight=None bias=None
+
+- layer2_0_conv2 [Conv2d]
+  preds: ['layer2_0_relu_0']  succs: ['layer2_0_relu_1']
+  quant: in=[5] w=9 b=4 out=3
+  shapes: in=[(1, 128, 56, 56)] out=(1, 128, 28, 28) weight=(128, 128, 3, 3) bias=(128,)
+
+- layer2_0_relu_1 [ReLU]
+  preds: ['layer2_0_conv2']  succs: ['layer2_0_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_0_conv3 [Conv2d]
+  preds: ['layer2_0_relu_1']  succs: ['add_3']
+  quant: in=[5] w=7 b=4 out=4
+  shapes: in=[(1, 128, 28, 28)] out=(1, 512, 28, 28) weight=(512, 128, 1, 1) bias=(512,)
+
+- add_3 [AddWithMetadata]
+  preds: ['layer2_0_conv3', 'layer2_0_downsample_0']  succs: ['layer2_0_relu_2']
+  quant: in=[4, 3] w=None b=None out=3
+  shapes: in=[(1, 512, 28, 28), (1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_0_relu_2 [ReLU]
+  preds: ['add_3']  succs: ['layer2_1_conv1', 'add_4']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_1_conv1 [Conv2d]
+  preds: ['layer2_0_relu_2']  succs: ['layer2_1_relu_0']
+  quant: in=[5] w=8 b=5 out=4
+  shapes: in=[(1, 512, 28, 28)] out=(1, 128, 28, 28) weight=(128, 512, 1, 1) bias=(128,)
+
+- layer2_1_relu_0 [ReLU]
+  preds: ['layer2_1_conv1']  succs: ['layer2_1_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_1_conv2 [Conv2d]
+  preds: ['layer2_1_relu_0']  succs: ['layer2_1_relu_1']
+  quant: in=[5] w=8 b=3 out=5
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=(128, 128, 3, 3) bias=(128,)
+
+- layer2_1_relu_1 [ReLU]
+  preds: ['layer2_1_conv2']  succs: ['layer2_1_conv3']
+  quant: in=[5] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_1_conv3 [Conv2d]
+  preds: ['layer2_1_relu_1']  succs: ['add_4']
+  quant: in=[5] w=7 b=4 out=4
+  shapes: in=[(1, 128, 28, 28)] out=(1, 512, 28, 28) weight=(512, 128, 1, 1) bias=(512,)
+
+- add_4 [AddWithMetadata]
+  preds: ['layer2_1_conv3', 'layer2_0_relu_2']  succs: ['layer2_1_relu_2']
+  quant: in=[4] w=None b=None out=3
+  shapes: in=[(1, 512, 28, 28), (1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_1_relu_2 [ReLU]
+  preds: ['add_4']  succs: ['layer2_2_conv1', 'add_5']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_2_conv1 [Conv2d]
+  preds: ['layer2_1_relu_2']  succs: ['layer2_2_relu_0']
+  quant: in=[5] w=8 b=6 out=4
+  shapes: in=[(1, 512, 28, 28)] out=(1, 128, 28, 28) weight=(128, 512, 1, 1) bias=(128,)
+
+- layer2_2_relu_0 [ReLU]
+  preds: ['layer2_2_conv1']  succs: ['layer2_2_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_2_conv2 [Conv2d]
+  preds: ['layer2_2_relu_0']  succs: ['layer2_2_relu_1']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=(128, 128, 3, 3) bias=(128,)
+
+- layer2_2_relu_1 [ReLU]
+  preds: ['layer2_2_conv2']  succs: ['layer2_2_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_2_conv3 [Conv2d]
+  preds: ['layer2_2_relu_1']  succs: ['add_5']
+  quant: in=[5] w=6 b=4 out=4
+  shapes: in=[(1, 128, 28, 28)] out=(1, 512, 28, 28) weight=(512, 128, 1, 1) bias=(512,)
+
+- add_5 [AddWithMetadata]
+  preds: ['layer2_2_conv3', 'layer2_1_relu_2']  succs: ['layer2_2_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 512, 28, 28), (1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_2_relu_2 [ReLU]
+  preds: ['add_5']  succs: ['layer2_3_conv1', 'add_6']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_3_conv1 [Conv2d]
+  preds: ['layer2_2_relu_2']  succs: ['layer2_3_relu_0']
+  quant: in=[5] w=8 b=5 out=4
+  shapes: in=[(1, 512, 28, 28)] out=(1, 128, 28, 28) weight=(128, 512, 1, 1) bias=(128,)
+
+- layer2_3_relu_0 [ReLU]
+  preds: ['layer2_3_conv1']  succs: ['layer2_3_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_3_conv2 [Conv2d]
+  preds: ['layer2_3_relu_0']  succs: ['layer2_3_relu_1']
+  quant: in=[5] w=7 b=4 out=3
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=(128, 128, 3, 3) bias=(128,)
+
+- layer2_3_relu_1 [ReLU]
+  preds: ['layer2_3_conv2']  succs: ['layer2_3_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 128, 28, 28)] out=(1, 128, 28, 28) weight=None bias=None
+
+- layer2_3_conv3 [Conv2d]
+  preds: ['layer2_3_relu_1']  succs: ['add_6']
+  quant: in=[5] w=7 b=3 out=4
+  shapes: in=[(1, 128, 28, 28)] out=(1, 512, 28, 28) weight=(512, 128, 1, 1) bias=(512,)
+
+- add_6 [AddWithMetadata]
+  preds: ['layer2_3_conv3', 'layer2_2_relu_2']  succs: ['layer2_3_relu_2']
+  quant: in=[4] w=None b=None out=3
+  shapes: in=[(1, 512, 28, 28), (1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer2_3_relu_2 [ReLU]
+  preds: ['add_6']  succs: ['layer3_0_conv1', 'layer3_0_downsample_0']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 28, 28)] out=(1, 512, 28, 28) weight=None bias=None
+
+- layer3_0_conv1 [Conv2d]
+  preds: ['layer2_3_relu_2']  succs: ['layer3_0_relu_0']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 512, 28, 28)] out=(1, 256, 28, 28) weight=(256, 512, 1, 1) bias=(256,)
+
+- layer3_0_downsample_0 [Conv2d]
+  preds: ['layer2_3_relu_2']  succs: ['add_7']
+  quant: in=[5] w=8 b=4 out=4
+  shapes: in=[(1, 512, 28, 28)] out=(1, 1024, 14, 14) weight=(1024, 512, 1, 1) bias=(1024,)
+
+- layer3_0_relu_0 [ReLU]
+  preds: ['layer3_0_conv1']  succs: ['layer3_0_conv2']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 256, 28, 28)] out=(1, 256, 28, 28) weight=None bias=None
+
+- layer3_0_conv2 [Conv2d]
+  preds: ['layer3_0_relu_0']  succs: ['layer3_0_relu_1']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 256, 28, 28)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_0_relu_1 [ReLU]
+  preds: ['layer3_0_conv2']  succs: ['layer3_0_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_0_conv3 [Conv2d]
+  preds: ['layer3_0_relu_1']  succs: ['add_7']
+  quant: in=[5] w=7 b=3 out=3
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_7 [AddWithMetadata]
+  preds: ['layer3_0_conv3', 'layer3_0_downsample_0']  succs: ['layer3_0_relu_2']
+  quant: in=[3, 4] w=None b=None out=3
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_0_relu_2 [ReLU]
+  preds: ['add_7']  succs: ['layer3_1_conv1', 'add_8']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_1_conv1 [Conv2d]
+  preds: ['layer3_0_relu_2']  succs: ['layer3_1_relu_0']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 256, 14, 14) weight=(256, 1024, 1, 1) bias=(256,)
+
+- layer3_1_relu_0 [ReLU]
+  preds: ['layer3_1_conv1']  succs: ['layer3_1_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_1_conv2 [Conv2d]
+  preds: ['layer3_1_relu_0']  succs: ['layer3_1_relu_1']
+  quant: in=[5] w=8 b=5 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_1_relu_1 [ReLU]
+  preds: ['layer3_1_conv2']  succs: ['layer3_1_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_1_conv3 [Conv2d]
+  preds: ['layer3_1_relu_1']  succs: ['add_8']
+  quant: in=[5] w=7 b=5 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_8 [AddWithMetadata]
+  preds: ['layer3_1_conv3', 'layer3_0_relu_2']  succs: ['layer3_1_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_1_relu_2 [ReLU]
+  preds: ['add_8']  succs: ['layer3_2_conv1', 'add_9']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_2_conv1 [Conv2d]
+  preds: ['layer3_1_relu_2']  succs: ['layer3_2_relu_0']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 256, 14, 14) weight=(256, 1024, 1, 1) bias=(256,)
+
+- layer3_2_relu_0 [ReLU]
+  preds: ['layer3_2_conv1']  succs: ['layer3_2_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_2_conv2 [Conv2d]
+  preds: ['layer3_2_relu_0']  succs: ['layer3_2_relu_1']
+  quant: in=[5] w=8 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_2_relu_1 [ReLU]
+  preds: ['layer3_2_conv2']  succs: ['layer3_2_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_2_conv3 [Conv2d]
+  preds: ['layer3_2_relu_1']  succs: ['add_9']
+  quant: in=[5] w=7 b=5 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_9 [AddWithMetadata]
+  preds: ['layer3_2_conv3', 'layer3_1_relu_2']  succs: ['layer3_2_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_2_relu_2 [ReLU]
+  preds: ['add_9']  succs: ['layer3_3_conv1', 'add_10']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_3_conv1 [Conv2d]
+  preds: ['layer3_2_relu_2']  succs: ['layer3_3_relu_0']
+  quant: in=[5] w=8 b=5 out=4
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 256, 14, 14) weight=(256, 1024, 1, 1) bias=(256,)
+
+- layer3_3_relu_0 [ReLU]
+  preds: ['layer3_3_conv1']  succs: ['layer3_3_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_3_conv2 [Conv2d]
+  preds: ['layer3_3_relu_0']  succs: ['layer3_3_relu_1']
+  quant: in=[5] w=8 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_3_relu_1 [ReLU]
+  preds: ['layer3_3_conv2']  succs: ['layer3_3_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_3_conv3 [Conv2d]
+  preds: ['layer3_3_relu_1']  succs: ['add_10']
+  quant: in=[5] w=7 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_10 [AddWithMetadata]
+  preds: ['layer3_3_conv3', 'layer3_2_relu_2']  succs: ['layer3_3_relu_2']
+  quant: in=[4] w=None b=None out=4
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_3_relu_2 [ReLU]
+  preds: ['add_10']  succs: ['layer3_4_conv1', 'add_11']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_4_conv1 [Conv2d]
+  preds: ['layer3_3_relu_2']  succs: ['layer3_4_relu_0']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 256, 14, 14) weight=(256, 1024, 1, 1) bias=(256,)
+
+- layer3_4_relu_0 [ReLU]
+  preds: ['layer3_4_conv1']  succs: ['layer3_4_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_4_conv2 [Conv2d]
+  preds: ['layer3_4_relu_0']  succs: ['layer3_4_relu_1']
+  quant: in=[5] w=8 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_4_relu_1 [ReLU]
+  preds: ['layer3_4_conv2']  succs: ['layer3_4_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_4_conv3 [Conv2d]
+  preds: ['layer3_4_relu_1']  succs: ['add_11']
+  quant: in=[5] w=7 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_11 [AddWithMetadata]
+  preds: ['layer3_4_conv3', 'layer3_3_relu_2']  succs: ['layer3_4_relu_2']
+  quant: in=[4] w=None b=None out=3
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_4_relu_2 [ReLU]
+  preds: ['add_11']  succs: ['layer3_5_conv1', 'add_12']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_5_conv1 [Conv2d]
+  preds: ['layer3_4_relu_2']  succs: ['layer3_5_relu_0']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 256, 14, 14) weight=(256, 1024, 1, 1) bias=(256,)
+
+- layer3_5_relu_0 [ReLU]
+  preds: ['layer3_5_conv1']  succs: ['layer3_5_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_5_conv2 [Conv2d]
+  preds: ['layer3_5_relu_0']  succs: ['layer3_5_relu_1']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=(256, 256, 3, 3) bias=(256,)
+
+- layer3_5_relu_1 [ReLU]
+  preds: ['layer3_5_conv2']  succs: ['layer3_5_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 256, 14, 14)] out=(1, 256, 14, 14) weight=None bias=None
+
+- layer3_5_conv3 [Conv2d]
+  preds: ['layer3_5_relu_1']  succs: ['add_12']
+  quant: in=[5] w=7 b=4 out=4
+  shapes: in=[(1, 256, 14, 14)] out=(1, 1024, 14, 14) weight=(1024, 256, 1, 1) bias=(1024,)
+
+- add_12 [AddWithMetadata]
+  preds: ['layer3_5_conv3', 'layer3_4_relu_2']  succs: ['layer3_5_relu_2']
+  quant: in=[4] w=None b=None out=3
+  shapes: in=[(1, 1024, 14, 14), (1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer3_5_relu_2 [ReLU]
+  preds: ['add_12']  succs: ['layer4_0_conv1', 'layer4_0_downsample_0']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 1024, 14, 14) weight=None bias=None
+
+- layer4_0_conv1 [Conv2d]
+  preds: ['layer3_5_relu_2']  succs: ['layer4_0_relu_0']
+  quant: in=[5] w=8 b=5 out=3
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 512, 14, 14) weight=(512, 1024, 1, 1) bias=(512,)
+
+- layer4_0_downsample_0 [Conv2d]
+  preds: ['layer3_5_relu_2']  succs: ['add_13']
+  quant: in=[5] w=8 b=4 out=3
+  shapes: in=[(1, 1024, 14, 14)] out=(1, 2048, 7, 7) weight=(2048, 1024, 1, 1) bias=(2048,)
+
+- layer4_0_relu_0 [ReLU]
+  preds: ['layer4_0_conv1']  succs: ['layer4_0_conv2']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 14, 14)] out=(1, 512, 14, 14) weight=None bias=None
+
+- layer4_0_conv2 [Conv2d]
+  preds: ['layer4_0_relu_0']  succs: ['layer4_0_relu_1']
+  quant: in=[5] w=9 b=4 out=3
+  shapes: in=[(1, 512, 14, 14)] out=(1, 512, 7, 7) weight=(512, 512, 3, 3) bias=(512,)
+
+- layer4_0_relu_1 [ReLU]
+  preds: ['layer4_0_conv2']  succs: ['layer4_0_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=None bias=None
+
+- layer4_0_conv3 [Conv2d]
+  preds: ['layer4_0_relu_1']  succs: ['add_13']
+  quant: in=[5] w=7 b=3 out=2
+  shapes: in=[(1, 512, 7, 7)] out=(1, 2048, 7, 7) weight=(2048, 512, 1, 1) bias=(2048,)
+
+- add_13 [AddWithMetadata]
+  preds: ['layer4_0_conv3', 'layer4_0_downsample_0']  succs: ['layer4_0_relu_2']
+  quant: in=[2, 3] w=None b=None out=1
+  shapes: in=[(1, 2048, 7, 7), (1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- layer4_0_relu_2 [ReLU]
+  preds: ['add_13']  succs: ['layer4_1_conv1', 'add_14']
+  quant: in=[1] w=None b=None out=None
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- layer4_1_conv1 [Conv2d]
+  preds: ['layer4_0_relu_2']  succs: ['layer4_1_relu_0']
+  quant: in=[5] w=9 b=4 out=4
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 512, 7, 7) weight=(512, 2048, 1, 1) bias=(512,)
+
+- layer4_1_relu_0 [ReLU]
+  preds: ['layer4_1_conv1']  succs: ['layer4_1_conv2']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=None bias=None
+
+- layer4_1_conv2 [Conv2d]
+  preds: ['layer4_1_relu_0']  succs: ['layer4_1_relu_1']
+  quant: in=[5] w=9 b=5 out=4
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=(512, 512, 3, 3) bias=(512,)
+
+- layer4_1_relu_1 [ReLU]
+  preds: ['layer4_1_conv2']  succs: ['layer4_1_conv3']
+  quant: in=[4] w=None b=None out=None
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=None bias=None
+
+- layer4_1_conv3 [Conv2d]
+  preds: ['layer4_1_relu_1']  succs: ['add_14']
+  quant: in=[5] w=7 b=3 out=3
+  shapes: in=[(1, 512, 7, 7)] out=(1, 2048, 7, 7) weight=(2048, 512, 1, 1) bias=(2048,)
+
+- add_14 [AddWithMetadata]
+  preds: ['layer4_1_conv3', 'layer4_0_relu_2']  succs: ['layer4_1_relu_2']
+  quant: in=[3] w=None b=None out=2
+  shapes: in=[(1, 2048, 7, 7), (1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- layer4_1_relu_2 [ReLU]
+  preds: ['add_14']  succs: ['layer4_2_conv1', 'add_15']
+  quant: in=[2] w=None b=None out=None
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- layer4_2_conv1 [Conv2d]
+  preds: ['layer4_1_relu_2']  succs: ['layer4_2_relu_0']
+  quant: in=[5] w=9 b=4 out=6
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 512, 7, 7) weight=(512, 2048, 1, 1) bias=(512,)
+
+- layer4_2_relu_0 [ReLU]
+  preds: ['layer4_2_conv1']  succs: ['layer4_2_conv2']
+  quant: in=[6] w=None b=None out=None
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=None bias=None
+
+- layer4_2_conv2 [Conv2d]
+  preds: ['layer4_2_relu_0']  succs: ['layer4_2_relu_1']
+  quant: in=[5] w=10 b=3 out=3
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=(512, 512, 3, 3) bias=(512,)
+
+- layer4_2_relu_1 [ReLU]
+  preds: ['layer4_2_conv2']  succs: ['layer4_2_conv3']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 512, 7, 7)] out=(1, 512, 7, 7) weight=None bias=None
+
+- layer4_2_conv3 [Conv2d]
+  preds: ['layer4_2_relu_1']  succs: ['add_15']
+  quant: in=[5] w=6 b=4 out=3
+  shapes: in=[(1, 512, 7, 7)] out=(1, 2048, 7, 7) weight=(2048, 512, 1, 1) bias=(2048,)
+
+- add_15 [AddWithMetadata]
+  preds: ['layer4_2_conv3', 'layer4_1_relu_2']  succs: ['layer4_2_relu_2']
+  quant: in=[3] w=None b=None out=1
+  shapes: in=[(1, 2048, 7, 7), (1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- layer4_2_relu_2 [ReLU]
+  preds: ['add_15']  succs: ['avgpool']
+  quant: in=[1] w=None b=None out=None
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 2048, 7, 7) weight=None bias=None
+
+- avgpool [AdaptiveAvgPool2d]
+  preds: ['layer4_2_relu_2']  succs: ['flatten']
+  quant: in=[5] w=None b=None out=3
+  shapes: in=[(1, 2048, 7, 7)] out=(1, 2048, 1, 1) weight=None bias=None
+
+- flatten [Flatten]
+  preds: ['avgpool']  succs: ['fc']
+  quant: in=[3] w=None b=None out=None
+  shapes: in=[(1, 2048, 1, 1)] out=(1, 2048) weight=None bias=None
+
+- fc [Linear]
+  preds: ['flatten']  succs: []
+  quant: in=[5] w=6 b=7 out=3
+  shapes: in=[(1, 2048)] out=(1, 1000) weight=(1000, 2048) bias=(1000,)

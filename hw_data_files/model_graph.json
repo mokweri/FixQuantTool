@@ -1,0 +1,5200 @@
+{
+  "nodes": [
+    {
+      "name": "conv1",
+      "type": "Conv2d",
+      "predecessors": [],
+      "successors": [
+        "relu_0"
+      ],
+      "quant": {
+        "frac_w": 5,
+        "frac_b": 2,
+        "frac_out": 1,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        3,
+        7,
+        7
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          3,
+          224,
+          224
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        112,
+        112
+      ]
+    },
+    {
+      "name": "relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "conv1"
+      ],
+      "successors": [
+        "maxpool"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          1
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          112,
+          112
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        112,
+        112
+      ]
+    },
+    {
+      "name": "maxpool",
+      "type": "MaxPool2d",
+      "predecessors": [
+        "relu_0"
+      ],
+      "successors": [
+        "layer1_0_conv1",
+        "layer1_0_downsample_0"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 1,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          112,
+          112
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "maxpool"
+      ],
+      "successors": [
+        "layer1_0_relu_0"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          1
+        ]
+      },
+      "weight_shape": [
+        64,
+        64,
+        1,
+        1
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_downsample_0",
+      "type": "Conv2d",
+      "predecessors": [
+        "maxpool"
+      ],
+      "successors": [
+        "add"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 3,
+        "frac_out": 2,
+        "frac_in": [
+          1
+        ]
+      },
+      "weight_shape": [
+        256,
+        64,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_0_conv1"
+      ],
+      "successors": [
+        "layer1_0_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_0_relu_0"
+      ],
+      "successors": [
+        "layer1_0_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 3,
+        "frac_out": 2,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_0_conv2"
+      ],
+      "successors": [
+        "layer1_0_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          2
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_0_relu_1"
+      ],
+      "successors": [
+        "add"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        64,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "add",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer1_0_conv3",
+        "layer1_0_downsample_0"
+      ],
+      "successors": [
+        "layer1_0_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          3,
+          2
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ],
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_0_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add"
+      ],
+      "successors": [
+        "layer1_1_conv1",
+        "add_1"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_0_relu_2"
+      ],
+      "successors": [
+        "layer1_1_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_1_conv1"
+      ],
+      "successors": [
+        "layer1_1_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_1_relu_0"
+      ],
+      "successors": [
+        "layer1_1_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_1_conv2"
+      ],
+      "successors": [
+        "layer1_1_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_1_relu_1"
+      ],
+      "successors": [
+        "add_1"
+      ],
+      "quant": {
+        "frac_w": 6,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        64,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "add_1",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer1_1_conv3",
+        "layer1_0_relu_2"
+      ],
+      "successors": [
+        "layer1_1_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ],
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_1_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_1"
+      ],
+      "successors": [
+        "layer1_2_conv1",
+        "add_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_1_relu_2"
+      ],
+      "successors": [
+        "layer1_2_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_2_conv1"
+      ],
+      "successors": [
+        "layer1_2_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_2_relu_0"
+      ],
+      "successors": [
+        "layer1_2_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "bias_shape": [
+        64
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer1_2_conv2"
+      ],
+      "successors": [
+        "layer1_2_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        64,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_2_relu_1"
+      ],
+      "successors": [
+        "add_2"
+      ],
+      "quant": {
+        "frac_w": 6,
+        "frac_b": 3,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        64,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          64,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "add_2",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer1_2_conv3",
+        "layer1_1_relu_2"
+      ],
+      "successors": [
+        "layer1_2_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ],
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer1_2_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_2"
+      ],
+      "successors": [
+        "layer2_0_conv1",
+        "layer2_0_downsample_0"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer2_0_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_2_relu_2"
+      ],
+      "successors": [
+        "layer2_0_relu_0"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer2_0_downsample_0",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer1_2_relu_2"
+      ],
+      "successors": [
+        "add_3"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_0_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_0_conv1"
+      ],
+      "successors": [
+        "layer2_0_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        56,
+        56
+      ]
+    },
+    {
+      "name": "layer2_0_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_0_relu_0"
+      ],
+      "successors": [
+        "layer2_0_relu_1"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          56,
+          56
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_0_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_0_conv2"
+      ],
+      "successors": [
+        "layer2_0_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_0_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_0_relu_1"
+      ],
+      "successors": [
+        "add_3"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        128,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "add_3",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer2_0_conv3",
+        "layer2_0_downsample_0"
+      ],
+      "successors": [
+        "layer2_0_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          4,
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ],
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_0_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_3"
+      ],
+      "successors": [
+        "layer2_1_conv1",
+        "add_4"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_0_relu_2"
+      ],
+      "successors": [
+        "layer2_1_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_1_conv1"
+      ],
+      "successors": [
+        "layer2_1_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_1_relu_0"
+      ],
+      "successors": [
+        "layer2_1_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 3,
+        "frac_out": 5,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_1_conv2"
+      ],
+      "successors": [
+        "layer2_1_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_1_relu_1"
+      ],
+      "successors": [
+        "add_4"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        128,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "add_4",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer2_1_conv3",
+        "layer2_0_relu_2"
+      ],
+      "successors": [
+        "layer2_1_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ],
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_1_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_4"
+      ],
+      "successors": [
+        "layer2_2_conv1",
+        "add_5"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_1_relu_2"
+      ],
+      "successors": [
+        "layer2_2_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 6,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_2_conv1"
+      ],
+      "successors": [
+        "layer2_2_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_2_relu_0"
+      ],
+      "successors": [
+        "layer2_2_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_2_conv2"
+      ],
+      "successors": [
+        "layer2_2_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_2_relu_1"
+      ],
+      "successors": [
+        "add_5"
+      ],
+      "quant": {
+        "frac_w": 6,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        128,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "add_5",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer2_2_conv3",
+        "layer2_1_relu_2"
+      ],
+      "successors": [
+        "layer2_2_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ],
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_2_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_5"
+      ],
+      "successors": [
+        "layer2_3_conv1",
+        "add_6"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_2_relu_2"
+      ],
+      "successors": [
+        "layer2_3_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_3_conv1"
+      ],
+      "successors": [
+        "layer2_3_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_3_relu_0"
+      ],
+      "successors": [
+        "layer2_3_relu_1"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "bias_shape": [
+        128
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer2_3_conv2"
+      ],
+      "successors": [
+        "layer2_3_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        128,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_3_relu_1"
+      ],
+      "successors": [
+        "add_6"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        128,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          128,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "add_6",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer2_3_conv3",
+        "layer2_2_relu_2"
+      ],
+      "successors": [
+        "layer2_3_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ],
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer2_3_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_6"
+      ],
+      "successors": [
+        "layer3_0_conv1",
+        "layer3_0_downsample_0"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer3_0_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_3_relu_2"
+      ],
+      "successors": [
+        "layer3_0_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer3_0_downsample_0",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer2_3_relu_2"
+      ],
+      "successors": [
+        "add_7"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_0_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_0_conv1"
+      ],
+      "successors": [
+        "layer3_0_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        28,
+        28
+      ]
+    },
+    {
+      "name": "layer3_0_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_0_relu_0"
+      ],
+      "successors": [
+        "layer3_0_relu_1"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          28,
+          28
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_0_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_0_conv2"
+      ],
+      "successors": [
+        "layer3_0_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_0_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_0_relu_1"
+      ],
+      "successors": [
+        "add_7"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_7",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_0_conv3",
+        "layer3_0_downsample_0"
+      ],
+      "successors": [
+        "layer3_0_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          3,
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_0_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_7"
+      ],
+      "successors": [
+        "layer3_1_conv1",
+        "add_8"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_0_relu_2"
+      ],
+      "successors": [
+        "layer3_1_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_1_conv1"
+      ],
+      "successors": [
+        "layer3_1_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_1_relu_0"
+      ],
+      "successors": [
+        "layer3_1_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_1_conv2"
+      ],
+      "successors": [
+        "layer3_1_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_1_relu_1"
+      ],
+      "successors": [
+        "add_8"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_8",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_1_conv3",
+        "layer3_0_relu_2"
+      ],
+      "successors": [
+        "layer3_1_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_1_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_8"
+      ],
+      "successors": [
+        "layer3_2_conv1",
+        "add_9"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_1_relu_2"
+      ],
+      "successors": [
+        "layer3_2_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_2_conv1"
+      ],
+      "successors": [
+        "layer3_2_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_2_relu_0"
+      ],
+      "successors": [
+        "layer3_2_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_2_conv2"
+      ],
+      "successors": [
+        "layer3_2_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_2_relu_1"
+      ],
+      "successors": [
+        "add_9"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_9",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_2_conv3",
+        "layer3_1_relu_2"
+      ],
+      "successors": [
+        "layer3_2_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_2_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_9"
+      ],
+      "successors": [
+        "layer3_3_conv1",
+        "add_10"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_2_relu_2"
+      ],
+      "successors": [
+        "layer3_3_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_3_conv1"
+      ],
+      "successors": [
+        "layer3_3_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_3_relu_0"
+      ],
+      "successors": [
+        "layer3_3_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_3_conv2"
+      ],
+      "successors": [
+        "layer3_3_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_3_relu_1"
+      ],
+      "successors": [
+        "add_10"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_10",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_3_conv3",
+        "layer3_2_relu_2"
+      ],
+      "successors": [
+        "layer3_3_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 4,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_3_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_10"
+      ],
+      "successors": [
+        "layer3_4_conv1",
+        "add_11"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_3_relu_2"
+      ],
+      "successors": [
+        "layer3_4_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_4_conv1"
+      ],
+      "successors": [
+        "layer3_4_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_4_relu_0"
+      ],
+      "successors": [
+        "layer3_4_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_4_conv2"
+      ],
+      "successors": [
+        "layer3_4_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_4_relu_1"
+      ],
+      "successors": [
+        "add_11"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_11",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_4_conv3",
+        "layer3_3_relu_2"
+      ],
+      "successors": [
+        "layer3_4_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_4_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_11"
+      ],
+      "successors": [
+        "layer3_5_conv1",
+        "add_12"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_4_relu_2"
+      ],
+      "successors": [
+        "layer3_5_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_5_conv1"
+      ],
+      "successors": [
+        "layer3_5_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_5_relu_0"
+      ],
+      "successors": [
+        "layer3_5_relu_1"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "bias_shape": [
+        256
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer3_5_conv2"
+      ],
+      "successors": [
+        "layer3_5_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        256,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_5_relu_1"
+      ],
+      "successors": [
+        "add_12"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1024,
+        256,
+        1,
+        1
+      ],
+      "bias_shape": [
+        1024
+      ],
+      "input_shapes": [
+        [
+          1,
+          256,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "add_12",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer3_5_conv3",
+        "layer3_4_relu_2"
+      ],
+      "successors": [
+        "layer3_5_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ],
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer3_5_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_12"
+      ],
+      "successors": [
+        "layer4_0_conv1",
+        "layer4_0_downsample_0"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        1024,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer4_0_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_5_relu_2"
+      ],
+      "successors": [
+        "layer4_0_relu_0"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 5,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer4_0_downsample_0",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer3_5_relu_2"
+      ],
+      "successors": [
+        "add_13"
+      ],
+      "quant": {
+        "frac_w": 8,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        2048,
+        1024,
+        1,
+        1
+      ],
+      "bias_shape": [
+        2048
+      ],
+      "input_shapes": [
+        [
+          1,
+          1024,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_0_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_0_conv1"
+      ],
+      "successors": [
+        "layer4_0_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        14,
+        14
+      ]
+    },
+    {
+      "name": "layer4_0_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_0_relu_0"
+      ],
+      "successors": [
+        "layer4_0_relu_1"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        512,
+        3,
+        3
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          14,
+          14
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_0_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_0_conv2"
+      ],
+      "successors": [
+        "layer4_0_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_0_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_0_relu_1"
+      ],
+      "successors": [
+        "add_13"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 2,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        2048,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        2048
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "add_13",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer4_0_conv3",
+        "layer4_0_downsample_0"
+      ],
+      "successors": [
+        "layer4_0_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 1,
+        "frac_in": [
+          2,
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ],
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_0_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_13"
+      ],
+      "successors": [
+        "layer4_1_conv1",
+        "add_14"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          1
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_0_relu_2"
+      ],
+      "successors": [
+        "layer4_1_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 4,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        2048,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_1_conv1"
+      ],
+      "successors": [
+        "layer4_1_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_1_relu_0"
+      ],
+      "successors": [
+        "layer4_1_relu_1"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 5,
+        "frac_out": 4,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        512,
+        3,
+        3
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_1_conv2"
+      ],
+      "successors": [
+        "layer4_1_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          4
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_1_relu_1"
+      ],
+      "successors": [
+        "add_14"
+      ],
+      "quant": {
+        "frac_w": 7,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        2048,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        2048
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "add_14",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer4_1_conv3",
+        "layer4_0_relu_2"
+      ],
+      "successors": [
+        "layer4_1_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 2,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ],
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_1_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_14"
+      ],
+      "successors": [
+        "layer4_2_conv1",
+        "add_15"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          2
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_conv1",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_1_relu_2"
+      ],
+      "successors": [
+        "layer4_2_relu_0"
+      ],
+      "quant": {
+        "frac_w": 9,
+        "frac_b": 4,
+        "frac_out": 6,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        2048,
+        1,
+        1
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_relu_0",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_2_conv1"
+      ],
+      "successors": [
+        "layer4_2_conv2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          6
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_conv2",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_2_relu_0"
+      ],
+      "successors": [
+        "layer4_2_relu_1"
+      ],
+      "quant": {
+        "frac_w": 10,
+        "frac_b": 3,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        512,
+        512,
+        3,
+        3
+      ],
+      "bias_shape": [
+        512
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_relu_1",
+      "type": "ReLU",
+      "predecessors": [
+        "layer4_2_conv2"
+      ],
+      "successors": [
+        "layer4_2_conv3"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        512,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_conv3",
+      "type": "Conv2d",
+      "predecessors": [
+        "layer4_2_relu_1"
+      ],
+      "successors": [
+        "add_15"
+      ],
+      "quant": {
+        "frac_w": 6,
+        "frac_b": 4,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        2048,
+        512,
+        1,
+        1
+      ],
+      "bias_shape": [
+        2048
+      ],
+      "input_shapes": [
+        [
+          1,
+          512,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "add_15",
+      "type": "AddWithMetadata",
+      "predecessors": [
+        "layer4_2_conv3",
+        "layer4_1_relu_2"
+      ],
+      "successors": [
+        "layer4_2_relu_2"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 1,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ],
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "layer4_2_relu_2",
+      "type": "ReLU",
+      "predecessors": [
+        "add_15"
+      ],
+      "successors": [
+        "avgpool"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          1
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        7,
+        7
+      ]
+    },
+    {
+      "name": "avgpool",
+      "type": "AdaptiveAvgPool2d",
+      "predecessors": [
+        "layer4_2_relu_2"
+      ],
+      "successors": [
+        "flatten"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          7,
+          7
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "flatten",
+      "type": "Flatten",
+      "predecessors": [
+        "avgpool"
+      ],
+      "successors": [
+        "fc"
+      ],
+      "quant": {
+        "frac_w": null,
+        "frac_b": null,
+        "frac_out": null,
+        "frac_in": [
+          3
+        ]
+      },
+      "weight_shape": null,
+      "bias_shape": null,
+      "input_shapes": [
+        [
+          1,
+          2048,
+          1,
+          1
+        ]
+      ],
+      "output_shape": [
+        1,
+        2048
+      ]
+    },
+    {
+      "name": "fc",
+      "type": "Linear",
+      "predecessors": [
+        "flatten"
+      ],
+      "successors": [],
+      "quant": {
+        "frac_w": 6,
+        "frac_b": 7,
+        "frac_out": 3,
+        "frac_in": [
+          5
+        ]
+      },
+      "weight_shape": [
+        1000,
+        2048
+      ],
+      "bias_shape": [
+        1000
+      ],
+      "input_shapes": [
+        [
+          1,
+          2048
+        ]
+      ],
+      "output_shape": [
+        1,
+        1000
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "conv1",
+      "to": "relu_0"
+    },
+    {
+      "from": "relu_0",
+      "to": "maxpool"
+    },
+    {
+      "from": "maxpool",
+      "to": "layer1_0_conv1"
+    },
+    {
+      "from": "maxpool",
+      "to": "layer1_0_downsample_0"
+    },
+    {
+      "from": "layer1_0_conv1",
+      "to": "layer1_0_relu_0"
+    },
+    {
+      "from": "layer1_0_downsample_0",
+      "to": "add"
+    },
+    {
+      "from": "layer1_0_relu_0",
+      "to": "layer1_0_conv2"
+    },
+    {
+      "from": "layer1_0_conv2",
+      "to": "layer1_0_relu_1"
+    },
+    {
+      "from": "layer1_0_relu_1",
+      "to": "layer1_0_conv3"
+    },
+    {
+      "from": "layer1_0_conv3",
+      "to": "add"
+    },
+    {
+      "from": "add",
+      "to": "layer1_0_relu_2"
+    },
+    {
+      "from": "layer1_0_relu_2",
+      "to": "layer1_1_conv1"
+    },
+    {
+      "from": "layer1_0_relu_2",
+      "to": "add_1"
+    },
+    {
+      "from": "layer1_1_conv1",
+      "to": "layer1_1_relu_0"
+    },
+    {
+      "from": "layer1_1_relu_0",
+      "to": "layer1_1_conv2"
+    },
+    {
+      "from": "layer1_1_conv2",
+      "to": "layer1_1_relu_1"
+    },
+    {
+      "from": "layer1_1_relu_1",
+      "to": "layer1_1_conv3"
+    },
+    {
+      "from": "layer1_1_conv3",
+      "to": "add_1"
+    },
+    {
+      "from": "add_1",
+      "to": "layer1_1_relu_2"
+    },
+    {
+      "from": "layer1_1_relu_2",
+      "to": "layer1_2_conv1"
+    },
+    {
+      "from": "layer1_1_relu_2",
+      "to": "add_2"
+    },
+    {
+      "from": "layer1_2_conv1",
+      "to": "layer1_2_relu_0"
+    },
+    {
+      "from": "layer1_2_relu_0",
+      "to": "layer1_2_conv2"
+    },
+    {
+      "from": "layer1_2_conv2",
+      "to": "layer1_2_relu_1"
+    },
+    {
+      "from": "layer1_2_relu_1",
+      "to": "layer1_2_conv3"
+    },
+    {
+      "from": "layer1_2_conv3",
+      "to": "add_2"
+    },
+    {
+      "from": "add_2",
+      "to": "layer1_2_relu_2"
+    },
+    {
+      "from": "layer1_2_relu_2",
+      "to": "layer2_0_conv1"
+    },
+    {
+      "from": "layer1_2_relu_2",
+      "to": "layer2_0_downsample_0"
+    },
+    {
+      "from": "layer2_0_conv1",
+      "to": "layer2_0_relu_0"
+    },
+    {
+      "from": "layer2_0_downsample_0",
+      "to": "add_3"
+    },
+    {
+      "from": "layer2_0_relu_0",
+      "to": "layer2_0_conv2"
+    },
+    {
+      "from": "layer2_0_conv2",
+      "to": "layer2_0_relu_1"
+    },
+    {
+      "from": "layer2_0_relu_1",
+      "to": "layer2_0_conv3"
+    },
+    {
+      "from": "layer2_0_conv3",
+      "to": "add_3"
+    },
+    {
+      "from": "add_3",
+      "to": "layer2_0_relu_2"
+    },
+    {
+      "from": "layer2_0_relu_2",
+      "to": "layer2_1_conv1"
+    },
+    {
+      "from": "layer2_0_relu_2",
+      "to": "add_4"
+    },
+    {
+      "from": "layer2_1_conv1",
+      "to": "layer2_1_relu_0"
+    },
+    {
+      "from": "layer2_1_relu_0",
+      "to": "layer2_1_conv2"
+    },
+    {
+      "from": "layer2_1_conv2",
+      "to": "layer2_1_relu_1"
+    },
+    {
+      "from": "layer2_1_relu_1",
+      "to": "layer2_1_conv3"
+    },
+    {
+      "from": "layer2_1_conv3",
+      "to": "add_4"
+    },
+    {
+      "from": "add_4",
+      "to": "layer2_1_relu_2"
+    },
+    {
+      "from": "layer2_1_relu_2",
+      "to": "layer2_2_conv1"
+    },
+    {
+      "from": "layer2_1_relu_2",
+      "to": "add_5"
+    },
+    {
+      "from": "layer2_2_conv1",
+      "to": "layer2_2_relu_0"
+    },
+    {
+      "from": "layer2_2_relu_0",
+      "to": "layer2_2_conv2"
+    },
+    {
+      "from": "layer2_2_conv2",
+      "to": "layer2_2_relu_1"
+    },
+    {
+      "from": "layer2_2_relu_1",
+      "to": "layer2_2_conv3"
+    },
+    {
+      "from": "layer2_2_conv3",
+      "to": "add_5"
+    },
+    {
+      "from": "add_5",
+      "to": "layer2_2_relu_2"
+    },
+    {
+      "from": "layer2_2_relu_2",
+      "to": "layer2_3_conv1"
+    },
+    {
+      "from": "layer2_2_relu_2",
+      "to": "add_6"
+    },
+    {
+      "from": "layer2_3_conv1",
+      "to": "layer2_3_relu_0"
+    },
+    {
+      "from": "layer2_3_relu_0",
+      "to": "layer2_3_conv2"
+    },
+    {
+      "from": "layer2_3_conv2",
+      "to": "layer2_3_relu_1"
+    },
+    {
+      "from": "layer2_3_relu_1",
+      "to": "layer2_3_conv3"
+    },
+    {
+      "from": "layer2_3_conv3",
+      "to": "add_6"
+    },
+    {
+      "from": "add_6",
+      "to": "layer2_3_relu_2"
+    },
+    {
+      "from": "layer2_3_relu_2",
+      "to": "layer3_0_conv1"
+    },
+    {
+      "from": "layer2_3_relu_2",
+      "to": "layer3_0_downsample_0"
+    },
+    {
+      "from": "layer3_0_conv1",
+      "to": "layer3_0_relu_0"
+    },
+    {
+      "from": "layer3_0_downsample_0",
+      "to": "add_7"
+    },
+    {
+      "from": "layer3_0_relu_0",
+      "to": "layer3_0_conv2"
+    },
+    {
+      "from": "layer3_0_conv2",
+      "to": "layer3_0_relu_1"
+    },
+    {
+      "from": "layer3_0_relu_1",
+      "to": "layer3_0_conv3"
+    },
+    {
+      "from": "layer3_0_conv3",
+      "to": "add_7"
+    },
+    {
+      "from": "add_7",
+      "to": "layer3_0_relu_2"
+    },
+    {
+      "from": "layer3_0_relu_2",
+      "to": "layer3_1_conv1"
+    },
+    {
+      "from": "layer3_0_relu_2",
+      "to": "add_8"
+    },
+    {
+      "from": "layer3_1_conv1",
+      "to": "layer3_1_relu_0"
+    },
+    {
+      "from": "layer3_1_relu_0",
+      "to": "layer3_1_conv2"
+    },
+    {
+      "from": "layer3_1_conv2",
+      "to": "layer3_1_relu_1"
+    },
+    {
+      "from": "layer3_1_relu_1",
+      "to": "layer3_1_conv3"
+    },
+    {
+      "from": "layer3_1_conv3",
+      "to": "add_8"
+    },
+    {
+      "from": "add_8",
+      "to": "layer3_1_relu_2"
+    },
+    {
+      "from": "layer3_1_relu_2",
+      "to": "layer3_2_conv1"
+    },
+    {
+      "from": "layer3_1_relu_2",
+      "to": "add_9"
+    },
+    {
+      "from": "layer3_2_conv1",
+      "to": "layer3_2_relu_0"
+    },
+    {
+      "from": "layer3_2_relu_0",
+      "to": "layer3_2_conv2"
+    },
+    {
+      "from": "layer3_2_conv2",
+      "to": "layer3_2_relu_1"
+    },
+    {
+      "from": "layer3_2_relu_1",
+      "to": "layer3_2_conv3"
+    },
+    {
+      "from": "layer3_2_conv3",
+      "to": "add_9"
+    },
+    {
+      "from": "add_9",
+      "to": "layer3_2_relu_2"
+    },
+    {
+      "from": "layer3_2_relu_2",
+      "to": "layer3_3_conv1"
+    },
+    {
+      "from": "layer3_2_relu_2",
+      "to": "add_10"
+    },
+    {
+      "from": "layer3_3_conv1",
+      "to": "layer3_3_relu_0"
+    },
+    {
+      "from": "layer3_3_relu_0",
+      "to": "layer3_3_conv2"
+    },
+    {
+      "from": "layer3_3_conv2",
+      "to": "layer3_3_relu_1"
+    },
+    {
+      "from": "layer3_3_relu_1",
+      "to": "layer3_3_conv3"
+    },
+    {
+      "from": "layer3_3_conv3",
+      "to": "add_10"
+    },
+    {
+      "from": "add_10",
+      "to": "layer3_3_relu_2"
+    },
+    {
+      "from": "layer3_3_relu_2",
+      "to": "layer3_4_conv1"
+    },
+    {
+      "from": "layer3_3_relu_2",
+      "to": "add_11"
+    },
+    {
+      "from": "layer3_4_conv1",
+      "to": "layer3_4_relu_0"
+    },
+    {
+      "from": "layer3_4_relu_0",
+      "to": "layer3_4_conv2"
+    },
+    {
+      "from": "layer3_4_conv2",
+      "to": "layer3_4_relu_1"
+    },
+    {
+      "from": "layer3_4_relu_1",
+      "to": "layer3_4_conv3"
+    },
+    {
+      "from": "layer3_4_conv3",
+      "to": "add_11"
+    },
+    {
+      "from": "add_11",
+      "to": "layer3_4_relu_2"
+    },
+    {
+      "from": "layer3_4_relu_2",
+      "to": "layer3_5_conv1"
+    },
+    {
+      "from": "layer3_4_relu_2",
+      "to": "add_12"
+    },
+    {
+      "from": "layer3_5_conv1",
+      "to": "layer3_5_relu_0"
+    },
+    {
+      "from": "layer3_5_relu_0",
+      "to": "layer3_5_conv2"
+    },
+    {
+      "from": "layer3_5_conv2",
+      "to": "layer3_5_relu_1"
+    },
+    {
+      "from": "layer3_5_relu_1",
+      "to": "layer3_5_conv3"
+    },
+    {
+      "from": "layer3_5_conv3",
+      "to": "add_12"
+    },
+    {
+      "from": "add_12",
+      "to": "layer3_5_relu_2"
+    },
+    {
+      "from": "layer3_5_relu_2",
+      "to": "layer4_0_conv1"
+    },
+    {
+      "from": "layer3_5_relu_2",
+      "to": "layer4_0_downsample_0"
+    },
+    {
+      "from": "layer4_0_conv1",
+      "to": "layer4_0_relu_0"
+    },
+    {
+      "from": "layer4_0_downsample_0",
+      "to": "add_13"
+    },
+    {
+      "from": "layer4_0_relu_0",
+      "to": "layer4_0_conv2"
+    },
+    {
+      "from": "layer4_0_conv2",
+      "to": "layer4_0_relu_1"
+    },
+    {
+      "from": "layer4_0_relu_1",
+      "to": "layer4_0_conv3"
+    },
+    {
+      "from": "layer4_0_conv3",
+      "to": "add_13"
+    },
+    {
+      "from": "add_13",
+      "to": "layer4_0_relu_2"
+    },
+    {
+      "from": "layer4_0_relu_2",
+      "to": "layer4_1_conv1"
+    },
+    {
+      "from": "layer4_0_relu_2",
+      "to": "add_14"
+    },
+    {
+      "from": "layer4_1_conv1",
+      "to": "layer4_1_relu_0"
+    },
+    {
+      "from": "layer4_1_relu_0",
+      "to": "layer4_1_conv2"
+    },
+    {
+      "from": "layer4_1_conv2",
+      "to": "layer4_1_relu_1"
+    },
+    {
+      "from": "layer4_1_relu_1",
+      "to": "layer4_1_conv3"
+    },
+    {
+      "from": "layer4_1_conv3",
+      "to": "add_14"
+    },
+    {
+      "from": "add_14",
+      "to": "layer4_1_relu_2"
+    },
+    {
+      "from": "layer4_1_relu_2",
+      "to": "layer4_2_conv1"
+    },
+    {
+      "from": "layer4_1_relu_2",
+      "to": "add_15"
+    },
+    {
+      "from": "layer4_2_conv1",
+      "to": "layer4_2_relu_0"
+    },
+    {
+      "from": "layer4_2_relu_0",
+      "to": "layer4_2_conv2"
+    },
+    {
+      "from": "layer4_2_conv2",
+      "to": "layer4_2_relu_1"
+    },
+    {
+      "from": "layer4_2_relu_1",
+      "to": "layer4_2_conv3"
+    },
+    {
+      "from": "layer4_2_conv3",
+      "to": "add_15"
+    },
+    {
+      "from": "add_15",
+      "to": "layer4_2_relu_2"
+    },
+    {
+      "from": "layer4_2_relu_2",
+      "to": "avgpool"
+    },
+    {
+      "from": "avgpool",
+      "to": "flatten"
+    },
+    {
+      "from": "flatten",
+      "to": "fc"
+    }
+  ]
+}

@@ -253,6 +253,9 @@ class InferProcessor:
         modules = dict(self.fx_model.named_modules())
         logger = logging.getLogger(self.__class__.__name__)  # Get the class logger
 
+        # Track repeated non-parameter module names (e.g., ReLU used multiple times)
+        name_counters = {}
+
         for node in self.fx_model.graph.nodes:
             if node.op == "placeholder":
                 new_node = new_graph.placeholder(node.name)
@@ -278,7 +281,10 @@ class InferProcessor:
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
                     elif isinstance(target_module, nn.ReLU):
-                        module_name = node.target.replace('.', '_')  # Fix the invalid naming issue
+                        base = node.target.replace('.', '_')
+                        idx = name_counters.get(base, 0)
+                        module_name = f"{base}_{idx}"
+                        name_counters[base] = idx + 1
                         inference_model.layers[module_name] = new_module
                         if node.args[0] in node_map:
                             new_node = new_graph.call_module(module_name, args=(node_map[node.args[0]],))
@@ -312,15 +318,13 @@ class InferProcessor:
                     )
                 elif node.target == torch.add:
                     add_layer = AddWithMetadata()
-                    add_layer.register_buffer(
-                        "frac_act", torch.tensor(target_module.export_quant_info())
-                    )
-                    inference_model.layers[target_module.module_name] = add_layer
+                    # No quant metadata source here; leave frac_act unset
+                    add_name = node.name
+                    inference_model.layers[add_name] = add_layer
                     new_node = new_graph.call_module(
-                        target_module.module_name,
+                        add_name,
                         args=(node_map[node.args[0]], node_map[node.args[1]]),
                     )
-                    node_map[node] = new_node
                 else:
                     logger.warning(f"Skipping unsupported function: {node.target}")
                     continue
@@ -772,3 +776,4 @@ class InferProcessor:
                 raise
 
         return return_fp_weight, return_fp_bias, frac_w, frac_b
+
