@@ -1,45 +1,51 @@
-qat_models
+# ========================
+# FixQuantTool .gitignore
+# ========================
 
-# Byte-compiled / optimized / DLL files
+# ---- Python ----
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+*.egg-info/
+dist/
+build/
+*.egg
 
-# IPython Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# pth modes
-*.pth
-
-# dotenv
-.env
-
-# virtualenv
+# ---- Virtual environments ----
 venv/
 ENV/
+.python-version
 
-# User-specific stuff
-.idea/**/workspace.xml
-.idea/**/tasks.xml
-.idea/**/usage.statistics.xml
-.idea/**/dictionaries
-.idea/**/shelf
+# ---- IDE ----
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Generated files
-.idea/**/contentModel.xml
-logs/
-*.out
-*.tar
+# ---- IPython / Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Env files ----
+.env
+
+# ---- Model checkpoints & outputs ----
+qat_models/
+checkpoints/
+outputs/
+saved_models-FP/
+*.pth
+*.pth.tar
 *.onnx
+
+# ---- Binary data files ----
+hw_data_files/
 *.data
 
-# idea folder
-.idea
-/saved_models-FP/
+# ---- Logs & HPC ----
+logs/
+*.out
+*.log
 
+# ---- Misc ----
+*.tar
