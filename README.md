@@ -1,104 +1,206 @@
-# FixQuantTool: An End-to-End Fixed-Point Quantization Workflow for FPGAs
+# FixQuantTool
 
-## Introduction
+A fixed-point quantization toolkit for Quantization-Aware Training (QAT), bit-exact hardware emulation, and FPGA deployment.
 
-FixQuantTool is a comprehensive framework designed to bridge the gap between software-based deep learning model 
-quantization and efficient deployment on Field-Programmable Gate Arrays (FPGAs). 
-Deploying deep learning models on resource-constrained hardware like FPGAs presents challenges, 
-as standard quantization techniques often do not map optimally to the target hardware. 
-This tool implements an end-to-end workflow for fixed-point quantization, integrating hardware emulation 
-directly into the Quantization-Aware Training (QAT) process to ensure that quantized models are optimized 
-for real-world FPGA deployment.
+## Overview
 
-This project is based on the research presented in the paper:
-**"Bridging Quantization and Deployment: A Fixed-Point Workflow for FPGA Accelerators"**
-*Obed M. Mogaka, Håkan Forsberg, Masoud Daneshtalab*
-DOI: `10.1109/DDECS63720.2025.11006791`
+FixQuantTool provides an end-to-end workflow for deploying neural networks on fixed-point FPGA accelerators:
 
-Our methodology aims to resolve discrepancies between software quantization and hardware behavior, 
-providing a practical solution for edge device applications.
+1. **Quantization-Aware Training (QAT)** — Fine-tune a pretrained model with learnable quantization thresholds (TQT-based approach) so that quantization noise is minimized.
+2. **Inference Conversion** — Convert a QAT-trained model to a standard `nn.Module` with folded batch normalization and fixed-point quantized parameters.
+3. **Hardware Emulation** — Bit-exact emulation of HLS/FPGA convolution kernels (including rounding, saturation, and ReLU behavior) for validation before synthesis.
+4. **Test Data Generation** — Extract per-layer weights, biases, and activations as binary blobs for use by an FPGA accelerator testbench.
 
-## Key Features
+## Features
 
-* **Efficient Fixed-Point Quantization:** Utilizes binary-point scaling, optimally mapping model weights and activations to integer values for efficient bit-shifting operations on FPGAs.
-* **Quantization-Aware Training (QAT):** Implements QAT to fine-tune models, converting weights and activations to fixed-point representation while learning optimal fractional lengths. It uses a TQT-like approach for learning quantization thresholds.
-* **Hardware Emulation in QAT:** Integrates a hardware emulation engine that considers various HLS rounding modes (RND, RND\_ZERO, RND\_MIN\_INF, RND\_CONV, TRN). This helps identify optimal layer-specific configurations and minimize quantization errors when mapping to hardware.
-* **Batch Normalization (BN) Folding:** Implements BN folding by combining BN layers with preceding convolutional layers to reduce inference overhead. A two-forward-pass strategy is used during training to manage statistics before freezing the BN layers.
-* **Graph Editing and Optimization:** Leverages `torch.fx` for tracing and transforming model graphs, replacing standard modules with their quantized counterparts to create a leaner graph for quantization.
-* **Flexible Deployment Interface:** Provides an interface to generate hardware-specific configuration files (quantization parameters, weights). Validated with the PipeCNN open-source FPGA accelerator and designed for extensibility to other FPGA platforms.
-* **Model & Dataset Support:** Validated with ResNet and VGG models on CIFAR-10 and ImageNet datasets.
+- **Fixed-point quantization** with configurable bit-widths and fractional positions
+- **TQT (Trained Quantization Thresholds)** for learning optimal quantization ranges
+- **Automatic Conv-BN fusion** via `torch.fx` graph transformations
+- **Fused ConvBN module** with proper handling of frozen/running BN statistics
+- **Multiple rounding modes** (round-nearest, round-to-zero, truncation, convergent)
+- **Model introspection** for graph analysis, activation capture, and parameter export
+- **ONNX export** with fixed-point metadata attributes
+- **Distributed training** support via Horovod
 
-## Workflow Overview
+## Installation
 
-The proposed end-to-end workflow generally consists of the following steps:
+### Prerequisites
 
-1.  **Input Model:** Start with a pre-trained PyTorch model.
-2.  **Graph Editing and Optimization:** 
-    * The model's computational graph is traced using `torch.fx`.
-    * Batch Normalization layers are fused with their preceding convolutional layers.
-    * Standard modules (convolution, pooling, linear) are replaced with their quantizable equivalents.
-3.  **Quantization-Aware Training (QAT):**
-    * The model undergoes fine-tuning to learn quantization parameters (fractional lengths via TQT approach).
-    * Hardware emulation is performed during QAT to account for hardware-specific behaviors like rounding modes.
-4.  **Deployment Output:**
-    * The process generates quantized model weights and hardware configuration files suitable for FPGA deployment.
+- Python ≥ 3.9
+- CUDA-capable GPU (recommended)
+- Conda environment with PyTorch (the project uses the `Obed_Cuda` conda environment)
 
-## Getting Started
+### Install (development mode)
 
-1.  **Prerequisites:** Ensure you have Python and PyTorch installed. Install necessary dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-2.  **Configuration:**
-    * Quantization settings are primarily managed via `quantization/utils/quant_config.yaml`.
-    * Dataset paths can be configured within the scripts (e.g., `qat_train.py`, `deploy_eval.py`) or data provider files.
-3.  **Main Scripts:**
-    * `qat_train.py`: Use this script for performing Quantization-Aware Training. See the script's internal argument parser or the original README for details on its arguments.
-    * `deploy_eval.py`: Use this script for post-QAT processing, model conversion, parameter extraction, and evaluation. See `DEPLOY.MD` for more details.
+```bash
+conda activate Obed_Cuda
+cd FixQuantTool
+pip install -e .
+```
 
-## Directory Structure
+This makes the `fixquant` package importable from anywhere while allowing in-place edits.
 
-A brief overview of the key directories:
+### Dependencies
 
-* `./`: Contains main scripts like `train.py`, `qat_train.py`, `deploy_eval.py`.
-* `data_providers/`: Modules for loading datasets (CIFAR, ImageNet).
-* `docs/`: Contains detailed documentation for different aspects of the tool.
-* `hw_fxp/`: Hardware-specific fixed-point emulation and testing utilities.
-* `hw_outputs/`: Example output files for hardware, and a README explaining their format.
-* `models/`: PyTorch model definitions, including custom CIFAR models.
-* `qconfig_files/`: Example JSON configuration files for quantization parameters.
-* `quantization/`: Core logic for quantization, including QAT modules, fixed-point operations, TQT quantizers, and graph transformation utilities.
-* `run_manager/`: Manages training and evaluation runs.
-* `scripts/`: Shell scripts for job submission (e.g., on SLURM).
-* `utils/`: General utility functions.
+Core dependencies are listed in `pyproject.toml` and `requirements.txt`:
+
+- `torch >= 2.0`, `torchvision >= 0.15`
+- `numpy`, `pyyaml`, `onnx`, `tqdm`, `Pillow`
+- Optional: `horovod` (for distributed training)
+
+## Project Structure
+
+```
+FixQuantTool/
+├── pyproject.toml              # Package metadata (PEP 621)
+├── setup.cfg                   # Backward-compat packaging config
+├── requirements.txt            # Dependency list
+│
+├── src/fixquant/               # Main Python package
+│   ├── quantization/           # Core quantization modules
+│   │   ├── fix_ops.py          # Fixed-point operations & rounding
+│   │   ├── fused_conv_bn.py    # Conv-BN fusion module
+│   │   ├── qat_modules.py      # QAT-aware layer wrappers
+│   │   ├── fxp_modules.py      # Fixed-point emulation modules
+│   │   ├── tqt_ops.py          # TQT threshold initialization
+│   │   └── tqt_quantizer.py    # Learnable threshold quantizer
+│   │
+│   ├── graph/                  # FX graph processing
+│   │   ├── qat_processor.py    # QatProcessor: model → QAT model
+│   │   └── inference_processor.py  # InferProcessor: QAT → inference
+│   │
+│   ├── emulation/              # Hardware emulation
+│   │   ├── fxp_emu_modules.py  # HLS-accurate Conv2d emulation
+│   │   ├── model_introspector.py   # Graph inspection & activation export
+│   │   └── model_transforms.py # Model-to-emulation conversion
+│   │
+│   ├── data/                   # Dataset providers
+│   │   ├── imagenet.py         # ImageNet data provider
+│   │   ├── cifar10.py          # CIFAR-10 data provider
+│   │   ├── cifar100.py         # CIFAR-100 data provider
+│   │   └── data_utils.py       # Quick data loader utilities
+│   │
+│   ├── training/               # Training orchestration
+│   │   ├── run_config.py       # Training configuration
+│   │   ├── run_manager.py      # Training loop manager
+│   │   └── distributed_run_manager.py  # Horovod DDP support
+│   │
+│   ├── models/                 # Model architectures
+│   │   ├── resnet.py           # ImageNet-scale ResNet
+│   │   └── cifar/              # CIFAR-specific models
+│   │
+│   └── utils/                  # General utilities
+│       ├── common_tools.py     # Metrics, logging helpers
+│       └── pytorch_utils.py    # Optimizer, checkpoint utilities
+│
+├── tools/                      # CLI entry-point scripts
+│   ├── qat_train.py            # Run QAT training
+│   ├── qat_test.py             # Evaluate a QAT model
+│   ├── deploy_eval.py          # Convert QAT → inference & evaluate
+│   ├── train.py                # Standard FP training
+│   ├── train_cifar.py          # CIFAR training
+│   ├── ddp_train_hvd.py        # Distributed training (Horovod)
+│   ├── hw_fxp_test.py          # INT8 convolution emulation test
+│   ├── hw_layer_test_gen.py    # Generate per-layer test data
+│   └── print_model_graph.py    # Dump model graph summary
+│
+├── configs/                    # Configuration files
+│   ├── quant_config.yaml       # Layer replacement mapping
+│   └── qconfig_files/          # Saved quantization configs
+│
+├── docs/                       # Technical documentation
+├── scripts/                    # HPC job scripts
+├── assets/                     # Test images
+├── checkpoints/                # Saved model weights (gitignored)
+├── outputs/                    # Runtime outputs (gitignored)
+└── qat_models/                 # QAT checkpoints (gitignored)
+```
+
+## Quick Start
+
+### 1. QAT Training
+
+```bash
+conda activate Obed_Cuda
+python tools/qat_train.py \
+    --dataset imagenet \
+    --dataroot /path/to/imagenet \
+    --n_epochs 10 \
+    --init_lr 1e-5
+```
+
+### 2. Deploy & Evaluate
+
+```bash
+python tools/deploy_eval.py \
+    --dataset imagenet \
+    --dataroot /path/to/imagenet
+```
+
+### 3. Generate HW Test Data
+
+```bash
+python tools/hw_layer_test_gen.py
+```
+
+### 4. Run HW Emulation Test
+
+```bash
+python tools/hw_fxp_test.py \
+    --qparams_json outputs/hw_data_files/conv1/qparams.json \
+    --weights_file outputs/hw_data_files/conv1/weights.data \
+    --bias_file outputs/hw_data_files/conv1/bias.data \
+    --activation_file outputs/hw_data_files/conv1/input.data \
+    --emu hls --compare_float_ref
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `FIXQUANT_DATA_DIR` | Path to dataset directory | `/home/obed/Documents/imagenet-mini` |
+
+### Quantization Config
+
+The quantization configuration is defined in `configs/quant_config.yaml`. It specifies:
+- Layer replacement mappings (which standard layers get replaced with QAT equivalents)
+- Default quantization bit-widths
+
+## Programmatic Usage
+
+```python
+import torch
+import yaml
+import torchvision.models as models
+from fixquant.graph import QatProcessor, InferProcessor
+
+# Load config
+with open("configs/quant_config.yaml") as f:
+    config = yaml.safe_load(f)
+
+# Create QAT model
+model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+qat = QatProcessor(model, config)
+qat_model = qat.quantize()
+
+# ... train the model ...
+
+# Convert to inference
+infer = InferProcessor(qat_model, config)
+std_model = infer.convert_to_std_model()
+qconfig = infer.generate_qconfig()
+```
 
 ## Documentation
 
-For more detailed information, please refer to the following documents:
+- [QAT Training Guide](QAT.md)
+- [Deployment Guide](DEPLOY.md)
+- [Fused Conv-BN](docs/conv_fused.md)
+- [Quantized Modules](docs/qmodules.md)
+- [TQT Quantizer](docs/tqt.md)
 
-* **This README (`README.md`):** Provides a general overview of the FixQuantTool project.
-* **[QAT Training Script Details (`QAT.md`)](QAT.md)**: Detailed instructions for using the `qat_train.py` script.
-* **[Deployment and Evaluation (`DEPLOY.md`)](./DEPLOY.md):** Guide for using `deploy_eval.py` for model deployment preparation and evaluation.
-* **[Fused Convolution-BN (`docs/conv_fused.md`)](./docs/conv_fused.md):** Information on the fused convolution and batch normalization modules.
-* **[Quantized Modules (`docs/qmodules.md`)](/docs/qmodules.md):** Details about the custom quantized PyTorch modules.
-* **[Trained Quantization Thresholds (`docs/tqt.md`)](./docs/tqt.md):** Explanation of the TQT-based quantizers.
-* **[Hardware Output Files (`hw_outputs/Readme.md`)](./hw_outputs/Readme.md):** Description of the format and interpretation of binary files generated for hardware.
+## License
 
-## Citation
-If you use FixQuantTool or find the associated research paper helpful, please cite:
-```bibtex
-@INPROCEEDINGS{Mogaka2025DDECS,
-  author={Mogaka, Obed M. and Forsberg, Håkan and Daneshtalab, Masoud},
-  booktitle={2025 IEEE 28th International Symposium on Design and Diagnostics of Electronic Circuits and Systems (DDECS)}, 
-  title={Bridging Quantization and Deployment: A Fixed-Point Workflow for FPGA Accelerators}, 
-  year={2025},
-  pages={to appear},
-  doi={10.1109/DDECS63720.2025.11006791}
-}
-```
-
-## Acknowledgments
-This work was supported in part by the Swedish Innovation Agency VINNOVA projects FASTER-AI and AutoDeep, 
-the European Union and Estonian Research Council via project TEM-TA138. 
-The computations were enabled by resources provided by the National Academic Infrastructure for Supercomputing in Sweden (NAISS), 
-partially funded by the Swedish Research Council through grant agreement no. 2022-06725.
+MIT

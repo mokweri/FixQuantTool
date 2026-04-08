@@ -38,7 +38,7 @@ To run the script, simply execute the Python file. The script accepts various co
 #### Misc. Options
 
 * `dataset`: Dataset to use for training (default: "imagenet")
-* `dataroot`: Root directory of the dataset (default: "/home/obed/Documents/imagenet-mini")
+* `dataroot`: Root directory of the dataset (default: `$FIXQUANT_DATA_DIR` or `/home/obed/Documents/imagenet-mini`)
 * `display_freq`: Display training metrics every n steps (default: 100)
 * `validation_frequency`: Validate model every n epochs (default: 1)
 * `save_dir`: Directory to save trained models (default: './qat_models')
@@ -48,7 +48,7 @@ To run the script, simply execute the Python file. The script accepts various co
 ### Example Usage
 
 ```bash
-python qat_train.py --dataset imagenet --dataroot /path/to/imagenet --save_dir ./qat_models
+python tools/qat_train.py --dataset imagenet --dataroot /path/to/imagenet --save_dir ./qat_models
 ```
 
 ### QAT Process
@@ -65,10 +65,11 @@ The script performs the following QAT process:
 9. Validates the quantized model using the `validate` method.
 
 ### Notes
-* The script assumes that the `quant_config.yaml` file is present in the `quantization/utils` directory.
-* The QatProcessor class is responsible for quantizing and calibrating the model.
-* The RunManager class is responsible for managing the training process.
+* The script looks for `configs/quant_config.yaml` relative to the project root.
+* The `QatProcessor` class (in `fixquant.graph.qat_processor`) is responsible for quantizing and calibrating the model.
+* The `RunManager` class (in `fixquant.training`) is responsible for managing the training process.
 
 ### Troubleshooting
-* If you encounter any issues while running the script, please check the logs for error messages.
-* Make sure that the `quant_config.yaml` file is correctly formatted and present in the required directory.
+* If you encounter any issues while running the script, check the logs for error messages.
+* Make sure `configs/quant_config.yaml` is correctly formatted and present.
+* Set the `FIXQUANT_DATA_DIR` environment variable to override the default dataset path.

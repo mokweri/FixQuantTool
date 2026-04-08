@@ -1,6 +1,6 @@
 # Fixed-Point Quantization Model Deployment Tool
 
-The script (`deploy_eval.py`) orchestrates the process of taking a pre-trained PyTorch model, applying Quantization-Aware Training (QAT) transformations, loading QAT-finetuned weights, and then extracting quantized model parameters in formats suitable for hardware deployment or further analysis. It also includes functionality to extract specific layer parameters (optionally subsetted) and can be extended to generate test vectors.
+The deployment script (`tools/deploy_eval.py`) orchestrates the process of taking a pre-trained PyTorch model, applying Quantization-Aware Training (QAT) transformations, loading QAT-finetuned weights, and then extracting quantized model parameters in formats suitable for hardware deployment or further analysis. It also includes functionality to extract specific layer parameters (optionally subsetted) and can be extended to generate test vectors.
 
 ## Features
 
@@ -25,65 +25,71 @@ The script (`deploy_eval.py`) orchestrates the process of taking a pre-trained P
     *   NumPy
     A `requirements.txt` is available.
 
-2.  **Custom Modules:** Ensure the following custom modules are in your `PYTHONPATH` or accessible from the script's directory:
-    *   `models.cifar_models`
-    *   `quantization.fix_ops`
-    *   `quantization.utils.graph_trace`
-    *   `quantization.utils.inference_mod`
-    *   `data_providers.imagenet`
-    *   `data_providers.cifar10`
-    *   `run_manager`
+2.  **Custom Modules:** Install the `fixquant` package (see README.md):
+    ```bash
+    pip install -e .
+    ```
+    This provides all required modules:
+    *   `fixquant.models.cifar`
+    *   `fixquant.quantization.fix_ops`
+    *   `fixquant.graph.qat_processor`
+    *   `fixquant.graph.inference_processor`
+    *   `fixquant.data.imagenet`
+    *   `fixquant.data.cifar10`
+    *   `fixquant.training`
 
 3.  **Datasets (Optional, for data provider paths):**
     *   **ImageNet:** The script sets a default path. Update `ImagenetDataProvider.DEFAULT_PATH` if your location differs.
     *   **CIFAR-10:** (If using CIFAR models) Ensure the data provider can access it.
 
 4.  **QAT Configuration:**
-    *   A `quantization/utils/quant_config.yaml` file is required to define QAT settings.
+    *   A `configs/quant_config.yaml` file is required to define QAT settings.
 
 5.  **Pre-trained QAT Weights:**
     *   The script expects QAT-finetuned weights, for example, at `qat_models/checkpoint/resnet50_best.pth.tar`. Update this path if necessary.
 
 ## Directory Structure
 `````
-├── deploy_eval.py # The deployment script
-├── quantization/
-│ ├── utils/
-│ │ ├── quant_config.yaml # QAT configuration file
-│ │ ├── graph_trace.py # Contains QatProcessor
-│ │ └── inference_mod.py # Contains InferProcessor
-│ └── fix_ops.py # Contains to_int_tensor, etc.
-├── models/
-│ └── cifar_models.py # Custom CIFAR models
-├── data_providers/
-│ ├── imagenet.py
-│ └── cifar10.py
-├── run_manager.py
+├── tools/
+│   └── deploy_eval.py          # The deployment script
+├── src/fixquant/
+│   ├── quantization/
+│   │   └── fix_ops.py          # Contains to_int_tensor, etc.
+│   ├── graph/
+│   │   ├── qat_processor.py    # Contains QatProcessor
+│   │   └── inference_processor.py  # Contains InferProcessor
+│   ├── models/
+│   │   └── cifar/              # Custom CIFAR models
+│   ├── data/
+│   │   ├── imagenet.py
+│   │   └── cifar10.py
+│   └── training/
+│       ├── run_config.py
+│       └── run_manager.py
+├── configs/
+│   └── quant_config.yaml       # QAT configuration file
 ├── qat_models/
-│ └── checkpoint/
-│ └── resnet50_best.pth.tar # Example QAT trained weights
-├── hw_outputs/ # Directory for test image/output (if uncommented)
-│ ├── test_image.data
-│ └── ref_output.data
-└── README.md
+│   └── checkpoint/
+│       └── resnet50_best.pth.tar
+└── outputs/
+    └── hw_data_files/          # Generated test data
 `````
 ## Configuration
 
-1.  **`quantization/utils/quant_config.yaml`:**
+1.  **`configs/quant_config.yaml`:**
     This YAML file defines the quantization strategy for different layer types, including bit-widths and 
 whether to quantize weights, activations, and biases. Modify this file to change how QAT is applied.
 2.  **Dataset Paths:**
-    If using ImageNet, update the default path in `deploy.py` within the `if platform.system() == ...` block to point to your ImageNet dataset location.
+    Set the `FIXQUANT_DATA_DIR` environment variable or pass `--dataroot` to point to your dataset.
 3.  **QAT Checkpoint Path:**
-    Update the path in `Qatprocessor.load_qat_weights('qat_models/checkpoint/resnet50_best.pth.tar')` 
-    to point to your actual trained QAT model checkpoint.
+    Update the path in `tools/deploy_eval.py` to point to your actual trained QAT model checkpoint.
 
 ## Usage
 
 The script is run from the command line:
 
 ```bash
-python deploy_eval.py [OPTIONS]
+python tools/deploy_eval.py [OPTIONS]
 ```
 
 ### Command-Line Options:

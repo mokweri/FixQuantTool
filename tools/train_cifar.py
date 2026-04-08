@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-from models.resnet import resnet18
-from utils.data_utils import getTrainData, getValData
-from models.cifar_models import *
-from utils.common_tools import *
-from utils.pytorch_utils import save_checkpoint
+from fixquant.models.resnet import resnet18
+from fixquant.data.data_utils import getTrainData, getValData
+from fixquant.models.cifar import *
+from fixquant.utils.common_tools import *
+from fixquant.utils.pytorch_utils import save_checkpoint
 from tqdm import tqdm
 
 import time
@@ -173,7 +173,8 @@ def adjust_learning_rate(optimizer, epoch):
 
 
 if __name__ == '__main__':
-    data_dir = "/home/obed/Documents/data"
+    import os
+    data_dir = os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/data")
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and len(device_ids) > 0 else "cpu"

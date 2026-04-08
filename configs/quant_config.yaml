@@ -1,0 +1,14 @@
+fuse_conv_bn: {}
+quantize_layers:
+  torch.nn.Conv2d: QuantizedConv2d
+  torch.nn.Linear: QuantizedLinear
+  torch.nn.MaxPool2d: QMaxPool2D
+  torch.nn.AdaptiveAvgPool2d: QAdaptiveAvgPool2d
+
+replacement_type: quant
+
+replace_add: {}
+input_stub: {}
+output_stub:
+  output:
+    out: 8

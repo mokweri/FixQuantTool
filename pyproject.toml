@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fixquant"
+version = "0.1.0"
+description = "Fixed-point quantization tool for QAT, hardware emulation, and FPGA deployment"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "numpy",
+    "pyyaml",
+    "onnx",
+    "tqdm",
+    "Pillow",
+]
+
+[project.optional-dependencies]
+distributed = ["horovod"]
+dev = ["pytest", "flake8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fixquant = ["*.yaml"]
