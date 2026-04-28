@@ -96,6 +96,36 @@ class StdModelInspector:
     # ---------------------- Quantization Info ----------------------
     def get_quant_params(self, name: str) -> Dict[str, Optional[int] | List[int]]:
         mod = self.get_module(name)
+        if hasattr(mod, "f1") or hasattr(mod, "f2"):
+            frac_in_list: List[int] = []
+            if hasattr(mod, "f1"):
+                frac_in_list.append(int(getattr(mod, "f1")))
+            if hasattr(mod, "f2"):
+                frac_in_list.append(int(getattr(mod, "f2")))
+            return {
+                "frac_w": None,
+                "frac_b": None,
+                "frac_out": int(getattr(mod, "fout")) if hasattr(mod, "fout") else None,
+                "frac_in": frac_in_list if frac_in_list else [self.default_input_frac],
+            }
+        if hasattr(mod, "fin") or hasattr(mod, "fout") or hasattr(mod, "fw") or hasattr(mod, "fb"):
+            return {
+                "frac_w": int(getattr(mod, "fw")) if hasattr(mod, "fw") else None,
+                "frac_b": int(getattr(mod, "fb")) if hasattr(mod, "fb") else None,
+                "frac_out": int(getattr(mod, "fout")) if hasattr(mod, "fout") else None,
+                "frac_in": [int(getattr(mod, "fin"))] if hasattr(mod, "fin") else [self.default_input_frac],
+            }
+        if hasattr(mod, "qconfig") and hasattr(mod, "module_name"):
+            q = mod.qconfig.get(mod.module_name, {})
+            frac_in = q.get("frac_in", [])
+            if not isinstance(frac_in, list):
+                frac_in = [frac_in]
+            return {
+                "frac_w": q.get("frac_w"),
+                "frac_b": q.get("frac_b"),
+                "frac_out": q.get("frac_out"),
+                "frac_in": frac_in if frac_in else [self.default_input_frac],
+            }
         frac_w = int(getattr(mod, "frac_weight", 0)) if hasattr(mod, "frac_weight") else None
         frac_b = int(getattr(mod, "frac_bias", 0)) if hasattr(mod, "frac_bias") else None
         frac_out = int(getattr(mod, "frac_act", 0)) if hasattr(mod, "frac_act") else None
@@ -206,7 +236,12 @@ class StdModelInspector:
 
         if tensor.dim() > 3 and tensor.shape[0] == 1:
             tensor = tensor.squeeze(0)
-        int_tensor = to_int_tensor(tensor, signed=True, n_bits=n_bits, n_frac=int(n_frac))
+            
+        if tensor.dtype in (torch.int8, torch.int16, torch.int32, torch.int64):
+            int_tensor = torch.clamp(tensor, -128, 127).to(torch.int8)
+        else:
+            int_tensor = to_int_tensor(tensor, signed=True, n_bits=n_bits, n_frac=int(n_frac))
+            
         int_tensor.numpy().astype("int8").tofile(filepath)
         self.logger.info("Saved %s activation to '%s' (n_bits=%d, n_frac=%d)", which, filepath, n_bits, n_frac)
 
@@ -219,14 +254,28 @@ class StdModelInspector:
         n_bits_out: int = 8,
     ) -> Tuple[Optional[int], Optional[int]]:
         mod = self.get_module(name)
-        if not isinstance(mod, (nn.Conv2d, nn.Linear)):
-            raise TypeError(f"Layer '{name}' is not Conv2d/Linear: {type(mod).__name__}")
+        if not isinstance(mod, (nn.Conv2d, nn.Linear)) and type(mod).__name__ not in ("FxP_QConv2D", "FxP_QLinear", "HLSConv2d", "HLSLinear"):
+            raise TypeError(f"Layer '{name}' is not Conv2d/Linear or Emulation module: {type(mod).__name__}")
 
-        frac_w = int(getattr(mod, "frac_weight", 0)) if hasattr(mod, "frac_weight") else None
-        frac_b = int(getattr(mod, "frac_bias", 0)) if hasattr(mod, "frac_bias") else None
+        if hasattr(mod, "qconfig"):
+            frac_w = mod.qconfig[mod.module_name]['frac_w']
+            frac_b = mod.qconfig[mod.module_name]['frac_b']
+        elif hasattr(mod, "fw"):
+            frac_w = mod.fw
+            frac_b = mod.fb
+        else:
+            frac_w = int(getattr(mod, "frac_weight", 0)) if hasattr(mod, "frac_weight") else None
+            frac_b = int(getattr(mod, "frac_bias", 0)) if hasattr(mod, "frac_bias") else None
 
         # Weights
-        if hasattr(mod, "weight") and mod.weight is not None:
+        if hasattr(mod, "w_int8") and mod.w_int8 is not None:
+            w = mod.w_int8.data.detach().clone().cpu()
+            if target_weight_shape is not None:
+                slices = tuple(slice(0, min(s, w.shape[i])) for i, s in enumerate(target_weight_shape))
+                w = w[slices]
+            w.numpy().astype("int8").tofile(weight_file)
+            self.logger.info("Saved w_int8 to '%s'", weight_file)
+        elif hasattr(mod, "weight") and mod.weight is not None:
             w = mod.weight.data.detach().clone()
             if target_weight_shape is not None:
                 if len(target_weight_shape) != w.ndim:
@@ -246,7 +295,14 @@ class StdModelInspector:
             self.logger.info("Layer '%s' has no weights; created empty '%s'", name, weight_file)
 
         # Bias
-        if hasattr(mod, "bias") and mod.bias is not None:
+        if hasattr(mod, "b_int8") and mod.b_int8 is not None:
+            b = mod.b_int8.data.detach().clone().cpu()
+            if target_weight_shape is not None and hasattr(mod, "w_int8"):
+                out_len = min(mod.w_int8.shape[0], target_weight_shape[0])
+                b = b[:out_len]
+            b.numpy().astype("int8").tofile(bias_file)
+            self.logger.info("Saved b_int8 to '%s'", bias_file)
+        elif hasattr(mod, "bias") and mod.bias is not None:
             b = mod.bias.data.detach().clone()
             if target_weight_shape is not None and isinstance(mod, (nn.Conv2d, nn.Linear)) and hasattr(mod, "weight"):
                 out_len = min(mod.weight.shape[0], target_weight_shape[0])
@@ -336,4 +392,3 @@ class StdModelInspector:
             if n not in order:
                 order.append(n)
         return order
-

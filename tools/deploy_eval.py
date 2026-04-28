@@ -47,6 +47,15 @@ parser.add_argument('--output_dir',
 parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
+parser.add_argument("--model_type", type=str, default="emu",
+                    choices=["emu", "tilecnn"],
+                    help=(
+                        "'emu'     → HLS sequential emulation (convert_to_emu_model) — fast to build.\n"
+                        "'tilecnn' → TileCNN digital-twin with fused residual add and hardware-exact\n"
+                        "            GAP / MaxPool kernels (convert_to_tilecnn_model) — bit-identical\n"
+                        "            to the real FPGA hardware accuracy."
+                    ))
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("deploy_eval")
@@ -83,12 +92,19 @@ if __name__ == '__main__':
 
     """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
-    stdm = infer_processor.convert_to_std_model()
+
+    if args.model_type == "tilecnn":
+        logger.info("Building TileCNN digital-twin model (bit-exact FPGA accuracy)...")
+        eval_model = infer_processor.convert_to_tilecnn_model()
+    else:
+        logger.info("Building HLS sequential emulation model...")
+        eval_model = infer_processor.convert_to_emu_model()
+
     qconfig = infer_processor.generate_qconfig()
-    logger.info("qconfig generated with %d entries", len(qconfig))
+    logger.info("Model type: %s | qconfig entries: %d", args.model_type, len(qconfig))
 
     # Evaluation-only script: uncomment below to run validation
     run_config = RunConfig(**args.__dict__, is_qat=False)
     run_config.print_config()
-    run_manager = RunManager(args.save_dir, stdm, run_config)
+    run_manager = RunManager(args.save_dir, eval_model, run_config)
     run_manager.validate(0)

@@ -136,8 +136,9 @@ def main():
     from fixquant.graph.qat_processor import QatProcessor
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
-    qat_proc.freeze()
+    # qat_proc.freeze()
     qat_proc.load_qat_weights(MODEL_CHECKPOINT)
+    qat_proc.freeze()
 
     # 2. Convert to standard model
     infer_proc = InferProcessor(model, config)

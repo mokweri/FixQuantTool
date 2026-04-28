@@ -60,9 +60,10 @@ def main():
     qat_proc.load_qat_weights(str(checkpoint))
 
     infer_proc = InferProcessor(model, config)
-    stdm = infer_proc.convert_to_std_model()
+    # stdm = infer_proc.convert_to_std_model()
+    hw_model = infer_proc.convert_to_emu_model()
 
-    inspector = StdModelInspector(stdm, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(hw_model, default_input_frac=5, logger=logger)
 
     # Print a simple ordered list of Conv/Linear layers for quick selection
     ordered_layers = inspector.topological_order()

@@ -322,7 +322,7 @@ class QatProcessor:
         if self.qat_model is None:
             raise ValueError("Quantize the model first before loading weights.")
 
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         self.qat_model.load_state_dict(checkpoint["state_dict"])
         self.logger.info(f"Loaded QAT weights from {checkpoint_path}")
 
