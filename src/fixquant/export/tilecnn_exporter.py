@@ -325,14 +325,19 @@ class TileCNNGraphExporter:
             mod = self.inspector.get_module(name)
             preds = self.inspector.get_predecessors(name)
 
-            if isinstance(mod, nn.Conv2d) or type(mod).__name__ in ("FxP_QConv2D", "HLSConv2d"):
+            if isinstance(mod, nn.Conv2d) or type(mod).__name__ in (
+                    "FxP_QConv2D", "HLSConv2d", "TileCNNConv2d"):
                 node_id = name.replace(".", "_")
+                # TileCNNConv2d with fused residual add receives (main, residual) as two preds
+                is_tilecnn = type(mod).__name__ == "TileCNNConv2d"
+                is_emu     = type(mod).__name__ in ("FxP_QConv2D", "HLSConv2d")
+
+                # Pick the main IFM (first pred)
                 ifm = tensor_map[preds[0]] if preds else "input"
-                
-                is_emu = type(mod).__name__ in ("FxP_QConv2D", "HLSConv2d")
-                w_tensor = mod.weight if hasattr(mod, "weight") else mod.w_int8
-                k = (w_tensor.shape[2], w_tensor.shape[3]) if is_emu else mod.kernel_size
-                
+
+                w_tensor = mod.w_int8 if is_emu or is_tilecnn else mod.weight
+                k = (w_tensor.shape[2], w_tensor.shape[3])
+
                 node = {
                     "id": node_id,
                     "op": "conv2d",
@@ -346,21 +351,35 @@ class TileCNNGraphExporter:
                     },
                     "attrs": {
                         "kernel": [k[0], k[1]],
-                        "stride": [mod.stride[0], mod.stride[1]],
-                        "padding": [mod.padding[0], mod.padding[0], mod.padding[1], mod.padding[1]],
-                        "dilation": [mod.dilation[0], mod.dilation[1]],
+                        "stride": list(mod.stride) if isinstance(mod.stride, (list, tuple)) else [mod.stride, mod.stride],
+                        "padding": [mod.padding[0], mod.padding[0], mod.padding[1], mod.padding[1]] if isinstance(mod.padding, (list, tuple)) else [mod.padding]*4,
+                        "dilation": list(mod.dilation) if isinstance(mod.dilation, (list, tuple)) else [mod.dilation, mod.dilation],
                         "groups": mod.groups
                     },
                     "post_ops": {}
                 }
+
+                # For TileCNNConv2d with fused residual add, wire up post_ops immediately
+                # (the Add node is gone from the graph — fusion already happened)
+                if is_tilecnn and getattr(mod, "residual_add", False):
+                    # preds[1] is the residual branch
+                    if len(preds) >= 2:
+                        residual_tensor = tensor_map.get(preds[1], preds[1])
+                        node["post_ops"]["residual_add"] = True
+                        node["inputs"]["residual"] = residual_tensor
+                    if getattr(mod, "post_add_relu", False):
+                        node["post_ops"]["post_add_relu"] = True
+
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id
 
                 if is_emu:
-                    frac_out = mod.qconfig[mod.module_name]['frac_out']
+                    frac_out = mod.qconfig[mod.module_name]["frac_out"]
+                elif is_tilecnn:
+                    frac_out = mod.fout  # already set to add's frac_out for fused nodes
                 else:
-                    frac_out = int(mod.frac_act.item()) if hasattr(mod, 'frac_act') else self.default_input_frac
-                    
+                    frac_out = int(mod.frac_act.item()) if hasattr(mod, "frac_act") else self.default_input_frac
+
                 tensors[f"{node_id}_out"] = {
                     "kind": "activation",
                     "dtype": "int8",
@@ -371,17 +390,23 @@ class TileCNNGraphExporter:
                 tensor_map[name] = f"{node_id}_out"
 
                 weight_file = params_dir / f"{node_id}.weight.int8.bin"
-                bias_file = params_dir / f"{node_id}.bias.int8.bin"
+                bias_file   = params_dir / f"{node_id}.bias.int8.bin"
                 frac_w, frac_b = self.inspector.save_layer_params(name, str(weight_file), str(bias_file))
 
-                has_bias = (hasattr(mod, "bias") and mod.bias is not None) or (hasattr(mod, "b_int8") and mod.b_int8 is not None)
+                has_bias = (hasattr(mod, "b_int8") and mod.b_int8 is not None) or \
+                           (hasattr(mod, "bias") and mod.bias is not None)
                 if not has_bias:
-                    np.zeros(mod.weight.shape[0] if hasattr(mod, "weight") else mod.w_int8.shape[0], dtype=np.int8).tofile(str(bias_file))
+                    np.zeros(w_tensor.shape[0], dtype=np.int8).tofile(str(bias_file))
                     frac_b = 0
 
-                w_shape = list(mod.weight.shape) if hasattr(mod, "weight") else list(mod.w_int8.shape)
-                b_shape = list(mod.bias.shape) if hasattr(mod, "bias") and mod.bias is not None else list(mod.b_int8.shape) if hasattr(mod, "b_int8") and mod.b_int8 is not None else [w_shape[0]]
-                
+                w_shape = list(w_tensor.shape)
+                if hasattr(mod, "b_int8") and mod.b_int8 is not None:
+                    b_shape = list(mod.b_int8.shape)
+                elif hasattr(mod, "bias") and mod.bias is not None:
+                    b_shape = list(mod.bias.shape)
+                else:
+                    b_shape = [w_shape[0]]
+
                 tensors[f"{node_id}_w"] = {
                     "kind": "param",
                     "dtype": "int8",
@@ -399,11 +424,13 @@ class TileCNNGraphExporter:
                     "file": f"params/{node_id}.bias.int8.bin"
                 }
 
-            elif isinstance(mod, nn.Linear) or type(mod).__name__ in ("FxP_QLinear", "HLSLinear"):
+            elif isinstance(mod, nn.Linear) or type(mod).__name__ in (
+                    "FxP_QLinear", "HLSLinear", "TileCNNLinear"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
-                is_emu = type(mod).__name__ in ("FxP_QLinear", "HLSLinear")
+                is_emu     = type(mod).__name__ in ("FxP_QLinear", "HLSLinear")
+                is_tilecnn = type(mod).__name__ == "TileCNNLinear"
 
                 node = {
                     "id": node_id,
@@ -421,9 +448,11 @@ class TileCNNGraphExporter:
                 node_to_fused[name] = node_id
 
                 if is_emu:
-                    frac_out = mod.qconfig[mod.module_name]['frac_out']
+                    frac_out = mod.qconfig[mod.module_name]["frac_out"]
+                elif is_tilecnn:
+                    frac_out = mod.fout
                 else:
-                    frac_out = int(mod.frac_act.item()) if hasattr(mod, 'frac_act') else self.default_input_frac
+                    frac_out = int(mod.frac_act.item()) if hasattr(mod, "frac_act") else self.default_input_frac
                     
                 tensors[f"{node_id}_out"] = {
                     "kind": "activation",
@@ -463,7 +492,8 @@ class TileCNNGraphExporter:
                     "file": f"params/{node_id}.bias.int8.bin"
                 }
 
-            elif isinstance(mod, nn.MaxPool2d) or type(mod).__name__ in ("FxP_QMaxPool2D", "HLSMaxPool2D"):
+            elif isinstance(mod, nn.MaxPool2d) or type(mod).__name__ in (
+                    "FxP_QMaxPool2D", "HLSMaxPool2D", "TileCNNMaxPool"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
@@ -489,11 +519,18 @@ class TileCNNGraphExporter:
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id
 
-                is_emu = type(mod).__name__ in ("FxP_QMaxPool2D", "HLSMaxPool2D")
+                is_emu     = type(mod).__name__ in ("FxP_QMaxPool2D", "HLSMaxPool2D")
+                is_tilecnn = type(mod).__name__ == "TileCNNMaxPool"
                 if is_emu:
-                    frac_out = mod.qconfig[mod.module_name]['frac_out']
+                    frac_out = mod.qconfig[mod.module_name]["frac_out"]
+                elif is_tilecnn:
+                    # TileCNNMaxPool has no fout attr; derive from qconfig or fallback
+                    q_mp = self.inspector.get_quant_params(name)
+                    fin_mp = q_mp["frac_in"][0] if q_mp["frac_in"] else self.default_input_frac
+                    frac_out = q_mp.get("frac_out") or (fin_mp + getattr(mod, "post_pool_shift", 0))
                 else:
-                    frac_out = int(mod.frac_act.item()) if hasattr(mod, 'frac_act') else self.default_input_frac
+                    frac_out = int(mod.frac_act.item()) if hasattr(mod, "frac_act") else self.default_input_frac
+
                     
                 tensors[f"{node_id}_out"] = {
                     "kind": "activation",
@@ -504,7 +541,8 @@ class TileCNNGraphExporter:
                 }
                 tensor_map[name] = f"{node_id}_out"
 
-            elif isinstance(mod, nn.AdaptiveAvgPool2d) or type(mod).__name__ in ("FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d"):
+            elif isinstance(mod, nn.AdaptiveAvgPool2d) or type(mod).__name__ in (
+                    "FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d", "TileCNNGAP"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
@@ -521,11 +559,14 @@ class TileCNNGraphExporter:
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id
 
-                is_emu = type(mod).__name__ in ("FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d")
+                is_emu     = type(mod).__name__ in ("FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d")
+                is_tilecnn = type(mod).__name__ == "TileCNNGAP"
                 if is_emu:
-                    frac_out = mod.qconfig[mod.module_name]['frac_out']
+                    frac_out = mod.qconfig[mod.module_name]["frac_out"]
+                elif is_tilecnn:
+                    frac_out = mod.fout
                 else:
-                    frac_out = int(mod.frac_act.item()) if hasattr(mod, 'frac_act') else self.default_input_frac
+                    frac_out = int(mod.frac_act.item()) if hasattr(mod, "frac_act") else self.default_input_frac
                     
                 tensors[f"{node_id}_out"] = {
                     "kind": "activation",
@@ -536,8 +577,12 @@ class TileCNNGraphExporter:
                 }
                 tensor_map[name] = f"{node_id}_out"
 
-            elif isinstance(mod, nn.ReLU) or type(mod).__name__ == "HLSRelu":
-                pred = preds[0]
+            elif isinstance(mod, nn.ReLU) or type(mod).__name__ in ("HLSRelu",):
+                # Standalone ReLU nodes in both emu and tilecnn models —
+                # fuse them into their predecessor's post_ops
+                pred = preds[0] if preds else None
+                if pred is None:
+                    continue
                 fused_id = node_to_fused.get(pred)
                 if fused_id and fused_id in built_nodes:
                     if built_nodes[fused_id]["post_ops"].get("residual_add"):
@@ -547,35 +592,45 @@ class TileCNNGraphExporter:
                     tensor_map[name] = tensor_map[pred]
                     node_to_fused[name] = fused_id
                 else:
-                    tensor_map[name] = tensor_map[pred]
+                    tensor_map[name] = tensor_map.get(pred, "input")
                     node_to_fused[name] = fused_id
 
-            elif isinstance(mod, AddWithMetadata) or type(mod).__name__ in ("AddWithMetadata", "FxP_QElementwiseAdd", "HLSElementwiseAdd"):
-                pred1, pred2 = preds
-                try: idx1 = self.inspector.topological_order().index(pred1)
-                except ValueError: idx1 = -1
-                try: idx2 = self.inspector.topological_order().index(pred2)
-                except ValueError: idx2 = -1
-                
+            elif isinstance(mod, AddWithMetadata) or type(mod).__name__ in (
+                    "AddWithMetadata", "FxP_QElementwiseAdd", "HLSElementwiseAdd"):
+                # AddWithMetadata only exists in the emu model — in tilecnn it is fused
+                # into the preceding TileCNNConv2d and the node is erased from the graph.
+                if len(preds) < 2:
+                    # Orphan / erased node slipped through — skip silently
+                    self.logger.warning(
+                        f"AddWithMetadata '{name}' has {len(preds)} predecessor(s); expected 2. Skipping.")
+                    if preds:
+                        tensor_map[name] = tensor_map.get(preds[0], "input")
+                    continue
+
+                pred1, pred2 = preds[0], preds[1]
+                topo = self.inspector.topological_order()
+                idx1 = topo.index(pred1) if pred1 in topo else -1
+                idx2 = topo.index(pred2) if pred2 in topo else -1
+
                 if idx1 > idx2:
                     main_pred, res_pred = pred1, pred2
                 else:
                     main_pred, res_pred = pred2, pred1
-                
+
                 fused_id = node_to_fused.get(main_pred)
                 if fused_id and fused_id in built_nodes:
                     built_nodes[fused_id]["post_ops"]["residual_add"] = True
-                    built_nodes[fused_id]["inputs"]["residual"] = tensor_map[res_pred]
-                    
+                    built_nodes[fused_id]["inputs"]["residual"] = tensor_map.get(res_pred, res_pred)
+
                     is_emu = type(mod).__name__ in ("FxP_QElementwiseAdd", "HLSElementwiseAdd")
                     if is_emu:
                         ofm_name = built_nodes[fused_id]["outputs"]["ofm"]
-                        tensors[ofm_name]["frac"] = mod.qconfig[mod.module_name]['frac_out']
+                        tensors[ofm_name]["frac"] = mod.qconfig[mod.module_name]["frac_out"]
                     elif hasattr(mod, "frac_act"):
                         ofm_name = built_nodes[fused_id]["outputs"]["ofm"]
                         tensors[ofm_name]["frac"] = int(mod.frac_act.item())
-                        
-                tensor_map[name] = tensor_map[main_pred]
+
+                tensor_map[name] = tensor_map.get(main_pred, "input")
                 node_to_fused[name] = fused_id
 
             elif isinstance(mod, nn.Flatten):
@@ -586,11 +641,29 @@ class TileCNNGraphExporter:
                 if preds:
                     tensor_map[name] = tensor_map[preds[0]]
                     node_to_fused[name] = node_to_fused.get(preds[0])
+
+            elif type(mod).__name__ in ("InputQuantizer",):
+                # InputQuantizer is injected by convert_to_emu_model at the graph entry.
+                # It consumes the raw float input (a graph placeholder, not in tensor_map)
+                # and emits the first quantized activation.  Map it to the global "input"
+                # tensor so that the next Conv can find its IFM in tensor_map.
+                tensor_map[name] = "input"
+                node_to_fused[name] = None
+
+            elif type(mod).__name__ in ("OutputDequantizer",):
+                # OutputDequantizer is injected at the graph exit.  It doesn't create a
+                # new hardware tensor — it is purely a software de-scaling stub.
+                # Pass through the predecessor's tensor so reference collection works.
+                if preds:
+                    tensor_map[name] = tensor_map.get(preds[0], "input")
+                    node_to_fused[name] = node_to_fused.get(preds[0])
+
             else:
                 self.logger.warning(f"Unhandled module type {type(mod).__name__} for {name}")
                 if preds:
-                    tensor_map[name] = tensor_map[preds[0]]
+                    tensor_map[name] = tensor_map.get(preds[0], "input")
                     node_to_fused[name] = node_to_fused.get(preds[0])
+
 
         # Find and register references (outputs of the subgraph)
         graph_outputs = []

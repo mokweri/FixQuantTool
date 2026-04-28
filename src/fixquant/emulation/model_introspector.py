@@ -71,9 +71,20 @@ class StdModelInspector:
                     self.successors.setdefault(p, []).append(target_name)
                 self.successors.setdefault(target_name, [])
 
-        # Ensure all referenced nodes exist in dicts
+        # Ensure all *live* graph nodes exist in the dicts.
+        # We intentionally restrict this to modules that are actually referenced
+        # by a call_module node in the FX graph.  Modules that are registered in
+        # the model's module dict but have been erased from the graph (e.g.
+        # AddWithMetadata nodes after TileCNN fusion) must NOT be included —
+        # they have no predecessors/successors and will confuse topological_order()
+        # and downstream exporters.
+        live_targets = {
+            node.target
+            for node in self.model.graph.nodes
+            if node.op == "call_module"
+        }
         for name, mod in self.model.named_modules():
-            if name == "":  # root
+            if name == "" or name not in live_targets:
                 continue
             self.predecessors.setdefault(name, [])
             self.successors.setdefault(name, [])
@@ -254,7 +265,10 @@ class StdModelInspector:
         n_bits_out: int = 8,
     ) -> Tuple[Optional[int], Optional[int]]:
         mod = self.get_module(name)
-        if not isinstance(mod, (nn.Conv2d, nn.Linear)) and type(mod).__name__ not in ("FxP_QConv2D", "FxP_QLinear", "HLSConv2d", "HLSLinear"):
+        if not isinstance(mod, (nn.Conv2d, nn.Linear)) and type(mod).__name__ not in (
+                "FxP_QConv2D", "FxP_QLinear",
+                "HLSConv2d", "HLSLinear",
+                "TileCNNConv2d", "TileCNNLinear"):
             raise TypeError(f"Layer '{name}' is not Conv2d/Linear or Emulation module: {type(mod).__name__}")
 
         if hasattr(mod, "qconfig"):

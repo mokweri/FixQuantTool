@@ -59,9 +59,9 @@ def main():
 
     logger.info("Converting to bit-exact emulation model...")
     infer_proc = InferProcessor(model, config)
-    emu_model = infer_proc.convert_to_emu_model()
+    tilecnn_model = infer_proc.convert_to_tilecnn_model()
 
-    inspector = StdModelInspector(emu_model, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(tilecnn_model, default_input_frac=5, logger=logger)
 
     # Prepare input
     if image_path.exists():
