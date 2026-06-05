@@ -203,6 +203,8 @@ class FusedConvBN(nn.Module):
         return func(input, w, b, conv.stride, conv.padding, conv.dilation, conv.groups)
 
     def freeze(self, verbose=False):
+        if getattr(self, 'frozen', False):
+            return
         if verbose:
             print("Freezing the BN")
         w, b, gamma, beta = self._get_all_parameters()
@@ -255,6 +257,9 @@ class FusedConvBN(nn.Module):
 
         # Extract conv_mod parameters
         conv_state_dict = {k[len(conv_prefix):]: v for k, v in state_dict.items() if k.startswith(conv_prefix)}
+        if 'bias' in conv_state_dict and self.conv_mod.bias is None:
+            self.conv_mod.bias = nn.Parameter(torch.empty_like(conv_state_dict['bias']))
+            
         self.conv_mod._load_from_state_dict(conv_state_dict, '', local_metadata, strict, missing_keys, unexpected_keys,
                                             error_msgs)
 

@@ -32,7 +32,7 @@ parser.add_argument('--gpus',
 
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
-parser.add_argument("--dataroot", type=str, default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/imagenet-mini"), )
+parser.add_argument("--dataroot", type=str, default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/datasets/imagenet-mini"), )
 
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
@@ -64,8 +64,8 @@ if __name__ == '__main__':
 
     """Imagenet models"""
     # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
 
     """cifar models"""
     # model = resnet18_cifar10()
@@ -78,13 +78,7 @@ if __name__ == '__main__':
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
     Qatprocessor.calibrate(calib_loader, device)
-    # Qatprocessor.freeze()
-    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/resnet18_best.pth.tar'))
-    """ NOTE:
-        Call Qatprocessor.freeze() before loading resnet50weights 
-        - it behaves normal - frozen during training -- resnet18 and vgg16 does not behave
-        Call Qatprocessor.freeze() after loading vgg16/resnet18weights 
-    """
+    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/vgg16_best.pth.tar'))
     Qatprocessor.freeze()
 
     run_config = RunConfig(**args.__dict__, is_qat=True)
