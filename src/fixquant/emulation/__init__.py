@@ -1,5 +1,19 @@
 """Hardware emulation modules for bit-exact FPGA-like inference."""
 
-from .fxp_emu_modules import HLSConv2d, FXPConv2dTorch, HLSConv2dInt
+from .fxp_emu_modules import HardwareConv2d, FXPConv2dTorch, HardwareLinear, HardwareMaxPool2d, HardwareGAP, HardwareAdaptiveAvgPool2d, HardwareElementwiseAdd, HardwareRelu, HardwareRelu6, InputQuantizer, OutputDequantizer
 from .model_introspector import StdModelInspector
-from .model_transforms import create_emulation_model
+
+__all__ = [
+    "HardwareConv2d",
+    "FXPConv2dTorch",
+    "HardwareLinear",
+    "HardwareMaxPool2d",
+    "HardwareGAP",
+    "HardwareAdaptiveAvgPool2d",
+    "HardwareElementwiseAdd",
+    "HardwareRelu",
+    "HardwareRelu6",
+    "InputQuantizer",
+    "OutputDequantizer",
+    "StdModelInspector"
+]

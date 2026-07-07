@@ -59,7 +59,7 @@ def main():
 
     logger.info("Converting to bit-exact emulation model...")
     infer_proc = InferProcessor(model, config)
-    tilecnn_model = infer_proc.convert_to_tilecnn_model()
+    tilecnn_model = infer_proc.convert_to_hardware_model()
 
     inspector = StdModelInspector(tilecnn_model, default_input_frac=5, logger=logger)
 

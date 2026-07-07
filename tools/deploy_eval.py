@@ -34,10 +34,10 @@ parser.add_argument('--gpus',
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
-                    default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/imagenet-mini"),)
+                    default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/datasets/imagenet-mini"), )
 
 parser.add_argument('--display_freq',
-                    default=100, type=int, help='Display training metrics every n steps.')
+                    default=10, type=int, help='Display training metrics every n steps.')
 parser.add_argument('--validation_frequency',
                     default=1, type=int, help='Validate model every n epochs.')
 parser.add_argument('--save_dir',
@@ -50,9 +50,9 @@ parser.add_argument('--manual_seed',
 parser.add_argument("--model_type", type=str, default="emu",
                     choices=["emu", "tilecnn"],
                     help=(
-                        "'emu'     → HLS sequential emulation (convert_to_emu_model) — fast to build.\n"
+                        "'emu'     → HLS sequential emulation (convert_to_hardware_model) — fast to build.\n"
                         "'tilecnn' → TileCNN digital-twin with fused residual add and hardware-exact\n"
-                        "            GAP / MaxPool kernels (convert_to_tilecnn_model) — bit-identical\n"
+                        "            GAP / MaxPool kernels (convert_to_hardware_model) — bit-identical\n"
                         "            to the real FPGA hardware accuracy."
                     ))
 
@@ -75,6 +75,7 @@ if __name__ == '__main__':
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    # model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
 
     """Cifar models"""
     # model = resnet18_cifar10()
@@ -87,24 +88,28 @@ if __name__ == '__main__':
 
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.freeze()
     Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/resnet50_best.pth.tar'))
+    Qatprocessor.freeze()
 
     """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
 
     if args.model_type == "tilecnn":
         logger.info("Building TileCNN digital-twin model (bit-exact FPGA accuracy)...")
-        eval_model = infer_processor.convert_to_tilecnn_model()
+        eval_model = infer_processor.convert_to_hardware_model()
     else:
         logger.info("Building HLS sequential emulation model...")
-        eval_model = infer_processor.convert_to_emu_model()
+        eval_model = infer_processor.convert_to_hardware_model()
 
     qconfig = infer_processor.generate_qconfig()
     logger.info("Model type: %s | qconfig entries: %d", args.model_type, len(qconfig))
 
     # Evaluation-only script: uncomment below to run validation
-    run_config = RunConfig(**args.__dict__, is_qat=False)
+    args_dict = args.__dict__.copy()
+    if 'image_size' not in args_dict:
+        args_dict['image_size'] = 224
+    
+    run_config = RunConfig(**args_dict, is_qat=False)
     run_config.print_config()
     run_manager = RunManager(args.save_dir, eval_model, run_config)
     run_manager.validate(0)

@@ -268,7 +268,8 @@ class StdModelInspector:
         if not isinstance(mod, (nn.Conv2d, nn.Linear)) and type(mod).__name__ not in (
                 "FxP_QConv2D", "FxP_QLinear",
                 "HLSConv2d", "HLSLinear",
-                "TileCNNConv2d", "TileCNNLinear"):
+                "TileCNNConv2d", "TileCNNLinear",
+                "HardwareConv2d", "HardwareLinear"):
             raise TypeError(f"Layer '{name}' is not Conv2d/Linear or Emulation module: {type(mod).__name__}")
 
         if hasattr(mod, "qconfig"):

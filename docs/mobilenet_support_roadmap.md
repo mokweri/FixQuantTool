@@ -34,18 +34,21 @@ An investigation of the current fixed-point quantization codebase reveals the fo
 
 ## 3. Development Roadmap
 
-### Phase 1: Foundational Support (MobileNetV1)
-*Goal: Enable QAT and fixed-point emulation for Depthwise Convolutions.*
+### Phase 1: Foundational Support (MobileNetV2)
+*Goal: Enable QAT and fixed-point emulation for MobileNet architectures from Torchvision.*
+
+> [!NOTE]
+> `torchvision.models` natively only ships with `mobilenet_v2` and `mobilenet_v3`, lacking a direct `mobilenet_v1` implementation. We will use `mobilenet_v2` as the foundational baseline.
 
 1. **Depthwise Validation**:
-   - Write comprehensive unit tests for `QuantizedConv2d` and `FxP_QConv2D` with `groups = in_channels`.
-   - Ensure the `fused_conv_bn` logic correctly calculates and applies folded batch-norm scales for depthwise filters.
-2. **Model Definition**:
-   - Introduce `mobilenetv1.py` to `src/fixquant/models/` and verify the `QatProcessor` successfully converts it.
+   - `QatProcessor` natively handles `groups=in_channels` perfectly via `FusedConvBN`.
+2. **ReLU6 and AdaptiveAvgPool Support**:
+   - Introduce `HLSRelu6` and map `nn.ReLU6` in `inference_processor.py`.
+   - Add support for functional `F.adaptive_avg_pool2d` mapping in `inference_processor.py`.
 3. **Emulation Verification**:
    - Validate that the inference processor correctly converts the graph into bit-exact emulation nodes.
 
-### Phase 2: MobileNetV2 & ReLU6
+### Phase 2: Further Model Optimizations
 *Goal: Support inverted residuals and bounded activations.*
 
 1. **QReLU6 Implementation**:

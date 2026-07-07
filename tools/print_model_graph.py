@@ -61,7 +61,7 @@ def main():
 
     infer_proc = InferProcessor(model, config)
     # stdm = infer_proc.convert_to_std_model()
-    hw_model = infer_proc.convert_to_emu_model()
+    hw_model = infer_proc.convert_to_hardware_model()
 
     inspector = StdModelInspector(hw_model, default_input_frac=5, logger=logger)
 

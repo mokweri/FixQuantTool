@@ -69,228 +69,6 @@ class FXPConv2dTorch(nn.Module):
         return torch.clamp_min(y_i8, 0) if self.relu else y_i8
 
 
-class HLSConv2d(torch.nn.Module):
-    """
-    Bit-true emulation of PipeCNN conv_pipe.cl (integer part only).
-    Parameters
-    ----------
-      weight_int8           : (C_out, C_in, kH, kW)  torch.int8
-      bias_int8             : (C_out,)               torch.int8   (may pass None)
-      stride, padding, dilation, groups     : as in nn.Conv2d
-      frac_w, frac_b, frac_din, frac_dout   : number of fractional bits in each quantity
-      relu                  :  if True reproduce the (contol & 0x01) ReLU in the kernel
-    """
-    def __init__(self, weight_int8, bias_int8,
-                 stride=1, padding=0, dilation=1, groups=1,
-                 frac_w=7, frac_b=7, frac_din=7, frac_dout=7,
-                 relu=True):
-        super().__init__()
-        self.register_buffer('w_int8', weight_int8.clone().contiguous())
-        self.register_buffer('b_int8',
-                             torch.zeros(weight_int8.size(0), dtype=torch.int8) if bias_int8 is None
-                             else bias_int8.clone().contiguous())
-
-        self.stride, self.padding = stride, padding
-        self.dilation, self.groups = dilation, groups
-
-        # frac parameters are stored for later use
-        self.fw, self.fb = frac_w, frac_b
-        self.fin, self.fout = frac_din, frac_dout
-        self.relu = relu
-
-        # widen bias once (same as HLS: sign-extend to 32b)
-        self.register_buffer('bias_i32',
-            self.b_int8.to(torch.int32))                     # raw INT8 pattern in int32 vessel
-
-    # ---------------------------------------------------------------------
-    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
-        """
-        x_int8 : (N, C_in, H, W)  torch.int8     (Qm.fin)
-        returns : torch.int8 in Qm.fout
-        """
-        assert x_int8.dtype == torch.int8
-        N, C_in, H, W = x_int8.shape
-        C_out, _, kH, kW = self.w_int8.shape
-
-        # ------------------ 1.  int-32 convolution -----------------------
-        patches = F.unfold(
-            x_int8.float(),  # ←  float32 view
-            (kH, kW),
-            dilation=self.dilation,
-            padding=self.padding,
-            stride=self.stride
-        ).to(torch.int32)  # ←  convert back to int32
-
-        # weights -> (C_out, C_in*kH*kW)
-        w_mat = self.w_int8.view(C_out, -1).to(torch.int32)
-
-        # gemm : (N, C_out, L)
-        # int32 matmul is not supported on CUDA, so we use float64 (double) to avoid precision loss
-        acc_fp64 = torch.matmul(w_mat.to(torch.float64), patches.to(torch.float64))
-        acc = torch.round(acc_fp64).to(torch.int32)
-        acc = acc.view(N, C_out, -1)                           # (N, C_out, L)
-
-        # ------------------ 2.  Rounding & scaling -----------------------
-        shift = self.fw + self.fin - self.fout                 # ≥0 is guaranteed by HLS host
-
-        # HLS step: sign extension for right-shift rounding
-        # In PyTorch, right shift by negative number returns 0, destroying the tensor!
-        # If shift - 1 < 0, we must left shift instead.
-        if (shift - 1) >= 0:
-            acc_shifted = acc >> (shift - 1)
-        else:
-            acc_shifted = acc << (1 - shift)
-            
-        # add first rounding bit ( +1 )
-        acc_rnd1 = acc_shifted + 1
-
-        # We DO NOT saturate to 9 bits here because the QAT model does not simulate
-        # intermediate clipping before bias addition!
-        acc_sat9 = acc_rnd1
-
-        # ------------------ 3.  add bias (in 2-step rounding) ------------
-        if self.fb == self.fout:
-            bias_adj = (self.bias_i32 << 1)                    # <<1 to align with rnd-bit
-        elif self.fb > self.fout:
-            bias_adj = self.bias_i32 >> (self.fb - self.fout - 1)
-        else:  # fb < fout
-            bias_adj = self.bias_i32 << (self.fout - self.fb + 1)
-
-        # broadcast bias over spatial dimension
-        bias_adj = bias_adj.view(1, C_out, 1)
-        acc_bias = acc_sat9 + bias_adj + 1                     # second +1 for 2-step rnd
-
-        # ------------------ 4.  final truncation to 8 bits ---------------
-        y_int8 = (acc_bias >> 1)                               # discard last rnd-bit
-        y_int8 = sat_int(y_int8, 8).to(torch.int8)             # clip to [-128,127]
-
-        # ------------------ 5.  optional ReLU ----------------------------
-        if self.relu:
-            y_int8 = torch.where(y_int8 < 0,
-                                 torch.zeros_like(y_int8, dtype=torch.int8),
-                                 y_int8)
-
-        # reshape back to (N, C_out, H_out, W_out)
-        pad_h = self.padding[0] if isinstance(self.padding, tuple) else self.padding
-        pad_w = self.padding[1] if isinstance(self.padding, tuple) else self.padding
-        dil_h = self.dilation[0] if isinstance(self.dilation, tuple) else self.dilation
-        dil_w = self.dilation[1] if isinstance(self.dilation, tuple) else self.dilation
-        str_h = self.stride[0] if isinstance(self.stride, tuple) else self.stride
-        str_w = self.stride[1] if isinstance(self.stride, tuple) else self.stride
-        
-        out_h = (H + 2*pad_h - dil_h*(kH - 1) - 1)//str_h + 1
-        out_w = (W + 2*pad_w - dil_w*(kW - 1) - 1)//str_w + 1
-        return y_int8.view(N, C_out, out_h, out_w)
-
-class HLSConv2dInt(torch.nn.Module):
-    """
-    INT ONLY Conv2d - NO fixed point quantization
-    Parameters
-    ----------
-      weight_int8           : (C_out, C_in, kH, kW)  torch.int8
-      bias_int8             : (C_out,)               torch.int8   (may pass None)
-      stride, padding, dilation, groups   : as in nn.Conv2d
-      relu                  :  if True do relu activation
-    """
-    def __init__(self, weight_int8, bias_int8,
-                 stride=1, padding=0, dilation=1, groups=1,
-                 relu=True):
-        super().__init__()
-        self.register_buffer('w_int8', weight_int8.clone().contiguous())
-        self.register_buffer('b_int8', torch.zeros(weight_int8.size(0), dtype=torch.int8) if bias_int8 is None
-                             else bias_int8.clone().contiguous())
-
-        self.stride, self.padding = stride, padding
-        self.dilation, self.groups = dilation, groups
-        self.relu = relu
-
-        # widen bias once (same as HLS: sign-extend to 32b)
-        self.register_buffer('bias_i32',self.b_int8.to(torch.int32))   # raw INT8 pattern in int32 vessel
-
-    # ---------------------------------------------------------------------
-    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
-        """
-        x_int8 : (N, C_in, H, W)  torch.int8
-        returns : torch.int32
-        """
-        assert x_int8.dtype == torch.int8
-        N, C_in, H, W = x_int8.shape
-        C_out, _, kH, kW = self.w_int8.shape
-
-        # ------------------ 1.  int-32 convolution -----------------------
-        patches = F.unfold(
-            x_int8.float(),  # ←  float32 view
-            (kH, kW),
-            dilation=self.dilation,
-            padding=self.padding,
-            stride=self.stride
-        ).to(torch.int32)  # ←  convert back to int32
-
-        # weights -> (C_out, C_in*kH*kW)
-        w_mat = self.w_int8.view(C_out, -1).to(torch.int32)
-
-        # gemm : (N, C_out, L)
-        acc = torch.matmul(w_mat, patches)        # INT32
-        acc = acc.view(N, C_out, -1)              # (N, C_out, L)
-
-        # broadcast bias over spatial dimension
-        bias = self.bias_i32.view(1, C_out, 1)
-        y_int32 = acc + bias
-
-        # ------------------ 5.  optional ReLU ----------------------------
-        if self.relu:
-            y_int32 = torch.where(y_int32 < 0,
-                                 torch.zeros_like(y_int32, dtype=torch.int32),
-                                 y_int32)
-
-        # reshape back to (N, C_out, H_out, W_out)
-        out_h = (H + 2*self.padding - self.dilation*(kH - 1) - 1)//self.stride + 1
-        out_w = (W + 2*self.padding - self.dilation*(kW - 1) - 1)//self.stride + 1
-        return y_int32.view(N, C_out, out_h, out_w)
-
-class HLSLinear(torch.nn.Module):
-    def __init__(self, weight_int8, bias_int8, frac_w=7, frac_b=7, frac_din=7, frac_dout=7):
-        super().__init__()
-        self.register_buffer('w_int8', weight_int8.clone().contiguous())
-        self.register_buffer('b_int8',
-                             torch.zeros(weight_int8.size(0), dtype=torch.int8) if bias_int8 is None
-                             else bias_int8.clone().contiguous())
-        self.fw, self.fb = frac_w, frac_b
-        self.fin, self.fout = frac_din, frac_dout
-        self.register_buffer('bias_i32', self.b_int8.to(torch.int32))
-
-    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
-        assert x_int8.dtype == torch.int8
-        N = x_int8.size(0)
-        x_flat = x_int8.view(N, -1).to(torch.float64)
-        w_mat = self.w_int8.to(torch.float64)
-        
-        acc_fp64 = torch.matmul(x_flat, w_mat.t())
-        acc = torch.round(acc_fp64).to(torch.int32)
-
-        shift = self.fw + self.fin - self.fout
-        if (shift - 1) >= 0:
-            acc_shifted = acc >> (shift - 1)
-        else:
-            acc_shifted = acc << (1 - shift)
-            
-        acc_rnd1 = acc_shifted + 1
-        acc_sat9 = acc_rnd1 # No intermediate saturation
-
-        if self.fb == self.fout:
-            bias_adj = (self.bias_i32 << 1)
-        elif self.fb > self.fout:
-            bias_adj = self.bias_i32 >> (self.fb - self.fout - 1)
-        else:
-            bias_adj = self.bias_i32 << (self.fout - self.fb + 1)
-
-        bias_adj = bias_adj.view(1, -1)
-        acc_bias = acc_sat9 + bias_adj + 1
-
-        y_int8 = (acc_bias >> 1)
-        y_int8 = sat_int(y_int8, 8).to(torch.int8)
-        return y_int8
-
 class HLSMaxPool2D(torch.nn.MaxPool2d):
     def forward(self, x_int8):
         assert x_int8.dtype == torch.int8
@@ -305,7 +83,7 @@ class HLSAdaptiveAvgPool2d(torch.nn.AdaptiveAvgPool2d):
         y_f = super().forward(x_f)
         return torch.round(y_f).to(torch.int8)
 
-class HLSElementwiseAdd(torch.nn.Module):
+class HardwareElementwiseAdd(torch.nn.Module):
     def __init__(self, frac_in1=5, frac_in2=5, frac_out=5):
         super().__init__()
         self.f1 = frac_in1
@@ -332,10 +110,20 @@ class HLSElementwiseAdd(torch.nn.Module):
         y = y1 + y2
         return sat_int(y, 8).to(torch.int8)
 
-class HLSRelu(torch.nn.ReLU):
+class HardwareRelu(torch.nn.ReLU):
     def forward(self, x_int8):
         assert x_int8.dtype == torch.int8
         return torch.clamp_min(x_int8, 0)
+
+class HardwareRelu6(torch.nn.Module):
+    def __init__(self, frac_in):
+        super().__init__()
+        self.frac_in = frac_in
+
+    def forward(self, x_int8):
+        assert x_int8.dtype == torch.int8
+        max_val = min(127, int(round(6.0 * (2 ** self.frac_in))))
+        return torch.clamp(x_int8, min=0, max=max_val)
 
 class InputQuantizer(torch.nn.Module):
     def __init__(self, frac_in):
@@ -386,7 +174,7 @@ def _tc_signed_shift(values: torch.Tensor, shift: int) -> torch.Tensor:
     return values
 
 
-class TileCNNConv2d(torch.nn.Module):
+class HardwareConv2d(torch.nn.Module):
     """
     Bit-exact digital-twin of the TileCNN conv2d hardware kernel.
 
@@ -394,9 +182,6 @@ class TileCNNConv2d(torch.nn.Module):
         s1  = (acc >> (shift-1)) + 1
         out = (s1 + bias_adj + 1) >> 1
         out = clamp(out, -128, 127)
-        out = relu(out)  [optional]
-
-    Optional fused residual add (performed after conv+bias, before post_add_relu).
 
     Parameters
     ----------
@@ -404,18 +189,14 @@ class TileCNNConv2d(torch.nn.Module):
     bias_int8     : (C_out,)               torch.int8  (pass None for zero bias)
     stride, padding, dilation, groups      : as in nn.Conv2d
     frac_w, frac_b, frac_din, frac_dout   : fractional widths
-    relu          : apply ReLU after conv (but before residual add)
-    residual_frac : fractional width of the residual tensor (needed if residual_add=True)
-    residual_add  : fuse a residual add into this layer
-    post_add_relu : apply ReLU after the residual add
     """
     def __init__(self, weight_int8, bias_int8,
                  stride=1, padding=0, dilation=1, groups=1,
                  frac_w=7, frac_b=7, frac_din=7, frac_dout=7,
-                 relu=False,
-                 residual_frac: int = 0,
-                 residual_add: bool = False,
-                 post_add_relu: bool = False):
+                 backend: str = 'tilecnn',
+                 relu=False, relu6=False,
+                 residual_frac=0, residual_add=False,
+                 post_add_relu=False, post_add_relu6=False):
         super().__init__()
         self.register_buffer('w_int8', weight_int8.clone().contiguous())
         self.register_buffer('b_int8',
@@ -430,77 +211,111 @@ class TileCNNConv2d(torch.nn.Module):
 
         self.fw, self.fb = frac_w, frac_b
         self.fin, self.fout = frac_din, frac_dout
+        self.backend = backend
+        
         self.relu = relu
+        self.relu6 = relu6
         self.residual_frac = residual_frac
-        self.residual_add  = residual_add
+        self.residual_add = residual_add
         self.post_add_relu = post_add_relu
+        self.post_add_relu6 = post_add_relu6
 
     # ------------------------------------------------------------------
     def _conv_int(self, x_int8: torch.Tensor) -> torch.Tensor:
         """Raw INT-32 convolution via float64 matmul (CUDA-safe)."""
         N, C_in, H, W = x_int8.shape
         C_out, _, kH, kW = self.w_int8.shape
-        patches = F.unfold(
-            x_int8.float(), (kH, kW),
-            dilation=self.dilation, padding=self.padding, stride=self.stride
-        ).to(torch.float64)                        # (N, C_in*kH*kW, L)
-        w_mat = self.w_int8.view(C_out, -1).to(torch.float64)   # (C_out, C_in*kH*kW)
-        acc = torch.round(torch.matmul(w_mat, patches)).to(torch.int64)  # (N, C_out, L)
-        return acc.view(N, C_out, -1)
+        acc_fp64 = F.conv2d(
+            x_int8.to(torch.float64),
+            self.w_int8.to(torch.float64),
+            bias=None,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=self.groups
+        )
+        acc = torch.round(acc_fp64).to(torch.int64).view(N, C_out, -1)
+        return acc
+
+    def _tc_signed_shift(self, values: torch.Tensor, shift: int) -> torch.Tensor:
+        """Rounding right-shift (or left-shift for negative shift)."""
+        values = values.to(torch.int64)
+        if shift > 0:
+            return values << shift
+        if shift < 0:
+            s = -shift
+            round_bias = (1 << (s - 1)) + (values >> 63)
+            return (values + round_bias) >> s
+        return values
 
     # ------------------------------------------------------------------
-    def forward(self, x_int8: torch.Tensor,
-                residual: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, x_int8: torch.Tensor, residual: torch.Tensor = None) -> torch.Tensor:
+        """
+        Forward pass doing the bit-exact computation.
+        """
         assert x_int8.dtype == torch.int8
+        squeeze = False
+        if x_int8.dim() == 3:          # (C, H, W)  — from eval loop
+            x_int8 = x_int8.unsqueeze(0)
+            squeeze = True
+
         N, C_in, H, W = x_int8.shape
-        _, _, kH, kW = self.w_int8.shape
+        C_out = self.w_int8.size(0)
 
-        acc = self._conv_int(x_int8)               # (N, C_out, L)
+        # 1) Int32 Convolution
+        acc = self._conv_int(x_int8)   # (N, C_out, H_out * W_out)
 
-        # --- Stage 1: two-step rounding + bias (TileCNN EMIT_LOOP) -------
+        # 2) First shift
         shift_out = self.fw + self.fin - self.fout
         if shift_out > 0:
-            s1 = (acc >> (shift_out - 1)) + 1
+            s1 = (acc >> (shift_out - 1))
         elif shift_out == 0:
-            s1 = (acc << 1) + 1
+            s1 = (acc << 1)
         else:
-            s1 = (acc << (1 - shift_out)) + 1
+            s1 = (acc << ((-shift_out) + 1))
 
+        # 3) Bias Add & Second Shift
         bias_shift = self.fout - self.fb + 1
-        bias_adj = _tc_bias_shift(self.bias_i64, bias_shift).view(1, -1, 1)
-        out64 = (s1 + bias_adj + 1) >> 1          # (N, C_out, L)
-
-        # --- Saturate to 8 bits -------------------------------------------
+        if bias_shift >= 0:
+            bias_adj = (self.bias_i64 << bias_shift).view(1, C_out, 1)
+        else:
+            bias_adj = (self.bias_i64 >> (-bias_shift)).view(1, C_out, 1)
+            
+        out64 = (s1 + bias_adj + 1) >> 1
         out = torch.clamp(out64, -128, 127).to(torch.int8)
 
-        # --- Optional standalone ReLU (no residual add yet) ---------------
-        if self.relu and not self.residual_add:
-            out = torch.clamp_min(out, 0)
+        # --- Optional standalone ReLU / ReLU6 (no residual add yet) ---------------
+        if not self.residual_add:
+            if self.relu:
+                out = torch.clamp_min(out, 0)
+            elif self.relu6:
+                max_val = min(127, int(round(6.0 * (2 ** self.fout))))
+                out = torch.clamp(out, min=0, max=max_val)
 
-        # --- Reshape to spatial map ---------------------------------------
-        pad_h, pad_w = self.padding
-        dil_h, dil_w = self.dilation
-        str_h, str_w = self.stride
-        out_h = (H + 2*pad_h - dil_h*(kH - 1) - 1)//str_h + 1
-        out_w = (W + 2*pad_w - dil_w*(kW - 1) - 1)//str_w + 1
-        C_out = self.w_int8.shape[0]
-        out = out.view(N, C_out, out_h, out_w)
-
+        # Reshape back to spatial
+        H_out = (H + 2 * self.padding[0] - self.dilation[0] * (self.w_int8.size(2) - 1) - 1) // self.stride[0] + 1
+        W_out = (W + 2 * self.padding[1] - self.dilation[1] * (self.w_int8.size(3) - 1) - 1) // self.stride[1] + 1
+        out = out.view(N, C_out, H_out, W_out)
+        
         # --- Fused residual add -------------------------------------------
         if self.residual_add:
             if residual is None:
-                raise ValueError("TileCNNConv2d: residual_add=True but no residual tensor supplied")
+                raise ValueError("HardwareConv2d: residual_add=True but no residual tensor supplied")
             residual_shift = self.fout - self.residual_frac
-            res_aligned = _tc_signed_shift(residual.to(torch.int64), residual_shift)
+            res_aligned = self._tc_signed_shift(residual.to(torch.int64), residual_shift)
             summed = out.to(torch.int64) + res_aligned
             out = torch.clamp(summed, -128, 127).to(torch.int8)
+            
             if self.post_add_relu:
                 out = torch.clamp_min(out, 0)
+            elif self.post_add_relu6:
+                max_val = min(127, int(round(6.0 * (2 ** self.fout))))
+                out = torch.clamp(out, min=0, max=max_val)
 
-        return out
+        return out.squeeze(0) if squeeze else out
 
 
-class TileCNNLinear(torch.nn.Module):
+class HardwareLinear(torch.nn.Module):
     """
     Bit-exact digital-twin of the TileCNN fully-connected layer.
     Mirrors _tilecnn_linear() in tilecnn_exporter.py.
@@ -524,11 +339,11 @@ class TileCNNLinear(torch.nn.Module):
 
         shift_out = self.fw + self.fin - self.fout
         if shift_out > 0:
-            s1 = (acc >> (shift_out - 1)) + 1
+            s1 = (acc >> (shift_out - 1))
         elif shift_out == 0:
-            s1 = (acc << 1) + 1
+            s1 = (acc << 1)
         else:
-            s1 = (acc << (1 - shift_out)) + 1
+            s1 = (acc << ((-shift_out) + 1))
 
         bias_shift = self.fout - self.fb + 1
         bias_adj = _tc_bias_shift(self.bias_i64, bias_shift).view(1, -1)
@@ -536,7 +351,7 @@ class TileCNNLinear(torch.nn.Module):
         return torch.clamp(out64, -128, 127).to(torch.int8)
 
 
-class TileCNNGAP(torch.nn.Module):
+class HardwareGAP(torch.nn.Module):
     """
     Bit-exact digital-twin of the TileCNN Global Average Pooling kernel.
     Mirrors _tilecnn_gap() in tilecnn_exporter.py.
@@ -567,16 +382,37 @@ class TileCNNGAP(torch.nn.Module):
         return out.squeeze(0) if squeeze else out
 
 
-class TileCNNMaxPool(torch.nn.Module):
+class HardwareAdaptiveAvgPool2d(torch.nn.Module):
+    """
+    General AdaptiveAvgPool2d in int8 for emulation purposes.
+    (Note: TileCNN hardware typically only supports Global Average Pooling via gap2d).
+    """
+    def __init__(self, output_size, frac_in: int, frac_out: int):
+        super().__init__()
+        self.output_size = output_size
+        self.fin = frac_in
+        self.fout = frac_out
+
+    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
+        assert x_int8.dtype == torch.int8
+        x_f = x_int8.float()
+        y_f = torch.nn.functional.adaptive_avg_pool2d(x_f, self.output_size)
+        return torch.round(y_f).to(torch.int8)
+
+
+class HardwareMaxPool2d(torch.nn.Module):
     """
     Bit-exact max-pool matching TileCNN hardware (3×3, stride=2, padding=1).
     The post_pool_shift is applied identically to _tilecnn_maxpool.
     """
-    def __init__(self, kernel_size=3, stride=2, padding=1, post_pool_shift: int = 0):
+    def __init__(self, kernel_size=3, stride=2, padding=1, dilation=1, return_indices=False, ceil_mode=False, post_pool_shift: int = 0):
         super().__init__()
         self.kernel_size    = kernel_size
         self.stride         = stride
         self.padding        = padding
+        self.dilation       = dilation
+        self.return_indices = return_indices
+        self.ceil_mode      = ceil_mode
         self.post_pool_shift = post_pool_shift
 
     def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
@@ -584,6 +420,18 @@ class TileCNNMaxPool(torch.nn.Module):
         y = F.max_pool2d(x_int8.float(),
                          kernel_size=self.kernel_size,
                          stride=self.stride,
-                         padding=self.padding).to(torch.int64)
-        out = _tc_signed_shift(y, self.post_pool_shift)
-        return torch.clamp(out, -128, 127).to(torch.int8)
+                         padding=self.padding,
+                         dilation=self.dilation,
+                         ceil_mode=self.ceil_mode,
+                         return_indices=self.return_indices)
+        
+        # If return_indices is true, y is a tuple (tensor, indices)
+        if self.return_indices:
+            pool_val, indices = y
+            pool_val = pool_val.to(torch.int64)
+            out = _tc_signed_shift(pool_val, self.post_pool_shift)
+            return torch.clamp(out, -128, 127).to(torch.int8), indices
+        else:
+            y = y.to(torch.int64)
+            out = _tc_signed_shift(y, self.post_pool_shift)
+            return torch.clamp(out, -128, 127).to(torch.int8)

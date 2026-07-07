@@ -22,7 +22,7 @@ parser.add_argument("--train_batch_size", type=int, default=50)
 parser.add_argument("--test_batch_size", type=int, default=50)
 parser.add_argument("--valid_size", default=None)
 parser.add_argument('--n_epochs',
-                    default=1, type=int, help='No. of training epochs.')
+                    default=10, type=int, help='No. of training epochs.')
 parser.add_argument('--warmup-epochs', type=float, default=0,
                     help='number of warmup epochs')
 parser.add_argument('--warmup_lr', type=float,
@@ -62,7 +62,7 @@ parser.add_argument('--dynamic_batch_size', default=1,
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
-                    default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/imagenet-mini"), )
+                    default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/datasets/imagenet-mini"), )
 
 parser.add_argument('--display_freq',
                     default=100, type=int, help='Display training metrics every n steps.')
@@ -95,8 +95,9 @@ if __name__ == '__main__':
 
     """Imagenet models"""
     # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
     # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
     """cifar models"""
     # model = resnet18_cifar10()
 

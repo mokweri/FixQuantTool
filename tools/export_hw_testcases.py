@@ -51,6 +51,14 @@ TEST_CASES = {
     }
 }
 
+TEST_CASES2 = {
+    "conv_stem": {
+        "nodes": ["conv1", "relu_0"],
+        "description": "Conv + ReLU"
+    },
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Export TileCNN subgraph testcases")
     parser.add_argument("--checkpoint", default=None, help="Path to best QAT checkpoint")
@@ -82,7 +90,7 @@ def main():
         qat_proc.load_qat_weights(str(checkpoint))
 
     infer_proc = InferProcessor(model, config)
-    emu_model = infer_proc.convert_to_emu_model()
+    emu_model = infer_proc.convert_to_hardware_model()
     inspector = StdModelInspector(emu_model, default_input_frac=5, logger=logger)
 
     if image_path.exists():
@@ -103,14 +111,14 @@ def main():
         logger=logger
     )
 
-    cases_to_run = TEST_CASES.keys() if args.test_case == "all" else [args.test_case]
+    cases_to_run = TEST_CASES2.keys() if args.test_case == "all" else [args.test_case]
     
     for case_name in cases_to_run:
-        if case_name not in TEST_CASES:
+        if case_name not in TEST_CASES2:
             logger.error(f"Test case {case_name} not found.")
             continue
             
-        case_def = TEST_CASES[case_name]
+        case_def = TEST_CASES2[case_name]
         logger.info(f"--- Exporting Test Case: {case_name} ---")
         logger.info(f"Description: {case_def['description']}")
         

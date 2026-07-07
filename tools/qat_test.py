@@ -65,7 +65,8 @@ if __name__ == '__main__':
     """Imagenet models"""
     # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
 
     """cifar models"""
     # model = resnet18_cifar10()
@@ -78,10 +79,15 @@ if __name__ == '__main__':
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
     Qatprocessor.calibrate(calib_loader, device)
-    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/vgg16_best.pth.tar'))
+    # Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/vgg16_best.pth.tar'))
+    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/mobilenet_v2_best.pth.tar'))
     Qatprocessor.freeze()
 
-    run_config = RunConfig(**args.__dict__, is_qat=True)
+    args_dict = args.__dict__.copy()
+    if 'image_size' not in args_dict:
+        args_dict['image_size'] = 224
+
+    run_config = RunConfig(**args_dict, is_qat=True)
     run_config.print_config()
     run_manager = RunManager(args.save_dir, model, run_config)
     # with torch.autograd.set_detect_anomaly(True):

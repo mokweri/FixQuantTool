@@ -175,6 +175,11 @@ def _handle_Relu(target_module: nn.ReLU) -> nn.ReLU:
     relu_layer = copy.deepcopy(target_module)
     return relu_layer
 
+def _handle_Relu6(target_module: nn.ReLU6) -> nn.ReLU6:
+    """Handles ReLU6 modules."""
+    relu_layer = copy.deepcopy(target_module)
+    return relu_layer
+
 
 def _handle_QuantStub(target_module):
     """Handles ReLU modules."""
@@ -209,6 +214,7 @@ def _get_new_module(target_module, node):
         QAdaptiveAvgPool2d: _handle_adaptiveavgpool2d,
         QElementwiseAdd: _handle_qelementwiseadd,
         nn.ReLU: _handle_Relu,
+        nn.ReLU6: _handle_Relu6,
         nn.Flatten: nn.Flatten,  # No special handling needed
         QuantStubC: _handle_QuantStub,
         nn.Dropout: _handle_Dropout,
@@ -280,7 +286,7 @@ class InferProcessor:
                     elif isinstance(target_module, QAdaptiveAvgPool2d):
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name, args=(node_map[node.args[0]],))
-                    elif isinstance(target_module, nn.ReLU):
+                    elif isinstance(target_module, (nn.ReLU, nn.ReLU6)):
                         base = node.target.replace('.', '_')
                         idx = name_counters.get(base, 0)
                         module_name = f"{base}_{idx}"
@@ -325,6 +331,12 @@ class InferProcessor:
                         add_name,
                         args=(node_map[node.args[0]], node_map[node.args[1]]),
                     )
+                elif getattr(node.target, '__name__', '') == 'adaptive_avg_pool2d' or node.target == torch.nn.functional.adaptive_avg_pool2d:
+                    output_size = node.args[1] if len(node.args) > 1 else (1, 1)
+                    inference_model.layers[node.name] = nn.AdaptiveAvgPool2d(output_size)
+                    new_node = new_graph.call_module(
+                        node.name, args=(node_map[node.args[0]],)
+                    )
                 else:
                     logger.warning(f"Skipping unsupported function: {node.target}")
                     continue
@@ -340,26 +352,28 @@ class InferProcessor:
         self.std_model = new_gm
         return new_gm
 
-    def convert_to_emu_model(self) -> fx.GraphModule:
+    def convert_to_hardware_model(self, backend: str = "tilecnn") -> fx.GraphModule:
         """
         Transforms a standard inference model into a bit-exact emulation model
-        using modules from fxp_modules.
+        using HardwareConv2d with pattern-matched fusions.
         """
         from fixquant.emulation.fxp_emu_modules import (
-            HLSConv2d, HLSLinear, HLSMaxPool2D,
-            HLSAdaptiveAvgPool2d, HLSElementwiseAdd, HLSRelu,
+            HardwareConv2d, HardwareLinear, HardwareMaxPool2d,
+            HardwareGAP, HardwareElementwiseAdd, HardwareRelu, HardwareRelu6,
             InputQuantizer, OutputDequantizer
         )
         from fixquant.quantization.fix_ops import to_int_tensor
         from torch.fx.experimental.optimization import replace_node_module
+        from torch.fx.passes.utils.matcher_utils import SubgraphMatcher
+        import torch.fx as fx
+        import copy
+        import torch.nn as nn
 
         if self.std_model is None:
             self.convert_to_std_model()
 
-        # Step 1: Extract quantization parameters
+        # Extract quantization parameters
         std_quant_params = self.generate_qconfig()
-        
-        # Un-standardize the keys for the fxp_modules which expect legacy keys
         quant_params = {}
         for layer, params in std_quant_params.items():
             quant_params[layer] = {
@@ -369,11 +383,29 @@ class InferProcessor:
                 "frac_out": params.get("out")
             }
 
-        # Step 2: Switch modules to the strict INT8 emulation modules
         emu_model = copy.deepcopy(self.std_model)
         modules = dict(emu_model.named_modules())
-        
-        for node in emu_model.graph.nodes:
+
+        # Subgraph matching for fusions
+        class TypeMatcher(SubgraphMatcher):
+            def __init__(self, pattern_graph, pattern_modules, graph_modules):
+                super().__init__(pattern_graph, ignore_literals=True)
+                self.pattern_modules = pattern_modules
+                self.graph_modules = graph_modules
+
+            def _nodes_are_equal(self, pn, gn):
+                if pn.op != gn.op: return False
+                if pn.op in ("placeholder", "output"): return True
+                if pn.op == "call_module":
+                    if pn.target not in self.pattern_modules or gn.target not in self.graph_modules:
+                        return False
+                    ptype = type(self.pattern_modules[pn.target])
+                    gtype = type(self.graph_modules[gn.target])
+                    return issubclass(gtype, ptype) or issubclass(ptype, gtype)
+                return pn.target == gn.target
+
+        # 3. Iterate over the nodes and create Hardware modules
+        for node in list(emu_model.graph.nodes):
             if node.op == "call_module":
                 target_module = modules[node.target]
                 q = quant_params.get(node.name, {})
@@ -381,33 +413,30 @@ class InferProcessor:
                 frac_in = q.get('frac_in', [5])[0] if q.get('frac_in') else 5
                 
                 if isinstance(target_module, nn.Conv2d):
-                    self.logger.debug(f"Replacing nn.Conv2d '{node.name}' with HLSConv2d")
                     frac_w = q.get('frac_w', 7)
                     frac_b = q.get('frac_b', 7)
-                    
                     w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
                     b_int8 = to_int_tensor(target_module.bias.data, True, 8, frac_b).to(torch.int8) if target_module.bias is not None else None
                     
-                    emuConv = HLSConv2d(
-                        weight_int8=w_int8, bias_int8=b_int8,
-                        stride=target_module.stride, padding=target_module.padding,
-                        dilation=target_module.dilation, groups=target_module.groups,
-                        frac_w=frac_w, frac_b=frac_b, frac_din=frac_in, frac_dout=frac_out,
-                        relu=False
-                    )
+                    emuConv = HardwareConv2d(
+                            weight_int8=w_int8, bias_int8=b_int8,
+                            stride=target_module.stride, padding=target_module.padding,
+                            dilation=target_module.dilation, groups=target_module.groups,
+                            frac_w=frac_w, frac_b=frac_b, frac_din=frac_in, frac_dout=frac_out,
+                            backend=backend,
+                            relu=False, relu6=False
+                        )
+                        
                     emuConv.module_name = str(node.name).strip()
-                    emuConv.qconfig = quant_params # For exporter
+                    emuConv.qconfig = quant_params
                     replace_node_module(node, modules, emuConv)
 
                 elif isinstance(target_module, nn.Linear):
-                    self.logger.debug(f"Replacing nn.Linear '{node.name}' with HLSLinear")
                     frac_w = q.get('frac_w', 7)
                     frac_b = q.get('frac_b', 7)
-                    
                     w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
                     b_int8 = to_int_tensor(target_module.bias.data, True, 8, frac_b).to(torch.int8) if target_module.bias is not None else None
-                    
-                    emuLin = HLSLinear(
+                    emuLin = HardwareLinear(
                         weight_int8=w_int8, bias_int8=b_int8,
                         frac_w=frac_w, frac_b=frac_b, frac_din=frac_in, frac_dout=frac_out
                     )
@@ -416,8 +445,7 @@ class InferProcessor:
                     replace_node_module(node, modules, emuLin)
 
                 elif isinstance(target_module, nn.MaxPool2d):
-                    self.logger.debug(f"Replacing nn.MaxPool2d '{node.name}' with HLSMaxPool2D")
-                    emuMax = HLSMaxPool2D(
+                    emuMax = HardwareMaxPool2d(
                         target_module.kernel_size, target_module.stride, 
                         target_module.padding, target_module.dilation, 
                         target_module.return_indices, target_module.ceil_mode
@@ -427,375 +455,64 @@ class InferProcessor:
                     replace_node_module(node, modules, emuMax)
 
                 elif isinstance(target_module, nn.AdaptiveAvgPool2d):
-                    self.logger.debug(f"Replacing nn.AdaptiveAvgPool2d '{node.name}' with HLSAdaptiveAvgPool2d")
-                    emuAdptAvgP = HLSAdaptiveAvgPool2d(target_module.output_size)
+                    out_size = target_module.output_size
+                    is_global = out_size == (1, 1) or out_size == 1
+                    if is_global:
+                        emuAdptAvgP = HardwareGAP(frac_in=frac_in, frac_out=frac_out)
+                    else:
+                        from fixquant.emulation.fxp_emu_modules import HardwareAdaptiveAvgPool2d
+                        emuAdptAvgP = HardwareAdaptiveAvgPool2d(out_size, frac_in=frac_in, frac_out=frac_out)
                     emuAdptAvgP.module_name = str(node.name).strip()
                     emuAdptAvgP.qconfig = quant_params
                     replace_node_module(node, modules, emuAdptAvgP)
 
                 elif isinstance(target_module, AddWithMetadata):
-                    self.logger.debug(f"Replacing AddWithMetadata '{node.name}' with HLSElementwiseAdd")
                     frac_in_list = q.get('frac_in', [5, 5])
-                    if len(frac_in_list) < 2:
-                        frac_in_list = [frac_in_list[0], frac_in_list[0]]
-                    emuAdd = HLSElementwiseAdd(frac_in1=frac_in_list[0], frac_in2=frac_in_list[1], frac_out=frac_out)
+                    if len(frac_in_list) < 2: frac_in_list = [frac_in_list[0], frac_in_list[0]]
+                    emuAdd = HardwareElementwiseAdd(frac_in1=frac_in_list[0], frac_in2=frac_in_list[1], frac_out=frac_out)
                     emuAdd.module_name = str(node.name).strip()
                     emuAdd.qconfig = quant_params
                     replace_node_module(node, modules, emuAdd)
-                    
+                        
                 elif isinstance(target_module, nn.ReLU):
-                    self.logger.debug(f"Replacing nn.ReLU '{node.name}' with HLSRelu")
-                    emuRelu = HLSRelu()
+                    emuRelu = HardwareRelu()
                     emuRelu.module_name = str(node.name).strip()
                     emuRelu.qconfig = quant_params
                     replace_node_module(node, modules, emuRelu)
 
-        # Inject InputQuantizer at the very beginning
+                elif isinstance(target_module, nn.ReLU6):
+                    emuRelu6 = HardwareRelu6(frac_in=frac_in)
+                    emuRelu6.module_name = str(node.name).strip()
+                    emuRelu6.qconfig = quant_params
+                    replace_node_module(node, modules, emuRelu6)
+
+        # 4. No graph rewiring needed since layers are sequential
+
+        # 5. I/O Quantizers
         input_node = next(n for n in emu_model.graph.nodes if n.op == "placeholder")
         first_layer = next(n for n in emu_model.graph.nodes if n.op == "call_module")
-        first_frac_in_list = quant_params.get(first_layer.name, {}).get('frac_in', [5])
-        first_frac_in = first_frac_in_list[0] if isinstance(first_frac_in_list, list) and first_frac_in_list else 5
-        
-        emu_model.add_module("input_quantizer", InputQuantizer(frac_in=first_frac_in))
+        first_fin = quant_params.get(first_layer.name, {}).get('frac_in', [5])[0]
+        emu_model.add_module("input_quantizer", InputQuantizer(frac_in=first_fin))
         with emu_model.graph.inserting_after(input_node):
             quant_node = emu_model.graph.call_module("input_quantizer", args=(input_node,))
-            
-            # Replace all uses of input_node with quant_node (except for quant_node itself)
             for user in list(input_node.users.keys()):
                 if user != quant_node:
                     user.replace_input_with(input_node, quant_node)
 
-        # We must insert OutputDequantizer at the end of the graph
         output_node = next(n for n in emu_model.graph.nodes if n.op == "output")
         last_layer = output_node.args[0]
-        
-        last_frac_out = 5
-        for node in emu_model.graph.nodes:
-            if node == last_layer:
-                last_frac_out = quant_params.get(node.name, {}).get('frac_out', 5)
-
-        emu_model.add_module("output_dequantizer", OutputDequantizer(frac_out=last_frac_out))
+        last_fout = quant_params.get(last_layer.name, {}).get("frac_out", 5) if hasattr(last_layer, 'name') else 5
+        emu_model.add_module("output_dequantizer", OutputDequantizer(frac_out=last_fout))
         with emu_model.graph.inserting_before(output_node):
             dequant_node = emu_model.graph.call_module("output_dequantizer", args=(last_layer,))
             output_node.replace_all_uses_with(dequant_node)
             dequant_node.replace_all_uses_with(output_node)
-            # Re-establish the correct args for output_node
             output_node.args = (dequant_node,)
 
         emu_model.graph.lint()
         emu_model.recompile()
-        self.logger.info("Successfully converted model to strict INT8 emulation model using HLSConv2d")
-
+        self.logger.info(f"Successfully converted model to strict INT8 emulation model using HardwareConv2d (backend={backend})")
         return emu_model
-
-    def convert_to_tilecnn_model(self) -> 'fx.GraphModule':
-        """
-        Builds a PyTorch Digital Twin of the TileCNN FPGA hardware.
-
-        Unlike convert_to_emu_model() which runs operations sequentially
-        (Conv → Add → ReLU as separate steps), this method reproduces the
-        TileCNN fused dataflow exactly:
-
-          • Conv + bias + ReLU are a single fused TileCNNConv2d node.
-          • Residual additions are fused INTO the preceding conv node
-            (matching the HLS EMIT_LOOP write-back stage).
-          • AdaptiveAvgPool uses TileCNNGAP with the fixed-point reciprocal.
-          • MaxPool uses TileCNNMaxPool with the correct post-pool shift.
-
-        The resulting model's validation accuracy is bit-identical to the
-        real FPGA hardware.  Use it in deploy_eval.py with --model-type tilecnn.
-        """
-        from fixquant.emulation.fxp_emu_modules import (
-            TileCNNConv2d, TileCNNLinear, TileCNNGAP, TileCNNMaxPool,
-            InputQuantizer, OutputDequantizer,
-        )
-        from fixquant.quantization.fix_ops import to_int_tensor
-        from torch.fx.experimental.optimization import replace_node_module
-
-        if self.std_model is None:
-            self.convert_to_std_model()
-
-        # ---- 1. Quantisation params (same extraction as emu model) --------
-        std_quant_params = self.generate_qconfig()
-        quant_params = {}
-        for layer, params in std_quant_params.items():
-            quant_params[layer] = {
-                "frac_w":   params.get("weight"),
-                "frac_b":   params.get("bias"),
-                "frac_in":  params.get("in", []),
-                "frac_out": params.get("out"),
-            }
-
-        # ---- 2. Deep-copy the std_model graph to mutate --------------------
-        tilecnn_model = copy.deepcopy(self.std_model)
-        modules = dict(tilecnn_model.named_modules())
-
-        # ---- 3. Pre-scan: for every AddWithMetadata node, record which
-        #         conv node feeds the "main" branch so we can later promote
-        #         it to a fused TileCNNConv2d.
-        #   add_fuses[add_node_name] = main_conv_node_name
-        add_fuses: dict = {}          # add_name → conv_name to fuse into
-        add_residual_fracs: dict = {} # add_name → frac of the residual input
-
-        for node in tilecnn_model.graph.nodes:
-            if node.op != "call_module":
-                continue
-            mod = modules.get(node.target)
-            if not isinstance(mod, AddWithMetadata):
-                continue
-            # args[0] is main-branch output, args[1] is skip/residual
-            main_arg  = node.args[0]
-            skip_arg  = node.args[1]
-            q_add     = quant_params.get(node.name, {})
-            fin_list  = q_add.get("frac_in", [5, 5])
-            if len(fin_list) < 2:
-                fin_list = [fin_list[0], fin_list[0]]
-            frac_out_add = q_add.get("frac_out", 5)
-
-            # Walk up main_arg to find the nearest preceding conv
-            main_conv_name = None
-            cursor = main_arg
-            while cursor is not None and cursor.op == "call_module":
-                cm = modules.get(cursor.target)
-                if isinstance(cm, (nn.Conv2d, nn.Linear)):
-                    main_conv_name = cursor.name
-                    break
-                # pass through ReLU/Pool nodes
-                if cursor.args:
-                    cursor = cursor.args[0]
-                else:
-                    break
-
-            if main_conv_name is not None:
-                add_fuses[node.name] = {
-                    "conv_name":    main_conv_name,
-                    "residual_arg": skip_arg,
-                    "frac_main":    fin_list[0],
-                    "frac_res":     fin_list[1],
-                    "frac_out":     frac_out_add,
-                    # ReLU after add — look for an immediately following ReLU
-                    "post_add_relu": False,
-                }
-
-        # Second pass: detect ReLU nodes that directly follow a fused Add
-        add_names_set = set(add_fuses.keys())
-        relu_absorbed: dict = {}   # relu_node_name → add_node_name it follows
-        for node in tilecnn_model.graph.nodes:
-            if node.op != "call_module":
-                continue
-            mod = modules.get(node.target)
-            if not isinstance(mod, nn.ReLU):
-                continue
-            if node.args and node.args[0].op == "call_module":
-                prev = node.args[0]
-                if prev.name in add_names_set:
-                    add_fuses[prev.name]["post_add_relu"] = True
-                    relu_absorbed[node.name] = prev.name
-
-        # ---- 4. Replace modules ----------------------------------------
-        for node in tilecnn_model.graph.nodes:
-            if node.op != "call_module":
-                continue
-            target_module = modules[node.target]
-            q  = quant_params.get(node.name, {})
-            frac_out = q.get("frac_out", 5)
-            frac_in  = q.get("frac_in", [5])[0] if q.get("frac_in") else 5
-
-            # ---- Conv2d → TileCNNConv2d --------------------------------
-            if isinstance(target_module, nn.Conv2d):
-                frac_w = q.get("frac_w", 7)
-                frac_b = q.get("frac_b", 7)
-                w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
-                b_int8 = (to_int_tensor(target_module.bias.data,   True, 8, frac_b).to(torch.int8)
-                          if target_module.bias is not None else None)
-
-                # Check whether this conv is fused with a residual-add
-                fused_add_info = None
-                for add_name, info in add_fuses.items():
-                    if info["conv_name"] == node.name:
-                        fused_add_info = info
-                        break
-
-                if fused_add_info is not None:
-                    tc = TileCNNConv2d(
-                        w_int8, b_int8,
-                        stride=target_module.stride, padding=target_module.padding,
-                        dilation=target_module.dilation, groups=target_module.groups,
-                        frac_w=frac_w, frac_b=frac_b, frac_din=frac_in, frac_dout=fused_add_info["frac_out"],
-                        relu=False,
-                        residual_frac=fused_add_info["frac_res"],
-                        residual_add=True,
-                        post_add_relu=fused_add_info["post_add_relu"],
-                    )
-                    self.logger.debug(f"[TileCNN] TileCNNConv2d+Add '{node.name}' (fused residual add)")
-                else:
-                    tc = TileCNNConv2d(
-                        w_int8, b_int8,
-                        stride=target_module.stride, padding=target_module.padding,
-                        dilation=target_module.dilation, groups=target_module.groups,
-                        frac_w=frac_w, frac_b=frac_b, frac_din=frac_in, frac_dout=frac_out,
-                        relu=False,
-                    )
-                    self.logger.debug(f"[TileCNN] TileCNNConv2d '{node.name}'")
-
-                tc.module_name = str(node.name).strip()
-                tc.qconfig     = quant_params
-                tc.fin  = frac_in
-                # For fused conv+add the effective output frac is the add's frac_out,
-                # not the conv's own frac_out — do NOT overwrite what the constructor set.
-                if fused_add_info is None:
-                    tc.fout = frac_out
-                replace_node_module(node, modules, tc)
-
-            # ---- Linear → TileCNNLinear --------------------------------
-            elif isinstance(target_module, nn.Linear):
-                frac_w = q.get("frac_w", 7)
-                frac_b = q.get("frac_b", 7)
-                w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
-                b_int8 = (to_int_tensor(target_module.bias.data,   True, 8, frac_b).to(torch.int8)
-                          if target_module.bias is not None else None)
-                tc = TileCNNLinear(w_int8, b_int8, frac_w=frac_w, frac_b=frac_b,
-                                   frac_din=frac_in, frac_dout=frac_out)
-                tc.module_name = str(node.name).strip()
-                tc.qconfig     = quant_params
-                self.logger.debug(f"[TileCNN] TileCNNLinear '{node.name}'")
-                replace_node_module(node, modules, tc)
-
-            # ---- MaxPool2d → TileCNNMaxPool ----------------------------
-            elif isinstance(target_module, nn.MaxPool2d):
-                fin_mp  = frac_in
-                fout_mp = frac_out if frac_out is not None else frac_in
-                post_shift = fout_mp - fin_mp
-                tc = TileCNNMaxPool(
-                    kernel_size=target_module.kernel_size,
-                    stride=target_module.stride,
-                    padding=target_module.padding,
-                    post_pool_shift=post_shift,
-                )
-                tc.module_name = str(node.name).strip()
-                tc.qconfig     = quant_params
-                self.logger.debug(f"[TileCNN] TileCNNMaxPool '{node.name}'")
-                replace_node_module(node, modules, tc)
-
-            # ---- AdaptiveAvgPool2d → TileCNNGAP -----------------------
-            elif isinstance(target_module, nn.AdaptiveAvgPool2d):
-                fin_gap  = frac_in
-                fout_gap = frac_out if frac_out is not None else frac_in
-                tc = TileCNNGAP(frac_in=fin_gap, frac_out=fout_gap)
-                tc.module_name = str(node.name).strip()
-                tc.qconfig     = quant_params
-                self.logger.debug(f"[TileCNN] TileCNNGAP '{node.name}'")
-                replace_node_module(node, modules, tc)
-
-            # ---- nn.ReLU → HLSRelu (preserves int8 dtype) -------------
-            elif isinstance(target_module, nn.ReLU) and node.name not in relu_absorbed:
-                from fixquant.emulation.fxp_emu_modules import HLSRelu
-                hr = HLSRelu()
-                hr.module_name = str(node.name).strip()
-                hr.qconfig     = quant_params
-                self.logger.debug(f"[TileCNN] HLSRelu '{node.name}'")
-                replace_node_module(node, modules, hr)
-
-        # ---- 5. Graph rewiring: fused Add nodes
-        #         Each AddWithMetadata node whose conv has been promoted now
-        #         needs to be rewired so the conv receives both main-branch
-        #         AND residual inputs, and the Add node is bypassed.
-        modules = dict(tilecnn_model.named_modules())  # refresh after replacements
-        for node in list(tilecnn_model.graph.nodes):
-            if node.op != "call_module":
-                continue
-            if node.name not in add_fuses:
-                continue
-            info = add_fuses[node.name]
-            conv_name = info["conv_name"]
-
-            # Find the conv node in the graph
-            conv_node = None
-            for n in tilecnn_model.graph.nodes:
-                if n.op == "call_module" and n.name == conv_name:
-                    conv_node = n
-                    break
-            if conv_node is None:
-                self.logger.warning(f"[TileCNN] Cannot find conv node '{conv_name}' to fuse with add '{node.name}'")
-                continue
-
-            # Rewire conv node to accept residual as second arg
-            residual_node = info["residual_arg"]
-            conv_node.args = (conv_node.args[0], residual_node)
-
-            # Replace all uses of the Add node's output with the conv's output
-            node.replace_all_uses_with(conv_node)
-
-            # ---- Topological order fix: the residual node (e.g. downsample_0)
-            #      may appear AFTER the conv node in the graph, but now the conv
-            #      needs it as a second arg.  Move it to just before the conv.
-            residual_node_ref = info["residual_arg"]
-            # Check if the residual node is after the conv node in graph order
-            nodes_in_order = list(tilecnn_model.graph.nodes)
-            conv_idx     = next((i for i, n in enumerate(nodes_in_order) if n.name == conv_name), None)
-            residual_idx = next((i for i, n in enumerate(nodes_in_order) if n is residual_node_ref), None)
-            if conv_idx is not None and residual_idx is not None and residual_idx > conv_idx:
-                # node.prepend(anchor) means: insert 'node' immediately before 'anchor'
-                # We want residual_node_ref inserted immediately before conv_node
-                conv_node.prepend(residual_node_ref)
-
-        # ---- 6. Remove now-dead nodes (Add nodes and absorbed ReLUs) ------
-        #  Add nodes have already had all uses replaced with the fused conv output,
-        #  so they can be erased directly.
-        #  Absorbed ReLU nodes that followed the Add may still have other users
-        #  (e.g., the same skip tensor feeding the NEXT block), so we first bypass
-        #  them (forward their input to all their users) and only then erase them.
-
-        # Bypass & erase absorbed ReLU nodes first
-        for node in list(tilecnn_model.graph.nodes):
-            if node.op == "call_module" and node.name in relu_absorbed:
-                # The ReLU's input is already fully handled by the fused conv.
-                # Forward all consumers of the ReLU to the fused conv output
-                # (which is node.args[0] in the graph after the rewiring above).
-                relu_input = node.args[0]  # the Add node (or conv) before it
-                node.replace_all_uses_with(relu_input)
-                if len(node.users) == 0:
-                    tilecnn_model.graph.erase_node(node)
-
-        # Erase now-dead Add nodes
-        for node in list(tilecnn_model.graph.nodes):
-            if node.op == "call_module" and node.name in add_fuses:
-                if len(node.users) == 0:
-                    tilecnn_model.graph.erase_node(node)
-
-
-        # ---- 7. Inject InputQuantizer & OutputDequantizer -----------------
-        input_node  = next(n for n in tilecnn_model.graph.nodes if n.op == "placeholder")
-        first_layer = next(n for n in tilecnn_model.graph.nodes if n.op == "call_module")
-        first_fin_list = quant_params.get(first_layer.name, {}).get("frac_in", [5])
-        first_fin = first_fin_list[0] if isinstance(first_fin_list, list) and first_fin_list else 5
-
-        tilecnn_model.add_module("input_quantizer", InputQuantizer(frac_in=first_fin))
-        with tilecnn_model.graph.inserting_after(input_node):
-            quant_node = tilecnn_model.graph.call_module("input_quantizer", args=(input_node,))
-            for user in list(input_node.users.keys()):
-                if user != quant_node:
-                    user.replace_input_with(input_node, quant_node)
-
-        output_node = next(n for n in tilecnn_model.graph.nodes if n.op == "output")
-        last_layer  = output_node.args[0]
-        last_frac_out = 5
-        for node in tilecnn_model.graph.nodes:
-            if node == last_layer:
-                last_frac_out = quant_params.get(node.name, {}).get("frac_out", 5)
-
-        tilecnn_model.add_module("output_dequantizer", OutputDequantizer(frac_out=last_frac_out))
-        with tilecnn_model.graph.inserting_before(output_node):
-            dequant_node = tilecnn_model.graph.call_module("output_dequantizer", args=(last_layer,))
-            output_node.replace_all_uses_with(dequant_node)
-            dequant_node.replace_all_uses_with(output_node)
-            output_node.args = (dequant_node,)
-
-        tilecnn_model.graph.lint()
-        tilecnn_model.recompile()
-        self.logger.info("Successfully converted model to TileCNN digital-twin model")
-        return tilecnn_model
-
 
     def export_onnx_with_layer_metadata(self, save_path):
         # Export the model to ONNX

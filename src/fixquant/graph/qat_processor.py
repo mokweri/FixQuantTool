@@ -7,7 +7,7 @@ from fixquant.quantization.qat_modules import (QuantizedLinear, QuantizedConv2d,
                                       QElementwiseAdd, QuantStubC)
 from fixquant.quantization.fused_conv_bn import FusedConvBN
 from fixquant.graph.inference_processor import InferProcessor
-from fixquant.quantization.fxp_modules import *
+import torch
 import yaml
 import logging
 from typing import Sequence, Callable, Dict, Any, Optional

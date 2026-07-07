@@ -326,11 +326,11 @@ class TileCNNGraphExporter:
             preds = self.inspector.get_predecessors(name)
 
             if isinstance(mod, nn.Conv2d) or type(mod).__name__ in (
-                    "FxP_QConv2D", "HLSConv2d", "TileCNNConv2d"):
+                    "FxP_QConv2D", "HLSConv2d", "TileCNNConv2d", "HardwareConv2d"):
                 node_id = name.replace(".", "_")
                 # TileCNNConv2d with fused residual add receives (main, residual) as two preds
-                is_tilecnn = type(mod).__name__ == "TileCNNConv2d"
-                is_emu     = type(mod).__name__ in ("FxP_QConv2D", "HLSConv2d")
+                is_tilecnn = type(mod).__name__ == "TileCNNConv2d" or (type(mod).__name__ == "HardwareConv2d" and getattr(mod, "backend", "hls") == "tilecnn")
+                is_emu     = type(mod).__name__ in ("FxP_QConv2D", "HLSConv2d") or (type(mod).__name__ == "HardwareConv2d" and getattr(mod, "backend", "hls") == "hls")
 
                 # Pick the main IFM (first pred)
                 ifm = tensor_map[preds[0]] if preds else "input"
@@ -425,12 +425,12 @@ class TileCNNGraphExporter:
                 }
 
             elif isinstance(mod, nn.Linear) or type(mod).__name__ in (
-                    "FxP_QLinear", "HLSLinear", "TileCNNLinear"):
+                    "FxP_QLinear", "HLSLinear", "TileCNNLinear", "HardwareLinear"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
-                is_emu     = type(mod).__name__ in ("FxP_QLinear", "HLSLinear")
-                is_tilecnn = type(mod).__name__ == "TileCNNLinear"
+                is_emu     = type(mod).__name__ in ("FxP_QLinear", "HLSLinear", "HardwareLinear")
+                is_tilecnn = type(mod).__name__ in ("TileCNNLinear",)
 
                 node = {
                     "id": node_id,
@@ -493,7 +493,7 @@ class TileCNNGraphExporter:
                 }
 
             elif isinstance(mod, nn.MaxPool2d) or type(mod).__name__ in (
-                    "FxP_QMaxPool2D", "HLSMaxPool2D", "TileCNNMaxPool"):
+                    "FxP_QMaxPool2D", "HLSMaxPool2D", "TileCNNMaxPool", "HardwareMaxPool2d"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
@@ -519,7 +519,7 @@ class TileCNNGraphExporter:
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id
 
-                is_emu     = type(mod).__name__ in ("FxP_QMaxPool2D", "HLSMaxPool2D")
+                is_emu     = type(mod).__name__ in ("FxP_QMaxPool2D", "HLSMaxPool2D", "HardwareMaxPool2d")
                 is_tilecnn = type(mod).__name__ == "TileCNNMaxPool"
                 if is_emu:
                     frac_out = mod.qconfig[mod.module_name]["frac_out"]
@@ -542,7 +542,7 @@ class TileCNNGraphExporter:
                 tensor_map[name] = f"{node_id}_out"
 
             elif isinstance(mod, nn.AdaptiveAvgPool2d) or type(mod).__name__ in (
-                    "FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d", "TileCNNGAP"):
+                    "FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d", "TileCNNGAP", "HardwareGAP"):
                 node_id = name.replace(".", "_")
                 ifm = tensor_map[preds[0]] if preds else "input"
                 
@@ -559,7 +559,7 @@ class TileCNNGraphExporter:
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id
 
-                is_emu     = type(mod).__name__ in ("FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d")
+                is_emu     = type(mod).__name__ in ("FxP_QAdaptiveAvgPool2d", "HLSAdaptiveAvgPool2d", "HardwareGAP")
                 is_tilecnn = type(mod).__name__ == "TileCNNGAP"
                 if is_emu:
                     frac_out = mod.qconfig[mod.module_name]["frac_out"]
@@ -577,7 +577,7 @@ class TileCNNGraphExporter:
                 }
                 tensor_map[name] = f"{node_id}_out"
 
-            elif isinstance(mod, nn.ReLU) or type(mod).__name__ in ("HLSRelu",):
+            elif isinstance(mod, nn.ReLU) or type(mod).__name__ in ("HLSRelu", "HardwareRelu", "HardwareRelu6"):
                 # Standalone ReLU nodes in both emu and tilecnn models —
                 # fuse them into their predecessor's post_ops
                 pred = preds[0] if preds else None
@@ -596,7 +596,7 @@ class TileCNNGraphExporter:
                     node_to_fused[name] = fused_id
 
             elif isinstance(mod, AddWithMetadata) or type(mod).__name__ in (
-                    "AddWithMetadata", "FxP_QElementwiseAdd", "HLSElementwiseAdd"):
+                    "AddWithMetadata", "FxP_QElementwiseAdd", "HLSElementwiseAdd", "HardwareElementwiseAdd"):
                 # AddWithMetadata only exists in the emu model — in tilecnn it is fused
                 # into the preceding TileCNNConv2d and the node is erased from the graph.
                 if len(preds) < 2:
@@ -622,7 +622,7 @@ class TileCNNGraphExporter:
                     built_nodes[fused_id]["post_ops"]["residual_add"] = True
                     built_nodes[fused_id]["inputs"]["residual"] = tensor_map.get(res_pred, res_pred)
 
-                    is_emu = type(mod).__name__ in ("FxP_QElementwiseAdd", "HLSElementwiseAdd")
+                    is_emu = type(mod).__name__ in ("FxP_QElementwiseAdd", "HLSElementwiseAdd", "HardwareElementwiseAdd")
                     if is_emu:
                         ofm_name = built_nodes[fused_id]["outputs"]["ofm"]
                         tensors[ofm_name]["frac"] = mod.qconfig[mod.module_name]["frac_out"]
@@ -643,7 +643,7 @@ class TileCNNGraphExporter:
                     node_to_fused[name] = node_to_fused.get(preds[0])
 
             elif type(mod).__name__ in ("InputQuantizer",):
-                # InputQuantizer is injected by convert_to_emu_model at the graph entry.
+                # InputQuantizer is injected by convert_to_hardware_model at the graph entry.
                 # It consumes the raw float input (a graph placeholder, not in tensor_map)
                 # and emits the first quantized activation.  Map it to the global "input"
                 # tensor so that the next Conv can find its IFM in tensor_map.

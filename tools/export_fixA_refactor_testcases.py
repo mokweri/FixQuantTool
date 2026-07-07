@@ -52,7 +52,7 @@ from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
 #   macs        – approximate MACs for logging/documentation
 #   hw_note     – design-space rationale
 #
-# Node name convention (from InferProcessor.convert_to_emu_model):
+# Node name convention (from InferProcessor.convert_to_hardware_model):
 #   - conv nodes:  <module_path with dots replaced by _>
 #   - relu nodes:  <preceding_conv_name>_relu_<N>  (inserted by converter)
 # ---------------------------------------------------------------------------
@@ -95,6 +95,33 @@ REFACTOR_TEST_CASES = {
     },
 }
 
+PHASE3_TEST_CASES = {
+    "layer3_0_conv2": {
+        "nodes": ["layer3_0_conv2", "layer3_0_relu_1"],
+        "description": "layer3_0_conv2",
+        "macs": "Unknown",
+        "hw_note": "Phase 3 test case",
+    },
+    "layer3_1_conv2": {
+        "nodes": ["layer3_1_conv2", "layer3_1_relu_1"],
+        "description": "layer3_1_conv2",
+        "macs": "Unknown",
+        "hw_note": "Phase 3 test case",
+    },
+    "layer4_0_conv2": {
+        "nodes": ["layer4_0_conv2", "layer4_0_relu_1"],
+        "description": "layer4_0_conv2",
+        "macs": "Unknown",
+        "hw_note": "Phase 3 test case",
+    },
+    "layer4_1_conv2": {
+        "nodes": ["layer4_1_conv2", "layer4_1_relu_1"],
+        "description": "layer4_1_conv2",
+        "macs": "Unknown",
+        "hw_note": "Phase 3 test case",
+    },
+}
+
 
 def preprocess_image(image_path: str) -> torch.Tensor:
     t = transforms.Compose([
@@ -114,10 +141,12 @@ def main():
     parser.add_argument("--quant_config", default=None, help="Path to quant_config.yaml")
     parser.add_argument("--image",        default=None, help="Path to test image (JPEG/PNG)")
     parser.add_argument("--out_dir",      default=None, help="Output base directory")
+    ALL_TEST_CASES = {**REFACTOR_TEST_CASES, **PHASE3_TEST_CASES}
+    
     parser.add_argument(
         "--test_case", default="all",
-        choices=list(REFACTOR_TEST_CASES.keys()) + ["all"],
-        help="Which test case to export, or 'all' (default)",
+        choices=list(ALL_TEST_CASES.keys()) + ["all", "phase3"],
+        help="Which test case to export, or 'all', or 'phase3' (default is 'all')",
     )
     args = parser.parse_args()
 
@@ -131,7 +160,7 @@ def main():
     checkpoint   = Path(args.checkpoint)   if args.checkpoint   else REPO_ROOT / "qat_models/checkpoint/resnet50_best.pth.tar"
     quant_config = Path(args.quant_config) if args.quant_config else REPO_ROOT / "configs/quant_config.yaml"
     image_path   = Path(args.image)        if args.image        else REPO_ROOT / "assets/new.JPEG"
-    out_dir      = Path(args.out_dir)      if args.out_dir      else REPO_ROOT / "outputs/phase2_testcases"
+    out_dir      = Path(args.out_dir)      if args.out_dir      else REPO_ROOT / "outputs/phase3_testcases"
 
     # ------------------------------------------------------------------
     # Build the HLS emulation model (the correct source for hw testcases)
@@ -154,7 +183,7 @@ def main():
 
     logger.info("Converting to HLS emulation model…")
     infer_proc = InferProcessor(model, config)
-    emu_model  = infer_proc.convert_to_emu_model()
+    emu_model  = infer_proc.convert_to_hardware_model()
 
     inspector = StdModelInspector(emu_model, default_input_frac=5, logger=logger)
 
@@ -193,14 +222,15 @@ def main():
     # ------------------------------------------------------------------
     # Export loop
     # ------------------------------------------------------------------
-    cases_to_run = (
-        list(REFACTOR_TEST_CASES.keys())
-        if args.test_case == "all"
-        else [args.test_case]
-    )
+    if args.test_case == "all":
+        cases_to_run = list(ALL_TEST_CASES.keys())
+    elif args.test_case == "phase3":
+        cases_to_run = list(PHASE3_TEST_CASES.keys())
+    else:
+        cases_to_run = [args.test_case]
 
     for case_name in cases_to_run:
-        case_def = REFACTOR_TEST_CASES[case_name]
+        case_def = ALL_TEST_CASES[case_name]
         logger.info("")
         logger.info("=" * 60)
         logger.info(f"Test case : {case_name}")

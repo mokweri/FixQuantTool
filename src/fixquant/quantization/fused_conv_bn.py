@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from fixquant.quantization.fxp_modules import FxP_QConv2D
-from fixquant.quantization.qat_modules import QuantizedConv2d
 from fixquant.quantization.tqt_quantizer import TQTQuantizer
 
 # Number of steps before freezing the batch norm running average and variance

@@ -6,6 +6,7 @@ import warnings
 
 from torch.nn.modules.utils import _pair
 from typing import Optional, List, Tuple, Union
+from fixquant.quantization.fix_ops import fix_quantize_tensor, FakeQuantize
 from fixquant.quantization.tqt_quantizer import TQTQuantizer
 
 
