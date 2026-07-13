@@ -88,11 +88,9 @@ class QuantizedConv2d(_QuantizedConvNd):
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         if self.padding_mode != 'zeros':
-            output = F.conv2d( F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
-                               weight, bias, self.stride, _pair(0), self.dilation, self.groups)
-
-        output = F.conv2d(input, weight, bias, self.stride, self.padding, self.dilation, self.groups)
-        return output
+            return F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            weight, bias, self.stride, _pair(0), self.dilation, self.groups)
+        return F.conv2d(input, weight, bias, self.stride, self.padding, self.dilation, self.groups)
 
     def forward(self, input: Tensor) -> Tensor:
         quantized_weight = self.weight_quantizer.forward(self.weight)
@@ -277,55 +275,6 @@ class QMaxPool2D(torch.nn.MaxPool2d):
                                       error_msgs)
 
 
-class QAvgPool2d(torch.nn.modules.AvgPool2d):
-    def __init__(self, kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override, ):
-        super().__init__(kernel_size, stride, padding, ceil_mode, count_include_pad, divisor_override)
-
-        self.quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
-        self._mod_name = None
-
-    def forward(self, input):
-        output = super().forward(input)
-        output = self.quantizer.forward(output)
-        return output
-
-    @property
-    def module_name(self):
-        return self._mod_name
-
-    @module_name.setter
-    def module_name(self, value):
-        self._mod_name = value
-
-    def extra_repr(self):
-        return super().extra_repr() + f", mod_name={self._mod_name},"
-
-    @classmethod
-    def from_float(cls, mod, qconfig):
-        Qavgpool = cls(mod.output_size)
-        return Qavgpool
-
-    def export_quant_info(self):
-        # "conv1": {"weight": 8, "bias": 7, "in": 5, "out": 6}, # @TODO Format accordingly
-        frac_out = self.quantizer.export_quant_info()[1]
-        return frac_out
-
-    def state_dict(self, *args, prefix='', **kwargs):
-        state = super().state_dict(*args, prefix=prefix, **kwargs)
-        state[prefix + 'quantizer'] = self.quantizer.state_dict()
-        return state
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
-                              error_msgs):
-        quantizer_key = prefix + 'quantizer'
-        if quantizer_key in state_dict:
-            self.quantizer.load_state_dict(state_dict[quantizer_key])
-            state_dict.pop(quantizer_key)
-
-        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
-                                      error_msgs)
-
-
 class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
     def __init__(self, output_size):
         super().__init__(output_size)
@@ -377,10 +326,16 @@ class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
 
 
 class QElementwiseAdd(nn.Module):
-    def __init__(self):
+    """Residual add. The TileCNN hardware shifts both int8 inputs onto the
+    output frac grid *before* the add, so (when align_inputs is True) the QAT
+    forward rounds both inputs onto the output grid first — the same rounding
+    the hardware alignment shift performs."""
+
+    def __init__(self, align_inputs=True):
         super().__init__()
 
         self.quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
+        self.align_inputs = align_inputs
         self._mod_name = None
 
     @property
@@ -394,7 +349,19 @@ class QElementwiseAdd(nn.Module):
     def extra_repr(self):
         return super().extra_repr() + f", mod_name={self._mod_name}, "
 
+    def _round_to_output_grid(self, x):
+        """Round x onto the output quantization grid (STE, no clamp — the
+        hardware aligns in int32 and only saturates after the add)."""
+        with torch.no_grad():
+            log_t = torch.ceil(self.quantizer.log_threshold.detach())
+            scale = (self.quantizer.domain / torch.pow(2.0, log_t)).to(x.device)
+            delta = torch.round(x * scale) / scale - x
+        return x + delta
+
     def forward(self, x1, x2):
+        if self.align_inputs and self.quantizer.warmup_enabled[0] == 0:
+            x1 = self._round_to_output_grid(x1)
+            x2 = self._round_to_output_grid(x2)
         output = x1 + x2
         output = self.quantizer.forward(output)
         return output

@@ -56,6 +56,10 @@ def _write_i8_tensor(export_path: Path, spec: Dict[str, Any], tensor: torch.Tens
     out.tofile(str(export_path / spec["file"]))
 
 
+def _relu6_max(out_frac: int) -> int:
+    return min(127, int(round(6.0 * (2 ** out_frac))))
+
+
 def _tilecnn_conv2d(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
                     node: Dict[str, Any], ifm_frac: int, weight_frac: int,
                     bias_frac: int, out_frac: int) -> torch.Tensor:
@@ -65,8 +69,6 @@ def _tilecnn_conv2d(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
     padding = (padding_attr[0], padding_attr[2])
     dilation = tuple(attrs.get("dilation", [1, 1]))
     groups = int(attrs.get("groups", 1))
-    if groups != 1:
-        raise ValueError("TileCNN reference supports groups=1 only")
 
     x = ifm.reshape(1, *ifm.shape).to(torch.float64)
     w = weight.to(torch.float64)
@@ -75,17 +77,21 @@ def _tilecnn_conv2d(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
 
     shift_out = ifm_frac + weight_frac - out_frac
     if shift_out > 0:
-        s1 = (y >> (shift_out - 1)) + 1
+        s1 = (y >> (shift_out - 1))
     elif shift_out == 0:
-        s1 = (y << 1) + 1
+        s1 = (y << 1)
     else:
-        s1 = (y << ((-shift_out) + 1)) + 1
+        s1 = (y << ((-shift_out) + 1))
 
     bias_adj = _bias_shift(bias, out_frac - bias_frac + 1).view(1, -1, 1, 1)
     out = (s1 + bias_adj + 1) >> 1
     out = _as_i8(out)
-    if node.get("post_ops", {}).get("relu", False) and not node.get("post_ops", {}).get("residual_add", False):
-        out = torch.clamp_min(out, 0)
+    post_ops = node.get("post_ops", {})
+    if not post_ops.get("residual_add", False):
+        if post_ops.get("relu6", False):
+            out = torch.clamp(out, 0, _relu6_max(out_frac))
+        elif post_ops.get("relu", False):
+            out = torch.clamp_min(out, 0)
     return out.squeeze(0)
 
 
@@ -98,11 +104,11 @@ def _tilecnn_linear(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
 
     shift_out = ifm_frac + weight_frac - out_frac
     if shift_out > 0:
-        s1 = (y >> (shift_out - 1)) + 1
+        s1 = (y >> (shift_out - 1))
     elif shift_out == 0:
-        s1 = (y << 1) + 1
+        s1 = (y << 1)
     else:
-        s1 = (y << ((-shift_out) + 1)) + 1
+        s1 = (y << ((-shift_out) + 1))
 
     bias_adj = _bias_shift(bias, out_frac - bias_frac + 1).view(1, -1)
     out = (s1 + bias_adj + 1) >> 1
@@ -110,17 +116,26 @@ def _tilecnn_linear(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
 
 
 def _tilecnn_residual_add(main: torch.Tensor, residual: torch.Tensor,
-                          residual_shift: int, relu: bool) -> torch.Tensor:
+                          residual_shift: int, relu: bool,
+                          relu6: bool = False, out_frac: int = 0) -> torch.Tensor:
     summed = main.to(torch.int64) + _signed_shift(residual, residual_shift)
     out = _as_i8(summed)
-    if relu:
+    if relu6:
+        out = torch.clamp(out, 0, _relu6_max(out_frac))
+    elif relu:
         out = torch.clamp_min(out, 0)
     return out
 
 
-def _tilecnn_maxpool(ifm: torch.Tensor, post_pool_shift: int) -> torch.Tensor:
+def _tilecnn_maxpool(ifm: torch.Tensor, node: Dict[str, Any],
+                     post_pool_shift: int) -> torch.Tensor:
+    attrs = node.get("attrs", {})
+    kernel = tuple(attrs.get("kernel", [3, 3]))
+    stride = tuple(attrs.get("stride", [2, 2]))
+    padding_attr = attrs.get("padding", [1, 1, 1, 1])
+    padding = (padding_attr[0], padding_attr[2])
     y = F.max_pool2d(ifm.reshape(1, *ifm.shape).to(torch.float32),
-                     kernel_size=3, stride=2, padding=1).to(torch.int64)
+                     kernel_size=kernel, stride=stride, padding=padding).to(torch.int64)
     return _as_i8(_signed_shift(y, post_pool_shift)).squeeze(0)
 
 
@@ -168,7 +183,9 @@ def _write_tilecnn_bitexact_references(export_path: Path, graph_json: Dict[str, 
                 residual_shift = int(node.get("post_ops", {}).get("residual_shift", residual_shift))
                 out = _tilecnn_residual_add(
                     out, values[residual_id], residual_shift,
-                    bool(node.get("post_ops", {}).get("post_add_relu", False)))
+                    bool(node.get("post_ops", {}).get("post_add_relu", False)),
+                    relu6=bool(node.get("post_ops", {}).get("post_add_relu6", False)),
+                    out_frac=tensors[ofm_id]["frac"])
             values[ofm_id] = out
 
         elif op == "linear":
@@ -185,7 +202,8 @@ def _write_tilecnn_bitexact_references(export_path: Path, graph_json: Dict[str, 
             ifm_id = inputs["ifm"]
             ofm_id = outputs["ofm"]
             values[ofm_id] = _tilecnn_maxpool(
-                values[ifm_id], tensors[ofm_id]["frac"] - tensors[ifm_id]["frac"])
+                values[ifm_id], node,
+                tensors[ofm_id]["frac"] - tensors[ifm_id]["frac"])
 
         elif op == "gap2d":
             ifm_id = inputs["ifm"]
@@ -200,6 +218,39 @@ def _write_tilecnn_bitexact_references(export_path: Path, graph_json: Dict[str, 
             raise ValueError(f"Cannot generate reference for missing graph output '{output_id}'")
         _write_i8_tensor(export_path, tensors[ref_id], values[output_id])
         logger.info("Rewrote TileCNN bit-exact reference '%s'", tensors[ref_id]["file"])
+
+
+def _check_shift_legality(graph_json: Dict[str, Any]) -> None:
+    """Verify every derived hardware shift is inside a sane range before the
+    artifacts are handed to the accelerator. Mirrors the Vitis-style
+    shift_cut/shift_bias legality checks."""
+    MAX_SHIFT = 31
+    tensors = graph_json["tensors"]
+    problems = []
+    for node in graph_json["nodes"]:
+        nid = node["id"]
+        if node["op"] in ("conv2d", "linear"):
+            fin = tensors[node["inputs"]["ifm"]]["frac"]
+            fw = tensors[node["inputs"]["weight"]]["frac"]
+            fb = tensors[node["inputs"]["bias"]]["frac"]
+            fout = tensors[node["outputs"]["ofm"]]["frac"]
+            shift_out = fin + fw - fout
+            bias_shift = fout - fb + 1
+            if abs(shift_out) > MAX_SHIFT:
+                problems.append(f"{nid}: shift_out={shift_out} out of range")
+            if abs(bias_shift) > MAX_SHIFT:
+                problems.append(f"{nid}: bias_shift={bias_shift} out of range")
+            if node.get("post_ops", {}).get("residual_add"):
+                fres = tensors[node["inputs"]["residual"]]["frac"]
+                if abs(fout - fres) > MAX_SHIFT:
+                    problems.append(f"{nid}: residual_shift={fout - fres} out of range")
+        elif node["op"] == "gap2d":
+            fin = tensors[node["inputs"]["ifm"]]["frac"]
+            fout = tensors[node["outputs"]["ofm"]]["frac"]
+            if GAP_SCALE_FRAC_BITS + (fout - fin) < 0:
+                problems.append(f"{nid}: gap total_shift={GAP_SCALE_FRAC_BITS + fout - fin} < 0")
+    if problems:
+        raise ValueError("TileCNN export legality check failed:\n  " + "\n  ".join(problems))
 
 
 class TileCNNGraphExporter:
@@ -577,18 +628,22 @@ class TileCNNGraphExporter:
                 }
                 tensor_map[name] = f"{node_id}_out"
 
-            elif isinstance(mod, nn.ReLU) or type(mod).__name__ in ("HLSRelu", "HardwareRelu", "HardwareRelu6"):
-                # Standalone ReLU nodes in both emu and tilecnn models —
-                # fuse them into their predecessor's post_ops
+            elif isinstance(mod, (nn.ReLU, nn.ReLU6)) or type(mod).__name__ in (
+                    "HLSRelu", "HardwareRelu", "HardwareRelu6"):
+                # Standalone ReLU/ReLU6 nodes — fuse them into their
+                # predecessor's post_ops (relu6 keeps its clamp; it must never
+                # silently degrade to relu).
+                is_relu6 = isinstance(mod, nn.ReLU6) or type(mod).__name__ == "HardwareRelu6"
                 pred = preds[0] if preds else None
                 if pred is None:
                     continue
                 fused_id = node_to_fused.get(pred)
                 if fused_id and fused_id in built_nodes:
-                    if built_nodes[fused_id]["post_ops"].get("residual_add"):
-                        built_nodes[fused_id]["post_ops"]["post_add_relu"] = True
+                    post_ops = built_nodes[fused_id]["post_ops"]
+                    if post_ops.get("residual_add"):
+                        post_ops["post_add_relu6" if is_relu6 else "post_add_relu"] = True
                     else:
-                        built_nodes[fused_id]["post_ops"]["relu"] = True
+                        post_ops["relu6" if is_relu6 else "relu"] = True
                     tensor_map[name] = tensor_map[pred]
                     node_to_fused[name] = fused_id
                 else:
@@ -713,6 +768,8 @@ class TileCNNGraphExporter:
             "tensors": tensors,
             "nodes": list(built_nodes.values())
         }
+
+        _check_shift_legality(graph_json)
 
         graph_path = export_path / "graph.json"
         with open(graph_path, "w") as f:

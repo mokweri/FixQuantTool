@@ -1,164 +1,72 @@
-# Fixed-Point Quantization Model Deployment Tool
+# Deployment Guide
 
-The deployment script (`tools/deploy_eval.py`) orchestrates the process of taking a pre-trained PyTorch model, applying Quantization-Aware Training (QAT) transformations, loading QAT-finetuned weights, and then extracting quantized model parameters in formats suitable for hardware deployment or further analysis. It also includes functionality to extract specific layer parameters (optionally subsetted) and can be extended to generate test vectors.
+*Rewritten 2026-07: earlier versions described `deploy_eval.py` as a parameter
+extraction tool. Since the `a30fc02` refactor it is a pure evaluation script;
+hardware artifact export lives in the exporter tools (see below).*
 
-## Features
+## Overview
 
-*   Supports standard torchvision models (e.g., ResNet50, ResNet18, VGG16) and custom CIFAR models.
-*   Integrates a Quantization-Aware Training (QAT) pipeline using `QatProcessor`.
-*   Loads pre-trained QAT weights onto the quantized model.
-*   Converts the QAT model into a "standard" inference-ready format using `InferProcessor`.
-*   Generates a `qconfig` dictionary detailing quantization parameters (bitwidth, fractional bits) for each layer.
-*   Exports all model weights and biases to a single binary `.data` file in `int8` format.
-*   Extracts parameters (weights and biases) from a *specific layer*, optionally taking a *subset* of these parameters, quantizes them, saves to a `.data` file, and returns the original floating-point subset.
-*   Configurable via command-line arguments and a `quant_config.yaml` file.
-*   Includes (commented out) example for image preprocessing, inference with an emulated model, and saving input/output tensors for hardware verification.
+Deployment has two independent steps:
 
-## Prerequisites
+1. **Evaluate the hardware model** (`tools/deploy_eval.py`) — rebuild the QAT
+   model, load the trained checkpoint, convert it to the bit-exact integer
+   digital twin, and measure Top-1/Top-5 on the validation set. This is the
+   accuracy the FPGA will deliver (see
+   [docs/tilecnn_exporter_and_digital_twin.md](docs/tilecnn_exporter_and_digital_twin.md)).
+2. **Export hardware artifacts** — produce `graph.json` + int8 binaries per the
+   [TileCNN Graph Handoff Specification](graph_handoff_spec.md):
+   * `tools/export_tilecnn_graph.py` — full-model graph bundle (`--model`).
+   * `tools/export_hw_testcases.py` — predefined ResNet-50 subgraph test cases
+     for the C-simulation testbench.
+   * `tools/export_mobilenet_testcases.py` — 5 real MobileNet-V2 inverted-residual
+     blocks (varying stride, channel width, residual add) for the depthwise /
+     pw→dw fusion path. Exports the plain sequential order (expand pw, depthwise,
+     project pw, optional residual add); the TileCNN graph compiler does the
+     pw→dw fusion. Uses the CLE checkpoint by default.
 
-1.  **Python Environment:**
-    *   Python 3.8+
-    *   PyTorch (with CUDA support if using GPU)
-    *   Torchvision
-    *   Pillow (PIL)
-    *   PyYAML
-    *   NumPy
-    A `requirements.txt` is available.
-
-2.  **Custom Modules:** Install the `fixquant` package (see README.md):
-    ```bash
-    pip install -e .
-    ```
-    This provides all required modules:
-    *   `fixquant.models.cifar`
-    *   `fixquant.quantization.fix_ops`
-    *   `fixquant.graph.qat_processor`
-    *   `fixquant.graph.inference_processor`
-    *   `fixquant.data.imagenet`
-    *   `fixquant.data.cifar10`
-    *   `fixquant.training`
-
-3.  **Datasets (Optional, for data provider paths):**
-    *   **ImageNet:** The script sets a default path. Update `ImagenetDataProvider.DEFAULT_PATH` if your location differs.
-    *   **CIFAR-10:** (If using CIFAR models) Ensure the data provider can access it.
-
-4.  **QAT Configuration:**
-    *   A `configs/quant_config.yaml` file is required to define QAT settings.
-
-5.  **Pre-trained QAT Weights:**
-    *   The script expects QAT-finetuned weights, for example, at `qat_models/checkpoint/resnet50_best.pth.tar`. Update this path if necessary.
-
-## Directory Structure
-`````
-├── tools/
-│   └── deploy_eval.py          # The deployment script
-├── src/fixquant/
-│   ├── quantization/
-│   │   └── fix_ops.py          # Contains to_int_tensor, etc.
-│   ├── graph/
-│   │   ├── qat_processor.py    # Contains QatProcessor
-│   │   └── inference_processor.py  # Contains InferProcessor
-│   ├── models/
-│   │   └── cifar/              # Custom CIFAR models
-│   ├── data/
-│   │   ├── imagenet.py
-│   │   └── cifar10.py
-│   └── training/
-│       ├── run_config.py
-│       └── run_manager.py
-├── configs/
-│   └── quant_config.yaml       # QAT configuration file
-├── qat_models/
-│   └── checkpoint/
-│       └── resnet50_best.pth.tar
-└── outputs/
-    └── hw_data_files/          # Generated test data
-`````
-## Configuration
-
-1.  **`configs/quant_config.yaml`:**
-    This YAML file defines the quantization strategy for different layer types, including bit-widths and 
-whether to quantize weights, activations, and biases. Modify this file to change how QAT is applied.
-2.  **Dataset Paths:**
-    Set the `FIXQUANT_DATA_DIR` environment variable or pass `--dataroot` to point to your dataset.
-3.  **QAT Checkpoint Path:**
-    Update the path in `tools/deploy_eval.py` to point to your actual trained QAT model checkpoint.
-
-## Usage
-
-The script is run from the command line:
+## Evaluating a trained model
 
 ```bash
-python tools/deploy_eval.py [OPTIONS]
+python tools/deploy_eval.py \
+    --model resnet50 \
+    --dataroot /path/to/imagenet \
+    --model_type tilecnn        # or "emu" (identical arithmetic, different
+                                # exporter classification)
 ```
 
-### Command-Line Options:
+Key options:
 
-*   `--test_batch_size`: Batch size for testing/validation (default: 100).
-*   `--valid_size`: Validation set size (default: None).
-*   `--test_criterion`: Test criterion (default: "ce").
-*   `--n_worker`: Number of data loading workers (default: 8).
-*   `--pin-memory`: Use pinned memory for data loading (default: True).
-*   `--device`: Device to use (e.g., "cuda", "cpu") (default: "cuda" if available).
-*   `--gpus`: GPU IDs to use, comma-separated (e.g., "0,1") (default: "0").
-*   `--dataset`: Dataset to use ("imagenet", "cifar10", "cifar100") (default: "imagenet").
-*   `--dataroot`: Root directory for the dataset (default: path for ImageNet).
-*   `--display_freq`: Frequency to display training metrics (default: 100).
-*   `--validation_frequency`: Frequency to validate model (default: 1).
-*   `--save_dir`: Directory to save trained QAT models (default: './qat_models').
-*   `--output_dir`: Directory to save QAT results (default: 'qat_result').
-*   `--manual_seed`: Manual seed for reproducibility (default: 0).
+* `--model` — `resnet18 | resnet50 | vgg16 | mobilenet_v2`
+* `--checkpoint` — QAT checkpoint; default
+  `qat_models/<model>/checkpoint/model_best.pth.tar`
+* `--dataset` / `--dataroot` (or `FIXQUANT_DATA_DIR`), `--test_batch_size`,
+  `--gpus`, `--manual_seed`
 
-Most of these options are relevant if you uncomment the training/validation parts of the script using `RunManager`. For the current primary use (parameter extraction), `dataroot`, `dataset` (for model selection logic), and `gpus`/`device` are most relevant.
+What it does: `QatProcessor.quantize()` → `load_qat_weights()` → `freeze()`
+(BN folding must be frozen before conversion) →
+`InferProcessor.convert_to_hardware_model(backend=...)` → `RunManager.validate()`.
+The hardware model takes float32 images and returns float32 logits; everything
+in between is int8 with TileCNN's exact two-step rounding.
 
-## Key Script Operations
+## Exporting a graph bundle
 
-1.  **Argument Parsing & Setup:** Parses command-line arguments and sets up device configurations.
-2.  **Model Loading:**
-    *   Loads a specified torchvision model (e.g., `resnet50`) with default pre-trained weights OR a custom CIFAR model.
-3.  **QAT Processing (`QatProcessor`):**
-    *   Initializes `QatProcessor` with the model and `quant_config.yaml`.
-    *   `Qatprocessor.quantize()`: Modifies the model by replacing layers with their quantized equivalents (e.g., `QuantConv2d`, `QuantLinear`) and inserts fake quantization nodes.
-    *   `Qatprocessor.freeze()`: "Freezes" batch norm statistics. **Important Note:** The script mentions a specific order for freezing and loading weights for different models (ResNet50 vs. VGG16/ResNet18). Pay attention to this if you change models.
-    *   `Qatprocessor.load_qat_weights()`: Loads the weights from a QAT-finetuned checkpoint onto the quantized model. These weights are still floating-point but have been trained with fake quantization in the loop.
-4.  **Inference Processor (`InferProcessor`):**
-    *   Initializes `InferProcessor` with the QAT-processed model and `quant_config.yaml`.
-    *   `infer_processor.convert_to_std_model()`: Converts the QAT model (with `QuantConv2d`, etc.) to a model with standard `nn.Conv2d`, `nn.Linear` layers but populates them with attributes like `frac_weight`, `frac_bias`, `frac_act` based on the QAT process. The weights and biases themselves are still floating-point at this stage but represent the "learned" quantized values.
-    *   `infer_processor.generate_qconfig()`: Traverses the standard model graph to determine quantization parameters (bitwidth, fractional bits for inputs, weights, biases, outputs) for each layer and prints this configuration.
-5.  **Parameter Export:**
-    *   `infer_processor.export_weights_to_file()`: Iterates through all Conv2d and Linear layers in the `stdm` (standard model). For each layer:
-        *   It retrieves the floating-point `weight` and `bias`.
-        *   It uses `layer.frac_weight` and `layer.frac_bias` (and a fixed `n_bits=8`).
-        *   It calls `to_int_tensor()` to convert these float parameters to `int8` fixed-point tensors.
-        *   All these `int8` tensors are concatenated and saved to a binary file (typically `weights.data` or similar, name defined within `InferProcessor`).
-    *   `infer_processor.extract_and_subset_layer_parameters()`:
-        *   Extracts parameters from a *user-specified layer* (e.g., "conv1").
-        *   Optionally takes a *subset* of the weights (e.g., first 16 output channels) based on `target_weight_shape`. The bias is subsetted accordingly.
-        *   Returns the **original floating-point** subsetted weights and biases (for generating reference outputs).
-        *   Quantizes the subsetted float parameters to `int8` using `to_int_tensor()`.
-        *   Saves these quantized subsetted parameters to a specified `.data` file.
-6.  **Test Image Processing & Inference (TODO):**
-    *   Will do the following:
-        *   Loading and preprocessing a test image (`new.JPEG`).
-        *   Applying fake quantization or `to_int_tensor` to the input image to simulate quantized input.
-        *   Saving the processed image to `hw_outputs/test_image.data`.
-        *   Performing inference using `emu_model` (emulation model for emulation).
-        *   Quantizing the model's output.
-        *   Saving the quantized prediction to `hw_outputs/ref_output.data`.
-    This part will generate test vectors for hardware verification.
+```bash
+python tools/export_tilecnn_graph.py --model resnet50 \
+    --checkpoint qat_models/resnet50/checkpoint/model_best.pth.tar \
+    --out_dir outputs/resnet50_int8_tilecnn
+```
 
-7.  **Validation (Optional):**
-    *   Using `RunManager` to perform model validation.
+Produces `graph.json`, `inputs/`, `params/`, `refs/` — with references
+recomputed using the fused bit-exact TileCNN arithmetic, and export-time
+legality checks on all derived shifts. Missing quantization parameters raise
+errors; nothing falls back to silent defaults.
 
-## Outputs
+## Verifying deployment correctness
 
-*   **Console Output:**
-    *   The structure of the QAT-processed model.
-    *   The generated `qconfig` dictionary.
-    *   Log messages detailing the extraction process and returned floating-point tensor shapes from `extract_and_subset_layer_parameters`.
-*   **Files Generated (by default, paths may vary based on internal implementation of `InferProcessor`):**
-    *   A binary file containing all `int8` weights and biases of the model (e.g., `weights.data`), generated by `infer_processor.export_weights_to_file()`.
-    *   A binary file for the subsetted layer, e.g., `conv1_subset.data`, generated by `infer_processor.extract_and_subset_layer_parameters()`.
-    *   If the test image processing section is uncommented:
-        *   `hw_outputs/test_image.data`: The processed `int8` input image.
-        *   `hw_outputs/ref_output.data`: The `int8` reference output from the model.
+* `python -m pytest tests/` — kernel bit-exactness, golden regression, export
+  structure (fast, CPU-only).
+* `fixquant.diagnostics.parity_sweep(qat_model, hw_model, input)` — per-layer
+  int8 comparison between the QAT model and the hardware model; only
+  ±1 LSB rounding differences are expected on the first layer, small
+  propagated diffs downstream.
+* Track accuracy in [docs/baselines.md](docs/baselines.md).

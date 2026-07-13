@@ -30,6 +30,16 @@ parser.add_argument("--device", type=torch.device, default="cuda")
 parser.add_argument('--gpus',
                     type=str, default='0', help='gpu ids to be used for training, seperated by commas')
 
+# Model options
+parser.add_argument("--model", type=str, default="mobilenet_v2",
+                    help="Model to evaluate (resnet18|resnet50|vgg16|mobilenet_v2)")
+parser.add_argument("--checkpoint", type=str, default=None,
+                    help="QAT checkpoint path. Default: qat_models/<model>/checkpoint/model_best.pth.tar")
+parser.add_argument("--cle", action="store_true", default=False,
+                    help="Apply cross-layer equalization before quantizing. Must match how "
+                         "the checkpoint was trained (BN-free, ReLU6->ReLU). Required for "
+                         "checkpoints produced by 'qat_train.py --cle'.")
+
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str, default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/datasets/imagenet-mini"), )
@@ -58,29 +68,25 @@ if __name__ == '__main__':
     )
 
     data_provider = ImagenetDataProvider()
-    # data_provider = Cifar10DataProvider()
 
-    calib_loader = data_provider.build_sub_train_loader(24, 24)
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=True)
 
-    """Imagenet models"""
-    # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
-    model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
-
-    """cifar models"""
-    # model = resnet18_cifar10()
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
 
     from pathlib import Path
     repo_root = Path(__file__).resolve().parent.parent
     with open(repo_root / "configs/quant_config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
+    checkpoint = args.checkpoint or str(
+        repo_root / f"qat_models/{args.model}/checkpoint/model_best.pth.tar")
+
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.calibrate(calib_loader, device)
-    # Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/vgg16_best.pth.tar'))
-    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/mobilenet_v2_best.pth.tar'))
+    Qatprocessor.load_qat_weights(checkpoint)
     Qatprocessor.freeze()
 
     args_dict = args.__dict__.copy()

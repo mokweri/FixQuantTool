@@ -238,6 +238,9 @@ class InferProcessor:
         self.fx_model = fx_model
 
         self.std_model: Optional[fx.GraphModule] = None
+        # Learned network-input frac, captured from the input QuantStub during
+        # convert_to_std_model (None until then; 5 used as documented fallback).
+        self.input_frac: Optional[int] = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def convert_to_std_model(self) -> fx.GraphModule:
@@ -304,9 +307,14 @@ class InferProcessor:
                         inference_model.layers[target_module.module_name] = new_module
                         new_node = new_graph.call_module(target_module.module_name,
                                                          args=(node_map[node.args[0]], node_map[node.args[1]]))
+                    elif isinstance(target_module, QuantStubC):
+                        # Training-time input stub: record its learned frac for
+                        # generate_qconfig and pass the input straight through.
+                        self.input_frac = int(target_module.export_quant_info())
+                        node_map[node] = node_map[node.args[0]]
+                        continue
                     else:
-                        if node.name == "QuantStub":
-                            print('QuantStub skipped')
+                        pass
 
                     # logger.debug(f"Handled module: {target_module.module_name} ({type(target_module).__name__})")
                 else:
@@ -404,20 +412,43 @@ class InferProcessor:
                     return issubclass(gtype, ptype) or issubclass(ptype, gtype)
                 return pn.target == gn.target
 
+        # Quantization params must cover every parametric layer; a missing
+        # entry means a wiring bug, and silently defaulting would turn it
+        # into an accuracy bug on the FPGA. Fail loudly instead.
+        def _require(node_name, q, key):
+            val = q.get(key)
+            if val is None or (isinstance(val, list) and not val):
+                raise KeyError(
+                    f"convert_to_hardware_model: missing quantization param '{key}' "
+                    f"for layer '{node_name}'. Check the QAT graph / qconfig wiring.")
+            return val
+
+        def _producer_frac_out(node):
+            """frac of the tensor feeding `node` (follow single-input chain)."""
+            prev = node.args[0]
+            while hasattr(prev, "name"):
+                qprev = quant_params.get(prev.name)
+                if qprev and qprev.get("frac_out") is not None:
+                    return qprev["frac_out"]
+                if not prev.args:
+                    break
+                prev = prev.args[0]
+            raise KeyError(f"convert_to_hardware_model: cannot resolve input frac for '{node.name}'.")
+
         # 3. Iterate over the nodes and create Hardware modules
         for node in list(emu_model.graph.nodes):
             if node.op == "call_module":
                 target_module = modules[node.target]
                 q = quant_params.get(node.name, {})
-                frac_out = q.get('frac_out', 5)
-                frac_in = q.get('frac_in', [5])[0] if q.get('frac_in') else 5
-                
+
                 if isinstance(target_module, nn.Conv2d):
-                    frac_w = q.get('frac_w', 7)
-                    frac_b = q.get('frac_b', 7)
+                    frac_out = _require(node.name, q, 'frac_out')
+                    frac_in = _require(node.name, q, 'frac_in')[0]
+                    frac_w = _require(node.name, q, 'frac_w')
+                    frac_b = _require(node.name, q, 'frac_b') if target_module.bias is not None else 0
                     w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
                     b_int8 = to_int_tensor(target_module.bias.data, True, 8, frac_b).to(torch.int8) if target_module.bias is not None else None
-                    
+
                     emuConv = HardwareConv2d(
                             weight_int8=w_int8, bias_int8=b_int8,
                             stride=target_module.stride, padding=target_module.padding,
@@ -432,8 +463,10 @@ class InferProcessor:
                     replace_node_module(node, modules, emuConv)
 
                 elif isinstance(target_module, nn.Linear):
-                    frac_w = q.get('frac_w', 7)
-                    frac_b = q.get('frac_b', 7)
+                    frac_out = _require(node.name, q, 'frac_out')
+                    frac_in = _require(node.name, q, 'frac_in')[0]
+                    frac_w = _require(node.name, q, 'frac_w')
+                    frac_b = _require(node.name, q, 'frac_b') if target_module.bias is not None else 0
                     w_int8 = to_int_tensor(target_module.weight.data, True, 8, frac_w).to(torch.int8)
                     b_int8 = to_int_tensor(target_module.bias.data, True, 8, frac_b).to(torch.int8) if target_module.bias is not None else None
                     emuLin = HardwareLinear(
@@ -445,16 +478,21 @@ class InferProcessor:
                     replace_node_module(node, modules, emuLin)
 
                 elif isinstance(target_module, nn.MaxPool2d):
+                    frac_out = _require(node.name, q, 'frac_out')
+                    frac_in = _require(node.name, q, 'frac_in')[0]
                     emuMax = HardwareMaxPool2d(
-                        target_module.kernel_size, target_module.stride, 
-                        target_module.padding, target_module.dilation, 
-                        target_module.return_indices, target_module.ceil_mode
+                        target_module.kernel_size, target_module.stride,
+                        target_module.padding, target_module.dilation,
+                        target_module.return_indices, target_module.ceil_mode,
+                        post_pool_shift=frac_out - frac_in
                     )
                     emuMax.module_name = str(node.name).strip()
                     emuMax.qconfig = quant_params
                     replace_node_module(node, modules, emuMax)
 
                 elif isinstance(target_module, nn.AdaptiveAvgPool2d):
+                    frac_out = _require(node.name, q, 'frac_out')
+                    frac_in = _require(node.name, q, 'frac_in')[0]
                     out_size = target_module.output_size
                     is_global = out_size == (1, 1) or out_size == 1
                     if is_global:
@@ -467,31 +505,34 @@ class InferProcessor:
                     replace_node_module(node, modules, emuAdptAvgP)
 
                 elif isinstance(target_module, AddWithMetadata):
-                    frac_in_list = q.get('frac_in', [5, 5])
+                    frac_out = _require(node.name, q, 'frac_out')
+                    frac_in_list = _require(node.name, q, 'frac_in')
                     if len(frac_in_list) < 2: frac_in_list = [frac_in_list[0], frac_in_list[0]]
                     emuAdd = HardwareElementwiseAdd(frac_in1=frac_in_list[0], frac_in2=frac_in_list[1], frac_out=frac_out)
                     emuAdd.module_name = str(node.name).strip()
                     emuAdd.qconfig = quant_params
                     replace_node_module(node, modules, emuAdd)
-                        
+
+                elif isinstance(target_module, nn.ReLU6):
+                    emuRelu6 = HardwareRelu6(frac_in=_producer_frac_out(node))
+                    emuRelu6.module_name = str(node.name).strip()
+                    emuRelu6.qconfig = quant_params
+                    replace_node_module(node, modules, emuRelu6)
+
                 elif isinstance(target_module, nn.ReLU):
                     emuRelu = HardwareRelu()
                     emuRelu.module_name = str(node.name).strip()
                     emuRelu.qconfig = quant_params
                     replace_node_module(node, modules, emuRelu)
 
-                elif isinstance(target_module, nn.ReLU6):
-                    emuRelu6 = HardwareRelu6(frac_in=frac_in)
-                    emuRelu6.module_name = str(node.name).strip()
-                    emuRelu6.qconfig = quant_params
-                    replace_node_module(node, modules, emuRelu6)
-
         # 4. No graph rewiring needed since layers are sequential
 
         # 5. I/O Quantizers
         input_node = next(n for n in emu_model.graph.nodes if n.op == "placeholder")
         first_layer = next(n for n in emu_model.graph.nodes if n.op == "call_module")
-        first_fin = quant_params.get(first_layer.name, {}).get('frac_in', [5])[0]
+        first_fin_list = quant_params.get(first_layer.name, {}).get('frac_in')
+        first_fin = first_fin_list[0] if first_fin_list else (
+            self.input_frac if self.input_frac is not None else 5)
         emu_model.add_module("input_quantizer", InputQuantizer(frac_in=first_fin))
         with emu_model.graph.inserting_after(input_node):
             quant_node = emu_model.graph.call_module("input_quantizer", args=(input_node,))
@@ -602,14 +643,18 @@ class InferProcessor:
                     "frac_b": int(module.frac_bias) if hasattr(module, "frac_bias") else None,
                     "frac_out": int(module.frac_act) if hasattr(module, "frac_act") else None
                 }
-        # Append frac of the first layer which is 5 for imagenet
-        # @TODO correctly get frac_n of in for a given dataset
+        # The first layer's input frac comes from the input QuantStub captured
+        # during convert_to_std_model (a fallback of 5 matches ImageNet
+        # normalization but is only a guess for other pipelines).
+        if self.input_frac is None:
+            self.logger.warning("No input QuantStub found; falling back to input frac=5.")
+        input_frac = self.input_frac if self.input_frac is not None else 5
         first_layer_name = next(
             (name for name, module in self.std_model.named_modules() if isinstance(module, (nn.Conv2d, nn.Linear))),
             next(iter(self.std_model.named_modules()))[0])
         qconfig[first_layer_name] = {
             "bitwidth": 8,
-            "frac_in": [5],
+            "frac_in": [input_frac],
             "frac_w": int(dict(self.std_model.named_modules())[first_layer_name].frac_weight),
             "frac_b": int(dict(self.std_model.named_modules())[first_layer_name].frac_bias),
             "frac_out": int(dict(self.std_model.named_modules())[first_layer_name].frac_act)

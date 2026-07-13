@@ -402,11 +402,26 @@ shift_bias = frac_out - frac_b + 1
 
 Current TileCNN constraints:
 
-- `groups` must be `1`.
+- `groups` must be `1` (schema v1 hardware; see the v1.1 extension below).
 - `dilation` must be `[1, 1]`.
 - `kernel[0] == kernel[1]`.
 - `stride[0] == stride[1]`.
 - padding should be symmetric for current runtime compatibility.
+
+### Schema v1.1 extensions (proposed — required for MobileNet)
+
+The exporter and the bit-exact software reference already implement these; the
+hardware importer/kernels must adopt them before MobileNet-class graphs can run
+on the accelerator:
+
+- **Grouped / depthwise convolution**: `attrs.groups` may be any divisor of the
+  channel counts; `groups == in_channels` denotes depthwise. The weight tensor
+  shape is `[O, I/groups, kH, kW]`. All shift/bias semantics are unchanged.
+- **`relu6` post-op**: `post_ops.relu6` (and `post_ops.post_add_relu6` after a
+  fused residual add) clamps the int8 output to
+  `[0, min(127, round(6 * 2^frac_out))]`. `relu` and `relu6` are mutually
+  exclusive. A producer must never lower ReLU6 to plain `relu` unless
+  `6 * 2^frac_out >= 127`, in which case they are equivalent.
 
 For `padding`, use `[top, bottom, left, right]`. For symmetric padding, this is
 normally `[p, p, p, p]`.

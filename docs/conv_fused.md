@@ -1,49 +1,60 @@
-# conv_fused 
+# FusedConvBN — Conv + BatchNorm fusion for QAT
 
-This Python project contains implementations for different classes and methods 
-that are mostly revolved around Convolutional layers and Batch Normalization Layers in neural networks.
+*Rewritten 2026-07: the previous version of this file documented classes
+(`_ConvBnNd`, `QuantizedConvBatchNorm2d`) from a module that no longer exists.
+The current implementation is `FusedConvBN` in
+`src/fixquant/quantization/fused_conv_bn.py`.*
 
-## Main Components
-class - `_FusedModule`
+## What it is
 
-class - `_ConvBnNd`
+`FusedConvBN` wraps a `nn.Conv2d` + `nn.BatchNorm2d` pair into one QAT module
+so that the *folded* weights are what gets quantized — matching the hardware,
+which has no BatchNorm. It owns three 8-bit `TQTQuantizer`s (weight, bias,
+output activation). `ConvBnFusionPass` in `qat_processor.py` creates these
+automatically for every Conv→BN pair during `QatProcessor.quantize()`.
 
-class - `QuantizedConvBatchNorm2d` 
+## Forward semantics
 
-## Description
-This module contains different methods and classes for working with and manipulating 
-Convolutional and Batch Normalization layers.
+Following Krishnamoorthi 2018 (arXiv:1806.08342 §3.2.2):
 
-The `_FusedModule` 
-class doesn't contain much except that it subclasses `torch.nn.Sequential` which is a container of `Module`s that can be stacked together and run at the same time sequentially.
+- **Training (unfrozen)** — two forward passes: batch statistics are computed
+  from the unquantized conv output, the weight is scaled by
+  `gamma / sigma_running` and quantized, and the output is corrected by
+  `sigma_running / sigma_batch`. BN running stats keep updating.
+- **Eval (unfrozen)** — weights folded with running stats, then quantized.
+- **Frozen** — BN is folded permanently into `conv_mod.weight` / `conv_mod.bias`
+  and the module behaves as a plain quantized conv.
 
+## Freezing (fixed 2026-07 — the MobileNet decay bug)
 
-The `_ConvBnNd` 
-is used for fusing Convolutional and Batch Normalization layers.It has methods to handle the batch normalization stats, application of the batch normalization to the Convolutional layer among others.
+Three guarantees introduced by the rework (`docs/improvements_2026-07.md` §1,
+tested in `tests/test_fused_conv_bn.py`):
 
-`QuantizedConvBatchNorm2d` is a specialized class that deals with the fusion of a 2-dimensional convolution layer and a 2-dimensional batch normalization layer where the weights are quantized for lower memory consumption and faster processing.
+1. **`num_batches_tracked` is reset to 0 at fusion time.** Pretrained
+   torchvision checkpoints carry values around 737k, which used to trip the
+   freeze condition on the very first training batch.
+2. **`freeze()` folds in place** (`weight.data.mul_`, `bias.data.copy_`), so
+   the Parameter objects survive and an optimizer built before the freeze keeps
+   updating them. The old implementation re-created the Parameters, silently
+   detaching the whole backbone from the optimizer.
+3. **A zero bias Parameter is created at fusion** if the conv has none, so the
+   freeze never has to mint a new Parameter mid-training.
 
+Auto-freeze triggers after `freeze_bn_delay` training steps *counted from the
+start of QAT*. It is configured via `configs/quant_config.yaml`:
 
-There are also utility functions in the module.
+```yaml
+freeze_bn_delay: 3000   # steps; null = never auto-freeze (use QatProcessor.freeze())
+```
 
-- `update_bn_stats(mod)`
-for updating the batch normalization stats on `mod` if it is type `_FusedModule`.
-- `freeze_bn_stats(mod)`, you can
-freeze the batch normalization statistics.
-- `fuse_conv_bn(mod)`, fuse the batch normalization with a convolution layer.
-- And finally, `clear_non_native_bias(mod)`, clear bias that was created outside of the original
-`torch.nn`
-creation process if `mod` is of type '_FusedModule' or '`QuantizedConvBatchNorm2d`.
+`QatProcessor.freeze()` freezes all `FusedConvBN` modules explicitly — required
+before `InferProcessor` conversion/export (unfrozen modules would export
+unfolded weights).
 
-## Usage
+## Alternative: fold before QAT (CLE path)
 
-Import the module and create an instance of the class .
-`QuantizedConvBatchNorm2d`
-
-This class is used to create a convolutional layer that can have batch normalization fused with it, with weights that can be quantized.The batch normalization can be turned on and off through the '.train(mode=True/False)' method inherited from `torch.nn.Module`.
-
-## Conclusion
-
-
-The purpose of this project is to assist in handling convolution layers and batch normalization
-layers of a neural network, with functionalities easy enough to comprehend and use.
+With `tools/qat_train.py --cle`, BN is folded *before* quantization by
+`equalization.equalize_model()` (torch.fx fuse + cross-layer equalization). In
+that flow there are no `FusedConvBN` modules at all — convs carry the folded
+bias and are wrapped as `QuantizedConv2d`. Recommended for MobileNet-class
+models; see `docs/improvements_2026-07.md`.

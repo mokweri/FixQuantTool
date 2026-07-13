@@ -20,8 +20,7 @@ FixQuantTool provides an end-to-end workflow for deploying neural networks on fi
 - **Fused ConvBN module** with proper handling of frozen/running BN statistics
 - **Multiple rounding modes** (round-nearest, round-to-zero, truncation, convergent)
 - **Model introspection** for graph analysis, activation capture, and parameter export
-- **HLS sequential emulation** — `HLSConv2d` / `HLSLinear` reproducing the exact two-step rounding of the hardware `EMIT_LOOP`
-- **TileCNN digital twin** — Fused `Conv + residual-Add + ReLU` modules and hardware-accurate GAP, bit-identical to the FPGA
+- **Bit-exact hardware modules** — `HardwareConv2d` / `HardwareLinear` / `HardwareGAP` / `HardwareMaxPool2d` reproducing the exact two-step rounding of the hardware `EMIT_LOOP` (guarded by kernel + golden tests)
 - **TileCNN graph exporter** — Produces `graph.json` + binary artifacts satisfying the TileCNN Graph Handoff Specification, with bit-exact references overwritten using fused hardware arithmetic
 - **ONNX export** with fixed-point metadata attributes
 - **Distributed training** support via Horovod
@@ -65,21 +64,18 @@ FixQuantTool/
 │   │   ├── fix_ops.py          # Fixed-point operations & rounding
 │   │   ├── fused_conv_bn.py    # Conv-BN fusion module
 │   │   ├── qat_modules.py      # QAT-aware layer wrappers
-│   │   ├── fxp_modules.py      # Fixed-point emulation modules
-│   │   ├── tqt_ops.py          # TQT threshold initialization
-│   │   └── tqt_quantizer.py    # Learnable threshold quantizer
+│   │   ├── equalization.py     # BN fold + cross-layer equalization + bias corr.
+│   │   └── tqt_quantizer.py    # Learnable threshold quantizer + calibration
 │   │
 │   ├── graph/                  # FX graph processing
-│   │   ├── qat_processor.py    # QatProcessor: model → QAT model
-│   │   └── inference_processor.py  # InferProcessor: QAT → std/emu/tilecnn
+│   │   ├── qat_processor.py    # QatProcessor: model → QAT model; preflight_check
+│   │   └── inference_processor.py  # InferProcessor: QAT → std/hardware model
+│   │
+│   ├── diagnostics.py          # Per-layer quant reports, threshold logs, parity sweep
 │   │
 │   ├── emulation/              # Hardware emulation
-│   │   ├── fxp_emu_modules.py  # HLS & TileCNN bit-exact modules
-│   │   │                         #   HLSConv2d, HLSLinear          (sequential)
-│   │   │                         #   TileCNNConv2d, TileCNNLinear  (fused twin)
-│   │   │                         #   TileCNNGAP, TileCNNMaxPool    (hw-accurate)
-│   │   ├── model_introspector.py   # Graph inspection & activation export
-│   │   └── model_transforms.py # Model-to-emulation conversion helpers
+│   │   ├── fxp_emu_modules.py  # Bit-exact TileCNN modules (HardwareConv2d, ...)
+│   │   └── model_introspector.py   # Graph inspection & activation export
 │   │
 │   ├── export/                 # Hardware artifact export
 │   │   └── tilecnn_exporter.py # TileCNNGraphExporter + bit-exact ref rewrite
@@ -103,28 +99,32 @@ FixQuantTool/
 │       ├── common_tools.py     # Metrics, logging helpers
 │       └── pytorch_utils.py    # Optimizer, checkpoint utilities
 │
-├── tools/                      # CLI entry-point scripts
-│   ├── qat_train.py            # Run QAT training
-│   ├── qat_test.py             # Evaluate a QAT model
-│   ├── deploy_eval.py          # Convert QAT → inference & evaluate
-│   │                             #   --model_type emu      (HLS emulation)
-│   │                             #   --model_type tilecnn  (FPGA digital twin)
-│   ├── export_hw_testcases.py  # Export TileCNN binary test artifacts
-│   ├── train.py                # Standard FP training
-│   ├── train_cifar.py          # CIFAR training
-│   ├── ddp_train_hvd.py        # Distributed training (Horovod)
-│   ├── hw_layer_test_gen.py    # Generate per-layer test data
-│   └── print_model_graph.py    # Dump model graph summary
+├── tools/                      # CLI entry-point scripts (all take --model)
+│   ├── qat_train.py            # Run QAT training (--cle, --calib_batches, ...)
+│   ├── qat_test.py             # Evaluate a QAT checkpoint
+│   ├── deploy_eval.py          # Convert QAT → hardware model & evaluate
+│   ├── layer_sensitivity.py    # Per-layer quantization sensitivity probes
+│   ├── export_hw_testcases.py  # Export TileCNN subgraph test artifacts (resnet50)
+│   ├── export_tilecnn_graph.py # Export a full model as a TileCNN graph bundle
+│   ├── export_fixA_refactor_testcases.py  # URAM-refactor test cases (resnet50)
+│   ├── train.py                # Float (non-QAT) training / baseline eval
+│   ├── print_model_graph.py    # Dump model graph summary
+│   └── archive/                # Retired scripts (see archive/README.md)
 │
+├── tests/                      # pytest suite (kernel bit-exactness, QAT flow,
+│                                 # export, golden regression) — run: pytest tests/
 ├── configs/                    # Configuration files
-│   ├── quant_config.yaml       # Layer replacement mapping
+│   ├── quant_config.yaml       # Layer replacement mapping, freeze_bn_delay
 │   └── qconfig_files/          # Saved quantization configs
 │
 ├── docs/                       # Technical documentation
+│   ├── quantization_repo_analysis_and_roadmap.md  # ★ Analysis & roadmap
+│   ├── improvements_2026-07.md # Phase 0-5 rework: what changed and why
+│   ├── baselines.md            # Reproducibility baselines & commands
 │   ├── conv_fused.md           # Conv-BN fusion details
 │   ├── qmodules.md             # Quantized module reference
 │   ├── tqt.md                  # TQT quantizer details
-│   └── tilecnn_exporter_and_digital_twin.md  # ★ Exporter & Digital Twin
+│   └── tilecnn_exporter_and_digital_twin.md  # Exporter & Digital Twin
 │
 ├── graph_handoff_spec.md       # TileCNN Graph Handoff Specification
 ├── scripts/                    # HPC job scripts
@@ -141,40 +141,39 @@ FixQuantTool/
 ```bash
 conda activate Obed_Cuda
 python tools/qat_train.py \
-    --dataset imagenet \
+    --model resnet50 \
     --dataroot /path/to/imagenet \
     --n_epochs 10 \
     --init_lr 1e-5
+
+# MobileNetV2: fold BN + cross-layer equalization first (recommended)
+python tools/qat_train.py --model mobilenet_v2 --cle --n_epochs 10
 ```
 
-### 2. Evaluate with HLS Emulation (matches QAT training)
+Calibration runs on `--calib_batches` batches with an MSE fix-position search;
+TQT thresholds freeze after `--threshold_freeze_frac` of the epochs. Per-epoch
+threshold/frac state is logged to `<save_dir>/logs/quant_thresholds.csv`.
+
+### 2. Evaluate with the TileCNN Digital Twin (bit-identical to FPGA)
 
 ```bash
 python tools/deploy_eval.py \
-    --dataset imagenet \
-    --dataroot /path/to/imagenet \
-    --model_type emu
-```
-
-### 3. Evaluate with TileCNN Digital Twin (bit-identical to FPGA)
-
-```bash
-python tools/deploy_eval.py \
-    --dataset imagenet \
+    --model resnet50 \
     --dataroot /path/to/imagenet \
     --model_type tilecnn
 ```
 
+### 3. Run the test suite
+
+```bash
+python -m pytest tests/            # add -m "not slow" to skip full-MobileNet tests
+```
+
 The digital twin fuses residual additions into the convolution write-back stage and uses hardware-accurate GAP/MaxPool kernels, reproducing the exact integer arithmetic of the TileCNN FPGA accelerator.
 
-**Expected accuracy (ResNet-50, ImageNet-mini, 40 validation batches):**
-
-| Model | Top-1 | Top-5 |
-|---|---|---|
-| HLS Emulation (`emu`) | 69.8% | 90.0% |
-| TileCNN Digital Twin (`tilecnn`) | 69.5% | 89.8% |
-
-The ~0.3% gap is the real rounding difference from fused vs. sequential residual-add arithmetic across 16 ResNet bottleneck blocks.
+Accuracy baselines (per model: float / PTQ / QAT / twin) are tracked in
+[docs/baselines.md](docs/baselines.md). Numbers recorded before the 2026-07
+rework are not comparable (see [docs/improvements_2026-07.md](docs/improvements_2026-07.md)).
 
 ### 4. Export Hardware Test Cases
 
@@ -222,21 +221,17 @@ with open("configs/quant_config.yaml") as f:
 model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
 qat = QatProcessor(model, config)
 qat_model = qat.quantize()
+qat.load_qat_weights("qat_models/resnet50/checkpoint/model_best.pth.tar")
 qat.freeze()
-qat.load_qat_weights("qat_models/checkpoint/resnet50_best.pth.tar")
 
-# ── Option A: HLS sequential emulation (matches QAT training math) ──────
-infer     = InferProcessor(qat_model, config)
-emu_model = infer.convert_to_emu_model()      # pure INT8, sequential
+# Bit-exact INT8 hardware model (Hardware* modules, TileCNN arithmetic)
+infer    = InferProcessor(qat_model, config)
+hw_model = infer.convert_to_hardware_model(backend="tilecnn")   # or "hls"
 
-# ── Option B: TileCNN digital twin (bit-identical to FPGA hardware) ──────
-infer2   = InferProcessor(qat_model, config)
-tc_model = infer2.convert_to_tilecnn_model()  # fused residual-add + hw GAP
-
-# Both accept float32 input and return float32 logits
-tc_model.eval()
+# Accepts float32 input, returns float32 logits (I/O quantizers injected)
+hw_model.eval()
 with torch.no_grad():
-    logits = tc_model(image_tensor)
+    logits = hw_model(image_tensor)
 ```
 
 ### Exporting Hardware Test Artifacts
@@ -245,7 +240,7 @@ with torch.no_grad():
 from fixquant.emulation.model_introspector import StdModelInspector
 from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
 
-inspector = StdModelInspector(emu_model, default_input_frac=5)
+inspector = StdModelInspector(hw_model, default_input_frac=infer.input_frac or 5)
 all_nodes = inspector.topological_order()
 inspector.register_activation_hooks(all_nodes, capture_input=True, capture_output=True)
 
@@ -261,12 +256,16 @@ The exporter automatically rewrites the reference files using TileCNN's fused bi
 
 ## Documentation
 
+- [Repo Analysis & Roadmap](docs/quantization_repo_analysis_and_roadmap.md)
+- [2026-07 Rework (Phases 0–5)](docs/improvements_2026-07.md)
+- [Reproducibility Baselines](docs/baselines.md)
+- [Arrhenius (NAISS) GPU Guide](docs/arrhenius_gpu_guide.md) + [job template](scripts/jobscript_arrhenius.sh)
 - [QAT Training Guide](QAT.md)
 - [Deployment Guide](DEPLOY.md)
 - [Fused Conv-BN](docs/conv_fused.md)
 - [Quantized Modules](docs/qmodules.md)
 - [TQT Quantizer](docs/tqt.md)
-- [TileCNN Exporter & Digital Twin](docs/tilecnn_exporter_and_digital_twin.md) ★ new
+- [TileCNN Exporter & Digital Twin](docs/tilecnn_exporter_and_digital_twin.md)
 - [TileCNN Graph Handoff Specification](graph_handoff_spec.md)
 
 ## License

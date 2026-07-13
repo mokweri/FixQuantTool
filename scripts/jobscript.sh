@@ -1,4 +1,6 @@
 #!/bin/env bash
+# DEPRECATED: targets the retired Alvis system and a deleted entry script
+# (run_dist2.py). Use scripts/jobscript_arrhenius.sh for Arrhenius.
 
 #SBATCH -A NAISS2024-22-1352     # find your project with the "projinfo" command
 #SBATCH -p alvis                 # what partition to use (usually not necessary)

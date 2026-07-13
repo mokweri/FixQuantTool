@@ -1,8 +1,8 @@
 # python
-# File: `tools/gen_resnet18_fc_testdata.py`
+# File: `tools/archive/gen_resnet18_fc_testdata.py`
 from pathlib import Path
 import torchvision.models as tv_models
-import tools.hw_layer_test_gen as gen
+import hw_layer_test_gen as gen  # run from tools/archive/
 
 # Monkeypatch: make calls to resnet50() produce a resnet18 instance
 tv_models.resnet50 = lambda weights=None: tv_models.resnet18(weights=None)

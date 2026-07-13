@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import math
-from fixquant.quantization.fix_ops import fix_quantize_tensor
+from fixquant.quantization.fix_ops import fix_quantize_tensor, find_fix_pos
 
 
 class FakeQuantizer(nn.Module):
@@ -79,6 +79,17 @@ class TQTQuantizer(FakeQuantizer):
         self.log_threshold = nn.Parameter(torch.tensor([0.0]))
         self.register_buffer('warmup_enabled', torch.tensor([1], dtype=torch.uint8))
 
+        # Known analytic bounds of the tensor being quantized, e.g. (0.0, 6.0)
+        # for a conv output that only feeds a ReLU6. Used to initialise the
+        # threshold and to clip calibration samples to the useful range.
+        self.bounded_range = None
+
+        # Transient calibration state (not part of the state_dict)
+        self._calib_samples = None
+        self._calib_n = 0
+        self._calib_max_samples = 1 << 17
+        self._calib_per_batch = 8192
+
         self._forward_fn = self._quantize_with_warmup
 
     def _init_threshold(self, x):
@@ -148,7 +159,6 @@ class TQTQuantizer(FakeQuantizer):
         return torch.tensor([th], dtype=x.dtype, device=x.device)
 
     def _forward_pass_input(self, x, log_threshold, domain, method):
-        print("Just to let you know, the quantizer is pybassed here")
         return x
 
     def _quantize(self, x, log_threshold, domain, method):
@@ -157,13 +167,73 @@ class TQTQuantizer(FakeQuantizer):
         domain = domain.to(device)
         return self.quantize_fn_cls.apply(x, log_threshold, domain, method)
 
+    def _warmup_init(self, x, log_threshold):
+        """One-shot threshold initialisation on the first observed tensor."""
+        self.warmup_enabled[0] = 0
+        if self.bounded_range is not None and self.bounded_range[1] is not None:
+            th = torch.tensor([float(self.bounded_range[1])], dtype=x.dtype, device=x.device)
+        else:
+            th = self._init_threshold(x)
+        log_threshold.data[0] = torch.log2(th)[0]
+
     def _quantize_with_warmup(self, x, log_threshold, domain, method):
-        self.disable_warmup()
-        log_threshold.data[0] = torch.log2(self._init_threshold(x))[0]
+        self._warmup_init(x, log_threshold)
+        self._forward_fn = self._quantize
         return self._quantize(x, log_threshold, domain, method)
 
     def forward(self, x):
         return self._forward_fn(x, self.log_threshold, self.domain, self.method)
+
+    # ------------------------------------------------------------------
+    # Calibration: collect a value reservoir over N batches, then pick the
+    # fractional position by the MSE search in fix_ops.find_fix_pos.
+    # ------------------------------------------------------------------
+    def start_calibration(self, max_samples=1 << 17, per_batch=8192):
+        self._calib_samples = []
+        self._calib_n = 0
+        self._calib_max_samples = max_samples
+        self._calib_per_batch = per_batch
+        self._forward_fn = self._calib_forward
+
+    def _calib_forward(self, x, log_threshold, domain, method):
+        if self.warmup_enabled[0] == 1:
+            self._warmup_init(x, log_threshold)
+        self._collect(x)
+        return self._quantize(x, log_threshold, domain, method)
+
+    @torch.no_grad()
+    def _collect(self, x):
+        flat = x.detach().reshape(-1)
+        if self.bounded_range is not None:
+            lo, hi = self.bounded_range
+            flat = flat.clamp(min=lo, max=hi)
+        k = min(flat.numel(), self._calib_per_batch)
+        if k < flat.numel():
+            idx = torch.randint(0, flat.numel(), (k,), device=flat.device)
+            flat = flat[idx]
+        self._calib_samples.append(flat.float().cpu())
+        self._calib_n += k
+        if self._calib_n > self._calib_max_samples:
+            data = torch.cat(self._calib_samples)
+            keep = torch.randperm(data.numel())[: self._calib_max_samples // 2]
+            self._calib_samples = [data[keep]]
+            self._calib_n = self._calib_samples[0].numel()
+
+    def finish_calibration(self, scope=5):
+        """Set the threshold from the collected reservoir; returns the frac bits."""
+        if not self._calib_samples:
+            self._forward_fn = self._quantize
+            return self.export_quant_info()[1]
+        data = torch.cat(self._calib_samples)
+        bitwidth = int(self.bitwidth.item())
+        frac = find_fix_pos(data, bitwidth, scope, self.method)
+        # export_quant_info: frac = bitwidth - 1 - ceil(log2 t)  =>  log2 t = bitwidth - 1 - frac
+        self.log_threshold.data[0] = float(bitwidth - 1 - frac)
+        self._calib_samples = None
+        self._calib_n = 0
+        self.warmup_enabled[0] = 0
+        self._forward_fn = self._quantize
+        return frac
 
     def enable_warmup(self, enabled=True):
         self.warmup_enabled[0] = 1 if enabled else 0
@@ -172,6 +242,16 @@ class TQTQuantizer(FakeQuantizer):
 
     def disable_warmup(self):
         return self.enable_warmup(False)
+
+    def enable_quant(self, enabled=True):
+        """Toggle quantization on/off (off = float passthrough). Used by the
+        layer-sensitivity tool."""
+        self.quant_enabled[0] = 1 if enabled else 0
+        if enabled:
+            self._forward_fn = self._quantize_with_warmup if self.warmup_enabled[0] == 1 else self._quantize
+        else:
+            self._forward_fn = self._forward_pass_input
+        return self
 
     def freeze_quant(self, frozen=True):
         self.log_threshold.requires_grad = (not frozen)

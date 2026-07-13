@@ -1,4 +1,8 @@
 fuse_conv_bn: {}
+
+# Training steps (from the start of QAT) after which BatchNorm folding is
+# frozen inside FusedConvBN. null = never auto-freeze (freeze explicitly).
+freeze_bn_delay: 3000
 quantize_layers:
   torch.nn.Conv2d: QuantizedConv2d
   torch.nn.Linear: QuantizedLinear

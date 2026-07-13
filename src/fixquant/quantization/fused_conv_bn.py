@@ -4,9 +4,12 @@ from torch.nn import functional as F
 
 from fixquant.quantization.tqt_quantizer import TQTQuantizer
 
-# Number of steps before freezing the batch norm running average and variance
-# change if you change dataset
-FREEZE_BN_DELAY_DEFAULT = 6000 #93200 #200000
+# Number of training steps before freezing the batch norm running average and
+# variance. Counted from fusion time (num_batches_tracked is reset when the
+# module is wrapped), so pretrained checkpoints do not trigger an early freeze.
+# Set to None to disable automatic freezing (freeze explicitly via
+# QatProcessor.freeze()). Override per run with quant_config.yaml: freeze_bn_delay.
+FREEZE_BN_DELAY_DEFAULT = 6000
 
 
 _conv_meta = {'conv1d': (1, F.conv1d),
@@ -24,6 +27,22 @@ class FusedConvBN(nn.Module):
         self.bn_mod = bn_mod
         self.freeze_bn_delay = freeze_bn_delay
         self.frozen = False
+
+        # Pretrained checkpoints carry a large num_batches_tracked (e.g. 736k for
+        # torchvision models), which would trip the freeze_bn_delay comparison on
+        # the very first training batch. The freeze delay is defined relative to
+        # the start of QAT, so restart the counter at fusion time.
+        with torch.no_grad():
+            self.bn_mod.num_batches_tracked.zero_()
+
+        # Guarantee the conv has a bias Parameter *before* any optimizer is
+        # built, so freeze() can fold the BN offset into it in place instead of
+        # creating a new Parameter the optimizer doesn't own.
+        if self.conv_mod.bias is None:
+            self.conv_mod.bias = nn.Parameter(
+                torch.zeros(self.conv_mod.weight.shape[0],
+                            dtype=self.conv_mod.weight.dtype,
+                            device=self.conv_mod.weight.device))
 
         self.weight_quantizer = TQTQuantizer(bitwidth=8, tensor_type='weight')
         self.bias_quantizer = TQTQuantizer(bitwidth=8, tensor_type='weight')
@@ -179,8 +198,7 @@ class FusedConvBN(nn.Module):
                 momentum = 1. / float(self.bn_mod.num_batches_tracked)
             self.bn_mod.running_mean.mul_(1 - momentum).add_(momentum * biased_batch_mean)
             self.bn_mod.running_var.mul_(1 - momentum).add_(momentum * corrected_var)
-        # print(self.bn_mod.num_batches_tracked)
-        if self.bn_mod.num_batches_tracked > self.freeze_bn_delay:
+        if self.freeze_bn_delay is not None and self.bn_mod.num_batches_tracked > self.freeze_bn_delay:
             self.freeze()
 
         return batch_mean, batch_var
@@ -208,16 +226,13 @@ class FusedConvBN(nn.Module):
         w, b, gamma, beta = self._get_all_parameters()
         with torch.no_grad():
             recip_sigma_running = torch.rsqrt(self.bn_mod.running_var + self.bn_mod.eps)
-            # w.mul_(self.broadcast_correction_weight(gamma * recip_sigma_running))
-
-            w = self.conv_mod.weight.detach().clone()  # Detach to avoid in-place modification error
-            w *= self.broadcast_correction_weight(gamma * recip_sigma_running)  # Modify weight
-            self.conv_mod.weight = nn.Parameter(w)
-
             corrected_mean = self.bn_mod.running_mean - (b if b is not None else 0)
             bias_corrected = beta - gamma * corrected_mean * recip_sigma_running
+            # Fold in place so the Parameter objects survive: an optimizer built
+            # before the freeze keeps updating these weights afterwards.
+            self.conv_mod.weight.data.mul_(self.broadcast_correction_weight(gamma * recip_sigma_running))
             if b is not None:
-                b.copy_(bias_corrected)
+                self.conv_mod.bias.data.copy_(bias_corrected)
             else:
                 self.conv_mod.bias = nn.Parameter(bias_corrected)
         self.frozen = True
@@ -231,8 +246,8 @@ class FusedConvBN(nn.Module):
         return w, b, gamma, beta
 
     @classmethod
-    def from_float(cls, conv, bn):
-        fused_convbn = cls(conv, bn, freeze_bn_delay=FREEZE_BN_DELAY_DEFAULT)
+    def from_float(cls, conv, bn, freeze_bn_delay=FREEZE_BN_DELAY_DEFAULT):
+        fused_convbn = cls(conv, bn, freeze_bn_delay=freeze_bn_delay)
         return fused_convbn
 
     def state_dict(self, *args, prefix='', **kwargs):
@@ -257,7 +272,18 @@ class FusedConvBN(nn.Module):
         conv_state_dict = {k[len(conv_prefix):]: v for k, v in state_dict.items() if k.startswith(conv_prefix)}
         if 'bias' in conv_state_dict and self.conv_mod.bias is None:
             self.conv_mod.bias = nn.Parameter(torch.empty_like(conv_state_dict['bias']))
-            
+
+        # Pre-rework checkpoints omit conv_mod.bias for bias-free convs (the zero
+        # bias Parameter is created at fusion only in the current code). Inject
+        # the model's own zero bias into the shared state dict so both this manual
+        # load and PyTorch's outer recursive load into conv_mod find it (otherwise
+        # the recursion reports it missing). For an unfrozen module the BN offset
+        # is folded into this bias at freeze(), reproducing the old result.
+        bias_key = conv_prefix + 'bias'
+        if bias_key not in state_dict and self.conv_mod.bias is not None:
+            state_dict[bias_key] = self.conv_mod.bias.data
+            conv_state_dict['bias'] = self.conv_mod.bias.data
+
         self.conv_mod._load_from_state_dict(conv_state_dict, '', local_metadata, strict, missing_keys, unexpected_keys,
                                             error_msgs)
 
@@ -281,6 +307,7 @@ class FusedConvBN(nn.Module):
 
     def to_qconv(self):
         assert self.frozen, 'The BN module is not frozen'
+        from fixquant.quantization.qat_modules import QuantizedConv2d
         conv = QuantizedConv2d(
             in_channels=self.conv_mod.in_channels,
             out_channels=self.conv_mod.out_channels,

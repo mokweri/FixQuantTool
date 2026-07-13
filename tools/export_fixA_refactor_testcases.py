@@ -138,6 +138,8 @@ def main():
         description="Export URAM-refactor target single-conv hardware test cases"
     )
     parser.add_argument("--checkpoint",   default=None, help="Path to QAT checkpoint .pth.tar")
+    parser.add_argument("--cle", action="store_true", default=False,
+                        help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
     parser.add_argument("--quant_config", default=None, help="Path to quant_config.yaml")
     parser.add_argument("--image",        default=None, help="Path to test image (JPEG/PNG)")
     parser.add_argument("--out_dir",      default=None, help="Output base directory")
@@ -157,7 +159,7 @@ def main():
     logger = logging.getLogger("export_uram_refactor_testcases")
 
     REPO_ROOT    = Path(__file__).resolve().parents[1]
-    checkpoint   = Path(args.checkpoint)   if args.checkpoint   else REPO_ROOT / "qat_models/checkpoint/resnet50_best.pth.tar"
+    checkpoint   = Path(args.checkpoint)   if args.checkpoint   else REPO_ROOT / "qat_models/resnet50/checkpoint/model_best.pth.tar"
     quant_config = Path(args.quant_config) if args.quant_config else REPO_ROOT / "configs/quant_config.yaml"
     image_path   = Path(args.image)        if args.image        else REPO_ROOT / "assets/new.JPEG"
     out_dir      = Path(args.out_dir)      if args.out_dir      else REPO_ROOT / "outputs/phase3_testcases"
@@ -171,21 +173,26 @@ def main():
 
     logger.info("Building ResNet-50 QAT model…")
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
-    qat_proc.freeze()
 
     if checkpoint.exists():
         logger.info(f"Loading checkpoint: {checkpoint}")
         qat_proc.load_qat_weights(str(checkpoint))
     else:
         logger.warning(f"Checkpoint not found at {checkpoint} — using default (untrained) weights")
+    qat_proc.freeze()
 
     logger.info("Converting to HLS emulation model…")
     infer_proc = InferProcessor(model, config)
     emu_model  = infer_proc.convert_to_hardware_model()
 
-    inspector = StdModelInspector(emu_model, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(emu_model,
+                                  default_input_frac=infer_proc.input_frac or 5,
+                                  logger=logger)
 
     # ------------------------------------------------------------------
     # One forward pass with hooks to capture all activations / shapes

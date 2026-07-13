@@ -35,14 +35,13 @@ parser.add_argument("--device", type=torch.device, default="cuda")
 parser.add_argument('--gpus', type=str, default='0',
                     help='gpu ids to be used for training, seperated by commas')
 
-# Horovod Settings
-parser.add_argument('--fp16-allreduce', action='store_true', default=False,
-                    help='use fp16 compression during allreduce')
-parser.add_argument('--independent_distributed_sampling',default=False,
-                    help='independent_distributed_sampling')
-parser.add_argument('--dynamic_batch_size',default=1, help='dynamic_batch_size')
-
-# Misc. options
+# Model / misc. options
+parser.add_argument("--model", type=str, default="vgg16",
+                    help="Model to train (resnet18|resnet50|vgg16|mobilenet_v2)")
+parser.add_argument("--pretrained", action="store_true", default=False,
+                    help="Start from torchvision pretrained weights.")
+parser.add_argument("--eval_only", action="store_true", default=False,
+                    help="Skip training and only run validation.")
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
                     default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/data"),)
@@ -57,24 +56,32 @@ parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
 """
-    This script is used to train models on various datasets such as CIFAR10, CIFAR100, and ImageNet. 
+    Float (non-QAT) training / evaluation. Used to establish the float
+    baselines in docs/baselines.md.
 """
 
 if __name__ == '__main__':
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
+    random.seed(args.manual_seed)
+    np.random.seed(args.manual_seed)
+    torch.manual_seed(args.manual_seed)
+
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
 
-    model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=args.pretrained)
 
-    run_config = RunConfig(**args.__dict__,is_qat=False)
+    args.save_dir = os.path.join(args.save_dir, args.model)
+
+    run_config = RunConfig(**args.__dict__, is_qat=False, image_size=224)
     run_config.print_config()
 
     run_manager = RunManager(args.save_dir, model, run_config)
-    # with torch.autograd.set_detect_anomaly(True):
-    #     run_manager.train()
+    if not args.eval_only:
+        run_manager.train()
 
     run_manager.validate(0)
 

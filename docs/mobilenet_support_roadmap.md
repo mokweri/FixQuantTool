@@ -1,5 +1,25 @@
 # MobileNet Support Roadmap (Fixed-Point Emulation & QAT)
 
+> **Status update (2026-07, see `improvements_2026-07.md`):** Phases 1–2 below
+> are implemented, in places differently from the original plan:
+>
+> - **Depthwise conv** — supported end to end: QAT (`FusedConvBN`/
+>   `QuantizedConv2d` pass `groups` through), `HardwareConv2d`, the exporter
+>   reference kernels, and `graph.json` (spec v1.1). Tested in
+>   `tests/test_qat_flow.py` / `tests/test_export.py`.
+> - **ReLU6** — no separate `QReLU6` module was needed: `ActRangePass` bounds
+>   the producing conv's activation quantizer to [0, 6], `HardwareRelu6`
+>   clamps at `min(127, 6·2^frac)`, and the exporter emits a true `relu6`
+>   post-op. Alternatively `--cle` folds BN, replaces ReLU6 with ReLU and
+>   equalizes weights (recommended for MobileNetV2).
+> - **Functional `adaptive_avg_pool2d`** (torchvision MobileNetV2) — handled
+>   by `ReplaceFunctionalPoolPass`.
+> - **QAT stability** — the accuracy decay had a training-bug root cause (BN
+>   freeze + optimizer detachment), fixed in `fused_conv_bn.py`.
+> - **Still open:** Phase 3 (MobileNetV3: `QElementwiseMul`, Hardswish/
+>   Hardsigmoid, SE blocks) and hardware-side (HLS) implementation of the
+>   spec v1.1 grouped-conv/relu6 extensions.
+
 ## 1. Executive Summary
 
 The `FixQuantTool` currently provides robust Quantization-Aware Training (QAT) and bit-exact fixed-point inference emulation for ResNet-style architectures. While the ultimate hardware exporter (`TileCNN`) has its own limitations, enabling the **Fixed-Point Quantization and Emulation** pass for the MobileNet family (MobileNetV1, V2, and V3) requires specific developments in our QAT library, FX graph processing, and bit-exact emulation layers.

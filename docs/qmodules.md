@@ -16,10 +16,9 @@ By integrating fake quantization through the TQT quantizer, it simulates low-pre
   - [QuantizedLinear](#quantizedlinear)
   - [Pooling Layers](#pooling-layers)
     - [QMaxPool2D](#qmaxpool2d)
-    - [QAvgPool2d](#qavgpool2d)
     - [QAdaptiveAvgPool2d](#qadaptiveavgpool2d)
   - [Element-wise Addition](#qelementwiseadd)
-  - [QuantStub Functions and Classes](#quantstub-functions-and-classes)
+  - [QuantStubC](#quantstubc)
 - [Usage Examples](#usage-examples)
 - [Exporting Quantization Information](#exporting-quantization-information)
 - [State Management](#state-management)
@@ -31,7 +30,10 @@ This module implements a series of quantized layers that extend PyTorch’s buil
 
 ## Setup
 
-Make sure that the `TQTQuantizer` class (from the `quantization.tqt` package) is available in your environment.
+All classes live in `src/fixquant/quantization/qat_modules.py`; the quantizer
+they embed is `fixquant.quantization.tqt_quantizer.TQTQuantizer` (see
+[tqt.md](tqt.md)). Modules are normally created for you by
+`QatProcessor.quantize()` — direct use is only needed for experiments.
 
 ## Module Components
 
@@ -80,18 +82,11 @@ A quantized version of `nn.MaxPool2d` that applies activation quantization after
   - `from_float(mod)`: Converts a standard max pooling layer into a quantized layer.
   - `export_quant_info()`: Exports quantization info for activations.
 
-#### QAvgPool2d
-
-A quantized version of average pooling (based on `nn.AvgPool2d`).
-
-- **Key Methods:**
-  - `forward(input)`: Applies average pooling with subsequent quantization.
-  - `from_float(mod, qconfig)`: Converts a floating point average pooling layer. (The `qconfig` parameter is available for extended configurations.)
-  - `export_quant_info()`: Exports activation quantization details.
-
 #### QAdaptiveAvgPool2d
 
-A quantized version of `AdaptiveAvgPool2d`.
+A quantized version of `AdaptiveAvgPool2d`. Also substituted for *functional*
+`F.adaptive_avg_pool2d` calls (used by torchvision MobileNetV2) by
+`ReplaceFunctionalPoolPass`, so the GAP output always carries a quantizer.
 
 - **Key Methods:**
   - `forward(input)`: Performs adaptive average pooling then applies quantization.
@@ -100,25 +95,17 @@ A quantized version of `AdaptiveAvgPool2d`.
 
 ### QElementwiseAdd
 
-Implements element-wise addition followed by activation quantization.
+Residual addition followed by activation quantization. Since 2026-07 it models
+the hardware alignment: when `align_inputs=True` (default), both inputs are
+first rounded onto the *output* frac grid (STE, no clamp — the hardware aligns
+in int32 and only saturates after the add), matching the TileCNN residual
+`_signed_shift`.
 
 - **Key Methods:**
-  - `forward(x1, x2)`: Computes the sum of two tensors and applies quantization.
+  - `forward(x1, x2)`: Aligns both inputs to the output grid, sums, then quantizes.
   - `export_quant_info()`: Exports quantization parameters for the output.
 
-### QuantStub Functions and Classes
-
-#### QuantStubF
-
-A functional quantization stub that creates a temporary TQTQuantizer instance to quantize an input tensor.
-
-```python
-def QuantStubF(x):
-    quantizer = TQTQuantizer(bitwidth=8, tensor_type='act')
-    return quantizer.forward(x)
-```
-
-#### QuantStubC
+### QuantStubC
 
 A module-based quantization stub.
 
@@ -138,7 +125,7 @@ Below is an example demonstrating how to convert a floating point convolution la
 ```python
 import torch
 import torch.nn as nn
-from your_module import QuantizedConv2d  # Replace 'your_module' with the actual module name
+from fixquant.quantization.qat_modules import QuantizedConv2d
 
 # Define a standard (floating point) convolution layer
 float_conv = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)

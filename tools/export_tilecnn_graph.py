@@ -24,7 +24,11 @@ def preprocess_image(image_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Export TileCNN standard model graph and params")
+    parser.add_argument("--model", default="resnet50",
+                        help="Model to export (resnet18|resnet50|vgg16|mobilenet_v2)")
     parser.add_argument("--checkpoint", default=None, help="Path to best QAT checkpoint")
+    parser.add_argument("--cle", action="store_true", default=False,
+                        help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
     parser.add_argument("--quant_config", default=None, help="Path to quant_config.yaml")
     parser.add_argument("--image", default=None, help="Path to test image for activation export")
     parser.add_argument("--out_dir", default=None, help="Output directory for TileCNN graph")
@@ -35,33 +39,40 @@ def main():
 
     # Resolve repo root as parent of this file's directory
     REPO_ROOT = Path(__file__).resolve().parents[1]
-    
-    checkpoint = Path(args.checkpoint) if args.checkpoint else (REPO_ROOT / "qat_models/checkpoint/resnet50_best.pth.tar")
+
+    checkpoint = Path(args.checkpoint) if args.checkpoint else (
+        REPO_ROOT / f"qat_models/{args.model}/checkpoint/model_best.pth.tar")
     quant_config = Path(args.quant_config) if args.quant_config else (REPO_ROOT / "configs/quant_config.yaml")
     image_path = Path(args.image) if args.image else (REPO_ROOT / "assets/new.JPEG")
-    out_dir = Path(args.out_dir) if args.out_dir else (REPO_ROOT / "outputs/resnet50_int8_tilecnn")
+    out_dir = Path(args.out_dir) if args.out_dir else (REPO_ROOT / f"outputs/{args.model}_int8_tilecnn")
 
     logger.info("Loading quantization config...")
     with open(quant_config, "r") as f:
         config = yaml.safe_load(f)
 
     logger.info("Building and quantizing the model...")
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=True)
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
-    qat_proc.freeze()
-    
+
     if checkpoint.exists():
         logger.info(f"Loading checkpoint from {checkpoint}")
         qat_proc.load_qat_weights(str(checkpoint))
     else:
         logger.warning(f"Checkpoint not found at {checkpoint}. Exporting with default weights!")
+    qat_proc.freeze()
 
     logger.info("Converting to bit-exact emulation model...")
     infer_proc = InferProcessor(model, config)
     tilecnn_model = infer_proc.convert_to_hardware_model()
 
-    inspector = StdModelInspector(tilecnn_model, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(tilecnn_model,
+                                  default_input_frac=infer_proc.input_frac or 5,
+                                  logger=logger)
 
     # Prepare input
     if image_path.exists():
@@ -77,8 +88,8 @@ def main():
     logger.info(f"Exporting TileCNN artifacts to {out_dir}...")
     exporter = TileCNNGraphExporter(
         inspector=inspector,
-        model_name="resnet50",
-        default_input_frac=5,
+        model_name=args.model,
+        default_input_frac=infer_proc.input_frac or 5,
         logger=logger
     )
     exporter.export(str(out_dir))

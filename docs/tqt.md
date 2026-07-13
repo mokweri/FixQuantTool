@@ -64,12 +64,35 @@ where symmetric quantization is assumed (zero_point = 0) and scaling is performe
 - For **activations**, it uses a KL-divergence based approach.
 - `_forward_pass_input(x, log_threshold, domain, method)`: A fallback that passes the input unchanged (used when quantization is disabled).
 - `_quantize(x, log_threshold, domain, method)`: Applies the quantization operation using the `TQTQuantize` autograd function.
-- `_quantize_with_warmup(x, log_threshold, domain, method)`: Calibrates the threshold during warmup before quantization.
+- `_quantize_with_warmup(x, log_threshold, domain, method)`: One-shot threshold initialization on the first observed tensor, then quantizes.
 - `forward(x)`: Calls the current forward function to quantize the input.
 - `enable_warmup(enabled=True)` / `disable_warmup()`: Enable or disable the warmup phase.
-- `freeze_quant(frozen=True)` / `unfreeze_quant()`: Freeze or unfreeze updates to the learned threshold.
+- `enable_quant(enabled=True)`: Toggle quantization on/off (off = float passthrough). Used by `tools/layer_sensitivity.py` for one-layer-at-a-time probes.
+- `freeze_quant(frozen=True)` / `unfreeze_quant()`: Freeze or unfreeze updates to the learned threshold. `RunManager` freezes all thresholds after `threshold_freeze_frac` of the QAT epochs so exported frac bits are stable.
 - `export_quant_info()`: Exports the quantization information as a list `[bitwidth, fp]`, where `fp = bitwidth - 1 - ceil(log_threshold)`.
 - `_save_to_state_dict(...)` and `_load_from_state_dict(...)`: Manage saving and restoring the quantizer state while handling custom buffers.
+
+#### Multi-batch calibration (added 2026-07)
+
+`QatProcessor.calibrate(loader, device, max_batches, scope)` drives these:
+
+- `start_calibration(max_samples, per_batch)`: switches the forward into
+  collection mode — each batch contributes a random subsample of values to a
+  bounded reservoir while quantization continues with the current threshold.
+- `finish_calibration(scope=5)`: picks the fractional position by the MSE
+  search in `fix_ops.find_fix_pos` (the Vitis "diffs" method) over the whole
+  reservoir, sets `log_threshold = bitwidth - 1 - frac` (an exact power of 2),
+  and returns the frac. Replaces the old behavior where only the first batch
+  mattered.
+
+#### Bounded activation ranges (added 2026-07)
+
+`bounded_range` (e.g. `(0.0, 6.0)`) declares the analytic output bounds of the
+tensor being quantized. Set by `ActRangePass` for conv outputs whose only
+consumer is a ReLU6 (or `(0, None)` for ReLU). Warmup then initializes the
+threshold at the bound and calibration samples are clipped to it, so the
+quantizer spends its range on values that survive the activation instead of the
+raw pre-activation distribution.
 
 ### TQTQuantize
 
@@ -98,7 +121,7 @@ Below is a simple example demonstrating how to use the TQT quantizer:
 
 ```python
 import torch
-from your_module_file import TQTQuantizer  # Replace with the actual module name/path
+from fixquant.quantization.tqt_quantizer import TQTQuantizer
 
 # Instantiate a TQTQuantizer for weight quantization
 tqtq = TQTQuantizer(bitwidth=8, tensor_type='weight')

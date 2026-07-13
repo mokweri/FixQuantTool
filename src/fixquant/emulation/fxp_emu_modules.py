@@ -25,64 +25,6 @@ def sign_extend(value, src_bits, dst_bits=32):
     return (value ^ sign) - sign                 # textbook sign-extension
 
 
-class FXPConv2dTorch(nn.Module):
-    """INT8-in / INT8-out Conv2d that re-uses PyTorch’s quantised kernel."""
-    def __init__(self, weight_int8, bias_int8=None,
-                 stride=1, padding=1, dilation=1, groups=1,
-                 frac_din=7, frac_w=7, frac_b=7, frac_out=7,
-                 relu=True):
-        super().__init__()
-
-        self.scale_in  = 2.0 ** (-frac_din)
-        self.scale_w   = 2.0 ** (-frac_w)
-        self.scale_out = 2.0 ** (-frac_out)
-        self.z_act  = 128                     # QUInt8 [0…255]
-        self.z_wt   = 0                       # QInt8
-        self.z_out  = 128
-
-        self.register_buffer("w_int8", weight_int8.contiguous())
-        w_q = torch.quantize_per_tensor(weight_int8.float()*self.scale_w,
-                                        scale=self.scale_w, zero_point=self.z_wt,
-                                        dtype=torch.qint8)
-
-        if bias_int8 is None:
-            bias_int8 = torch.zeros(weight_int8.size(0), dtype=torch.int8)
-        self.register_buffer("bias_int8", bias_int8.contiguous())
-        bias_fp32 = bias_int8.float() * (2.0**(-frac_b))
-
-        stride   = stride   if isinstance(stride,   tuple) else (stride,   stride)
-        padding  = padding  if isinstance(padding,  tuple) else (padding,  padding)
-        dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
-
-        self.packed_w = torch.ops.quantized.conv2d_prepack(
-                            w_q, bias_fp32, stride, padding, dilation, groups)
-        self.relu = relu
-
-    def forward(self, x_int8: torch.Tensor) -> torch.Tensor:
-        assert x_int8.dtype == torch.int8
-        x_q = torch.quantize_per_tensor(x_int8.float()*self.scale_in,
-                                        scale=self.scale_in, zero_point=self.z_act,
-                                        dtype=torch.quint8)
-        y_q = torch.ops.quantized.conv2d(x_q, self.packed_w,
-                                         self.scale_out, self.z_out)
-        y_i8 = (y_q.int_repr().to(torch.int16) - self.z_out).to(torch.int8)
-        return torch.clamp_min(y_i8, 0) if self.relu else y_i8
-
-
-class HLSMaxPool2D(torch.nn.MaxPool2d):
-    def forward(self, x_int8):
-        assert x_int8.dtype == torch.int8
-        x_f = x_int8.float()
-        y_f = super().forward(x_f)
-        return y_f.to(torch.int8)
-
-class HLSAdaptiveAvgPool2d(torch.nn.AdaptiveAvgPool2d):
-    def forward(self, x_int8):
-        assert x_int8.dtype == torch.int8
-        x_f = x_int8.float()
-        y_f = super().forward(x_f)
-        return torch.round(y_f).to(torch.int8)
-
 class HardwareElementwiseAdd(torch.nn.Module):
     def __init__(self, frac_in1=5, frac_in2=5, frac_out=5):
         super().__init__()
@@ -92,21 +34,10 @@ class HardwareElementwiseAdd(torch.nn.Module):
         
     def forward(self, x1, x2):
         assert x1.dtype == torch.int8 and x2.dtype == torch.int8
-        y1 = x1.to(torch.int32)
-        y2 = x2.to(torch.int32)
-        
-        # Align y1 to fout
-        if self.f1 > self.fout:
-            y1 = (y1 + (1 << (self.f1 - self.fout - 1))) >> (self.f1 - self.fout)
-        elif self.f1 < self.fout:
-            y1 = y1 << (self.fout - self.f1)
-            
-        # Align y2 to fout
-        if self.f2 > self.fout:
-            y2 = (y2 + (1 << (self.f2 - self.fout - 1))) >> (self.f2 - self.fout)
-        elif self.f2 < self.fout:
-            y2 = y2 << (self.fout - self.f2)
-            
+        # Align both inputs to fout with the same rounding shift the TileCNN
+        # residual path uses (_signed_shift), then add and saturate.
+        y1 = _tc_signed_shift(x1, self.fout - self.f1)
+        y2 = _tc_signed_shift(x2, self.fout - self.f2)
         y = y1 + y2
         return sat_int(y, 8).to(torch.int8)
 
@@ -178,8 +109,8 @@ class HardwareConv2d(torch.nn.Module):
     """
     Bit-exact digital-twin of the TileCNN conv2d hardware kernel.
 
-    Reproduces the two-step rounding used in the HLS EMIT_LOOP:
-        s1  = (acc >> (shift-1)) + 1
+    Reproduces the two-step round-half-up used in the HLS EMIT_LOOP:
+        s1  = (acc >> (shift-1))
         out = (s1 + bias_adj + 1) >> 1
         out = clamp(out, -128, 127)
 
@@ -265,7 +196,10 @@ class HardwareConv2d(torch.nn.Module):
         # 1) Int32 Convolution
         acc = self._conv_int(x_int8)   # (N, C_out, H_out * W_out)
 
-        # 2) First shift
+        # 2) First shift to the (out_frac+1) scale — truncate only. The single
+        #    round-half-up +1 is applied in the second shift below. (An extra +1
+        #    here added a constant +0.5/layer output bias; removed 2026-07 to
+        #    match the corrected HLS EMIT_LOOP.)
         shift_out = self.fw + self.fin - self.fout
         if shift_out > 0:
             s1 = (acc >> (shift_out - 1))

@@ -25,7 +25,11 @@ def preprocess_image(image_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Print and dump standard model graph details")
+    parser.add_argument("--model", default="resnet50",
+                        help="Model to inspect (resnet18|resnet50|vgg16|mobilenet_v2)")
     parser.add_argument("--checkpoint", default=None)
+    parser.add_argument("--cle", action="store_true", default=False,
+                        help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
     parser.add_argument("--quant_config", default=None)
     parser.add_argument("--image", default=None)
     parser.add_argument("--out_txt", default=None)
@@ -39,11 +43,12 @@ def main():
     # Resolve repo root as parent of this file's directory
     REPO_ROOT = Path(__file__).resolve().parents[1]
     # Defaults
-    checkpoint = Path(args.checkpoint) if args.checkpoint else (REPO_ROOT / "qat_models/checkpoint/resnet50_best.pth.tar")
+    checkpoint = Path(args.checkpoint) if args.checkpoint else (
+        REPO_ROOT / f"qat_models/{args.model}/checkpoint/model_best.pth.tar")
     quant_config = Path(args.quant_config) if args.quant_config else (REPO_ROOT / "configs/quant_config.yaml")
     image_path = Path(args.image) if args.image else (REPO_ROOT / "assets/new.JPEG")
-    out_txt = Path(args.out_txt) if args.out_txt else (REPO_ROOT / "outputs/hw_data_files/model_graph.txt")
-    out_json = Path(args.out_json) if args.out_json else (REPO_ROOT / "outputs/hw_data_files/model_graph.json")
+    out_txt = Path(args.out_txt) if args.out_txt else (REPO_ROOT / f"outputs/{args.model}_model_graph.txt")
+    out_json = Path(args.out_json) if args.out_json else (REPO_ROOT / f"outputs/{args.model}_model_graph.json")
 
     # Ensure output dirs
     out_txt.parent.mkdir(parents=True, exist_ok=True)
@@ -53,17 +58,25 @@ def main():
     with open(quant_config, "r") as f:
         config = yaml.safe_load(f)
 
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=True)
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
+    if checkpoint.exists():
+        qat_proc.load_qat_weights(str(checkpoint))
+    else:
+        logger.warning(f"Checkpoint not found at {checkpoint}; using default weights.")
     qat_proc.freeze()
-    qat_proc.load_qat_weights(str(checkpoint))
 
     infer_proc = InferProcessor(model, config)
-    # stdm = infer_proc.convert_to_std_model()
     hw_model = infer_proc.convert_to_hardware_model()
 
-    inspector = StdModelInspector(hw_model, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(hw_model,
+                                  default_input_frac=infer_proc.input_frac or 5,
+                                  logger=logger)
 
     # Print a simple ordered list of Conv/Linear layers for quick selection
     ordered_layers = inspector.topological_order()

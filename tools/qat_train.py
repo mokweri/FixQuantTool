@@ -32,7 +32,9 @@ parser.add_argument('--init_lr', '--learning-rate',
 parser.add_argument('--quantizer_lr',
                     default=1e-2, type=float, help='Initial learning rate of quantizer.')
 parser.add_argument('--quantizer_lr_decay',
-                    default=0.5, type=int, help='Learning rate decay ratio of quantizer.')
+                    default=0.5, type=float, help='Learning rate decay ratio of quantizer.')
+parser.add_argument('--threshold_freeze_frac', default=0.7, type=float,
+                    help='Fraction of epochs after which TQT thresholds are frozen.')
 
 parser.add_argument('--momentum',
                     default=0.9, type=float, metavar='M', help='momentum')
@@ -59,6 +61,19 @@ parser.add_argument('--independent_distributed_sampling', default=False,
 parser.add_argument('--dynamic_batch_size', default=1,
                     help='dynamic_batch_size')
 
+# Model / quantization options
+parser.add_argument("--model", type=str, default="mobilenet_v2",
+                    help="Model to quantize (resnet18|resnet50|vgg16|mobilenet_v2)")
+parser.add_argument("--calib_batches", type=int, default=20,
+                    help="Number of calibration batches (batch size = train_batch_size).")
+parser.add_argument("--calib_scope", type=int, default=5,
+                    help="MSE fix-position search width during calibration.")
+parser.add_argument("--cle", action="store_true", default=False,
+                    help="Fold BN and apply cross-layer equalization before QAT "
+                         "(replaces ReLU6 with ReLU; recommended for MobileNet).")
+parser.add_argument("--bias_corr", action="store_true", default=False,
+                    help="Apply empirical bias correction after calibration (requires --cle).")
+
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
@@ -76,12 +91,20 @@ parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)  # Set desired logging level
+    logging.basicConfig(level=logging.INFO)
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
+    # Reproducibility
+    random.seed(args.manual_seed)
+    np.random.seed(args.manual_seed)
+    torch.manual_seed(args.manual_seed)
+
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
+
+    # keep checkpoints of different models separate
+    args.save_dir = os.path.join(args.save_dir, args.model)
 
     """Calibration Dataset"""
     ImagenetDataProvider.DEFAULT_PATH = os.environ.get(
@@ -89,29 +112,40 @@ if __name__ == '__main__':
     )
 
     data_provider = ImagenetDataProvider()
-    # data_provider = Cifar10DataProvider()
 
-    calib_loader = data_provider.build_sub_train_loader(24, 24)
+    n_calib_images = args.calib_batches * args.train_batch_size
+    calib_loader = data_provider.build_sub_train_loader(n_calib_images, args.train_batch_size)
 
-    """Imagenet models"""
-    # model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
-    model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
-    """cifar models"""
-    # model = resnet18_cifar10()
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=True)
 
     from pathlib import Path
     config_path = Path(__file__).resolve().parent.parent / "configs/quant_config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    float_ref = None
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
+        float_ref = model  # BN-free, equalized float reference for bias correction
+
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.calibrate(calib_loader, device)
+    Qatprocessor.calibrate(calib_loader, device,
+                           max_batches=args.calib_batches, scope=args.calib_scope)
 
-    #Qatprocessor.load_qat_weights('qat_models/checkpoint/resnet18_best.pth.tar')
-    #Qatprocessor.freeze()
+    if args.bias_corr:
+        if float_ref is None:
+            raise SystemExit("--bias_corr requires --cle (needs a BN-free float reference).")
+        from fixquant.quantization.equalization import apply_bias_correction
+        apply_bias_correction(float_ref, model, calib_loader, device)
+
+    from fixquant.diagnostics import quantizer_report, write_report_csv
+    report_path = os.path.join(args.save_dir, f"{args.model}_calib_report.csv")
+    os.makedirs(args.save_dir, exist_ok=True)
+    write_report_csv(quantizer_report(model), report_path)
+    print(f"Post-calibration quantizer report written to {report_path}")
 
     run_config = RunConfig(**args.__dict__, is_qat=True)
     run_config.print_config()
@@ -121,7 +155,6 @@ if __name__ == '__main__':
         During QAT of VGG16 if you encounter CUDA out of Memory Issue,
         reduce the train batch size to 50 or less
     """
-    with torch.autograd.set_detect_anomaly(True):
-        run_manager.train()
+    run_manager.train()
 
     run_manager.validate(0)

@@ -64,24 +64,22 @@ class BaseConfig:
     """ learning rate """
     def adjust_learning_rate(self, optimizer, train_loader, epoch, batch_idx, ddp=False):
         if self.is_qat:
-            """FOR TQT: Sets the learning rate to the initial LR decayed by decay ratios"""
-            weight_lr_decay_steps = 3000 * (24 / self.train_batch_size)
-            quantizer_lr_decay_steps = 1000 * (24 / self.train_batch_size)
+            """FOR TQT: staircase-decay both LR groups. Computed (not matched
+            against exact step multiples) so the decay always applies."""
+            weight_lr_decay_steps = max(1, int(3000 * (24 / self.train_batch_size)))
+            quantizer_lr_decay_steps = max(1, int(1000 * (24 / self.train_batch_size)))
             weight_lr_decay = 0.94
 
             step = len(train_loader) * epoch + batch_idx
 
             for param_group in optimizer.param_groups:
                 group_name = param_group['name']
-                if group_name == 'weight' and step % weight_lr_decay_steps == 0:
-                    lr = self.init_lr * (weight_lr_decay ** (step / weight_lr_decay_steps))
-                    param_group['lr'] = lr
-                    print('{} lr at epoch {}, step {}:, lr={}'.format(group_name, epoch, step,lr))
-                if group_name == 'quantizer' and step % quantizer_lr_decay_steps == 0:
-                    lr = self.quantizer_lr * (
-                            self.quantizer_lr_decay ** (step / quantizer_lr_decay_steps))
-                    param_group['lr'] = lr
-                    print('{} lr at epoch {}, step {}:, lr={}'.format(group_name, epoch, step,lr))
+                if group_name == 'weight':
+                    param_group['lr'] = self.init_lr * (
+                            weight_lr_decay ** (step // weight_lr_decay_steps))
+                elif group_name == 'quantizer':
+                    param_group['lr'] = self.quantizer_lr * (
+                            self.quantizer_lr_decay ** (step // quantizer_lr_decay_steps))
 
         else:
             """adjust learning of a given optimizer and return the new learning rate"""
@@ -165,6 +163,7 @@ class RunConfig(BaseConfig):
         print_frequency=10,
         n_worker=32,
         image_size=32, # 224, # 32
+        threshold_freeze_frac=0.7,
         **kwargs
     ):
         super(RunConfig, self).__init__(
@@ -190,6 +189,9 @@ class RunConfig(BaseConfig):
 
         self.n_worker = n_worker
         self.image_size = image_size
+        # Fraction of QAT epochs after which TQT thresholds are frozen so the
+        # exported frac bits are stable. None disables freezing.
+        self.threshold_freeze_frac = threshold_freeze_frac
 
     @property
     def data_provider(self):

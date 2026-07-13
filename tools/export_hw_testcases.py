@@ -51,17 +51,18 @@ TEST_CASES = {
     }
 }
 
-TEST_CASES2 = {
-    "conv_stem": {
-        "nodes": ["conv1", "relu_0"],
-        "description": "Conv + ReLU"
-    },
+# Node names above are ResNet-50 specific; this tool always builds resnet50.
+TEST_CASES["conv_stem"] = {
+    "nodes": ["conv1", "relu_0"],
+    "description": "Conv + ReLU"
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Export TileCNN subgraph testcases")
     parser.add_argument("--checkpoint", default=None, help="Path to best QAT checkpoint")
+    parser.add_argument("--cle", action="store_true", default=False,
+                        help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
     parser.add_argument("--quant_config", default=None, help="Path to quant_config.yaml")
     parser.add_argument("--image", default=None, help="Path to test image")
     parser.add_argument("--out_dir", default=None, help="Output base directory")
@@ -72,7 +73,8 @@ def main():
     logger = logging.getLogger("export_hw_testcases")
 
     REPO_ROOT = Path(__file__).resolve().parents[1]
-    checkpoint = Path(args.checkpoint) if args.checkpoint else (REPO_ROOT / "qat_models/checkpoint/resnet50_best.pth.tar")
+    checkpoint = Path(args.checkpoint) if args.checkpoint else (
+        REPO_ROOT / "qat_models/resnet50/checkpoint/model_best.pth.tar")
     quant_config = Path(args.quant_config) if args.quant_config else (REPO_ROOT / "configs/quant_config.yaml")
     image_path = Path(args.image) if args.image else (REPO_ROOT / "assets/new.JPEG")
     out_dir = Path(args.out_dir) if args.out_dir else (REPO_ROOT / "outputs/hw_testcases")
@@ -82,16 +84,23 @@ def main():
         config = yaml.safe_load(f)
 
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
-    qat_proc.freeze()
-    
+
     if checkpoint.exists():
         qat_proc.load_qat_weights(str(checkpoint))
+    else:
+        logger.warning(f"Checkpoint not found at {checkpoint}; exporting with default weights!")
+    qat_proc.freeze()
 
     infer_proc = InferProcessor(model, config)
     emu_model = infer_proc.convert_to_hardware_model()
-    inspector = StdModelInspector(emu_model, default_input_frac=5, logger=logger)
+    inspector = StdModelInspector(emu_model,
+                                  default_input_frac=infer_proc.input_frac or 5,
+                                  logger=logger)
 
     if image_path.exists():
         inp = preprocess_image(str(image_path))
@@ -111,14 +120,14 @@ def main():
         logger=logger
     )
 
-    cases_to_run = TEST_CASES2.keys() if args.test_case == "all" else [args.test_case]
-    
+    cases_to_run = TEST_CASES.keys() if args.test_case == "all" else [args.test_case]
+
     for case_name in cases_to_run:
-        if case_name not in TEST_CASES2:
+        if case_name not in TEST_CASES:
             logger.error(f"Test case {case_name} not found.")
             continue
-            
-        case_def = TEST_CASES2[case_name]
+
+        case_def = TEST_CASES[case_name]
         logger.info(f"--- Exporting Test Case: {case_name} ---")
         logger.info(f"Description: {case_def['description']}")
         

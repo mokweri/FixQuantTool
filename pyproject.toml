@@ -28,3 +28,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 fixquant = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: heavier end-to-end tests (full MobileNetV2 graph); deselect with -m 'not slow'",
+]

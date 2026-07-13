@@ -46,9 +46,13 @@ class RunManager:
         # optimizer
         if self.run_config.is_qat:
             """ optimizer based on param groups - tqt """
+            # log_thresholds are already regularised by the explicit TQT norm
+            # penalty in train_one_epoch; weight_decay on top of it would pull
+            # every threshold toward 1.0 regardless of the data.
             net_params = [{
                 'params': self.quantizer_parameters(self.net),
                 'lr': self.run_config.quantizer_lr,
+                'weight_decay': 0.0,
                 'name': 'quantizer'
             }, {
                 'params': self.non_quantizer_parameters(self.net),
@@ -77,6 +81,9 @@ class RunManager:
                             net_params.append(param)
 
         self.optimizer = self.run_config.build_optimizer(net_params)
+
+        self._q_params = self.quantizer_parameters(self.net)
+        self._thresholds_frozen = False
 
     """ save path and log path """
 
@@ -197,16 +204,13 @@ class RunManager:
                 output = self.net(images)
                 loss = self.train_criterion(output, labels)
 
-                # tqt quantizer stuff
-                if self.run_config.is_qat:
+                # TQT threshold norm penalty (Jain et al. 2019, sec. 4.2)
+                if self.run_config.is_qat and not self._thresholds_frozen:
                     l2_decay = 1e-4
                     l2_norm = 0.0
-                    quantizer_norm = True
-                    q_params = self.quantizer_parameters(self.net)
-                    for param in q_params:
+                    for param in self._q_params:
                         l2_norm += torch.pow(param, 2.0)[0]
-                    if quantizer_norm:
-                        loss += l2_decay * torch.sqrt(l2_norm)
+                    loss += l2_decay * torch.sqrt(l2_norm)
 
                 # compute gradient and do SGD step
                 self.optimizer.zero_grad()
@@ -232,10 +236,34 @@ class RunManager:
                 end = time.time()
         return losses.avg, top1.avg, top5.avg
 
-    def train(self, warmup_epoch=0):
+    def freeze_thresholds(self):
+        """Stop training TQT thresholds so exported frac bits are stable."""
+        from fixquant.quantization.tqt_quantizer import TQTQuantizer
+        for m in self.network.modules():
+            if isinstance(m, TQTQuantizer):
+                m.freeze_quant(True)
+        self._thresholds_frozen = True
+        print("[RunManager] Quantizer thresholds frozen.")
 
-        for epoch in range(self.start_epoch, self.run_config.n_epochs + warmup_epoch):
+    def log_quantizer_state(self, epoch):
+        from fixquant.diagnostics import log_quantizer_state
+        log_quantizer_state(self.network, epoch,
+                            os.path.join(self.logs_path, "quant_thresholds.csv"))
+
+    def train(self, warmup_epoch=0):
+        n_epochs = self.run_config.n_epochs + warmup_epoch
+        freeze_frac = getattr(self.run_config, "threshold_freeze_frac", None)
+        freeze_epoch = int(n_epochs * freeze_frac) if (
+            self.run_config.is_qat and freeze_frac is not None) else None
+
+        for epoch in range(self.start_epoch, n_epochs):
+            if freeze_epoch is not None and epoch >= freeze_epoch and not self._thresholds_frozen:
+                self.freeze_thresholds()
+
             train_loss, train_top1, train_top5 = self.train_one_epoch(epoch)
+
+            if self.run_config.is_qat:
+                self.log_quantizer_state(epoch)
 
             if (epoch + 1) % self.run_config.validation_frequency == 0:
                 val_loss, val_acc, val_acc5 = self.validate( epoch=epoch, is_test=False)

@@ -31,6 +31,15 @@ parser.add_argument("--device", type=torch.device, default="cuda")
 parser.add_argument('--gpus',
                     type=str, default='0', help='gpu ids to be used for training, seperated by commas')
 
+# Model options
+parser.add_argument("--model", type=str, default="resnet50",
+                    help="Model to deploy (resnet18|resnet50|vgg16|mobilenet_v2)")
+parser.add_argument("--checkpoint", type=str, default=None,
+                    help="QAT checkpoint path. Default: qat_models/<model>/checkpoint/model_best.pth.tar")
+parser.add_argument("--cle", action="store_true", default=False,
+                    help="Apply cross-layer equalization before quantizing. Must match how "
+                         "the checkpoint was trained (required for 'qat_train.py --cle' checkpoints).")
+
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
@@ -71,14 +80,12 @@ if __name__ == '__main__':
         "FIXQUANT_DATA_DIR", args.dataroot
     )
 
-    """Imagenet models"""
-    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-    # model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    # model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
-    # model = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
+    from fixquant.models import get_model
+    model = get_model(args.model, pretrained=True)
 
-    """Cifar models"""
-    # model = resnet18_cifar10()
+    if args.cle:
+        from fixquant.quantization.equalization import equalize_model
+        model = equalize_model(model)
 
     """ ---- QUANTIZATION PROCESSING -----"""
     from pathlib import Path
@@ -86,20 +93,20 @@ if __name__ == '__main__':
     with open(repo_root / "configs/quant_config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
+    checkpoint = args.checkpoint or str(
+        repo_root / f"qat_models/{args.model}/checkpoint/model_best.pth.tar")
+
     Qatprocessor = QatProcessor(model, config)
     model = Qatprocessor.quantize()
-    Qatprocessor.load_qat_weights(str(repo_root / 'qat_models/checkpoint/resnet50_best.pth.tar'))
+    Qatprocessor.load_qat_weights(checkpoint)
     Qatprocessor.freeze()
 
     """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
 
-    if args.model_type == "tilecnn":
-        logger.info("Building TileCNN digital-twin model (bit-exact FPGA accuracy)...")
-        eval_model = infer_processor.convert_to_hardware_model()
-    else:
-        logger.info("Building HLS sequential emulation model...")
-        eval_model = infer_processor.convert_to_hardware_model()
+    backend = "tilecnn" if args.model_type == "tilecnn" else "hls"
+    logger.info("Building %s hardware model...", backend)
+    eval_model = infer_processor.convert_to_hardware_model(backend=backend)
 
     qconfig = infer_processor.generate_qconfig()
     logger.info("Model type: %s | qconfig entries: %d", args.model_type, len(qconfig))
