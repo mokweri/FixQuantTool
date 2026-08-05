@@ -11,8 +11,26 @@ from torch.utils.data.distributed import DistributedSampler
 __all__ = ["ImagenetDataProvider"]
 
 
+class _HuggingFaceImageDataset(torch.utils.data.Dataset):
+    """Expose a Hugging Face image split as a torchvision-style dataset."""
+
+    def __init__(self, dataset, transform):
+        self.dataset = dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        sample = self.dataset[int(index)]
+        image = sample["image"]
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        return self.transform(image), int(sample["label"])
+
+
 class ImagenetDataProvider(DataProvider):
-    DEFAULT_PATH = "/home/obed/Documents/imagenet-mini"
+    DEFAULT_PATH = "./dataset/imagenet"
 
     def __init__(
         self,
@@ -29,6 +47,7 @@ class ImagenetDataProvider(DataProvider):
 
         warnings.filterwarnings("ignore")
         self._save_path = save_path
+        self._hf_datasets = None
         self.image_size = image_size  # int or list of int
         self._valid_transform_dict = {}
 
@@ -110,7 +129,7 @@ class ImagenetDataProvider(DataProvider):
             self.test_loader = torch.utils.data.DataLoader(
                 test_dataset,
                 batch_size=test_batch_size,
-                shuffle=True,
+                shuffle=False,
                 num_workers=n_worker,
                 pin_memory=pin_memory,
             )
@@ -133,9 +152,12 @@ class ImagenetDataProvider(DataProvider):
     @property
     def save_path(self):
         if self._save_path is None:
-            self._save_path = self.DEFAULT_PATH
-            if not os.path.exists(self._save_path):
-                self._save_path = os.path.expanduser("./dataset/imagenet")
+            self._save_path = (
+                os.environ.get("FIXQUANT_DATA_DIR")
+                or os.environ.get("IMAGENET_1K_DATA_DIR")
+                or self.DEFAULT_PATH
+            )
+        self._save_path = os.path.abspath(os.path.expanduser(self._save_path))
         return self._save_path
 
     @property
@@ -143,10 +165,46 @@ class ImagenetDataProvider(DataProvider):
         raise ValueError("unable to download %s" % self.name())
 
     def train_dataset(self, _transforms):
+        if self.is_huggingface_dataset:
+            return _HuggingFaceImageDataset(
+                self.huggingface_datasets["train"], _transforms
+            )
         return datasets.ImageFolder(self.train_path, _transforms)
 
     def test_dataset(self, _transforms):
+        if self.is_huggingface_dataset:
+            split = (
+                "validation" if "validation" in self.huggingface_datasets else "val"
+            )
+            return _HuggingFaceImageDataset(
+                self.huggingface_datasets[split], _transforms
+            )
         return datasets.ImageFolder(self.valid_path, _transforms)
+
+    @property
+    def is_huggingface_dataset(self):
+        return os.path.isfile(os.path.join(self.save_path, "dataset_dict.json"))
+
+    @property
+    def huggingface_datasets(self):
+        if self._hf_datasets is None:
+            try:
+                from datasets import load_from_disk
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Hugging Face ImageNet data requires the optional 'datasets' "
+                    "package. On Arrhenius, rerun scripts/setup_arrhenius_env.sh."
+                ) from exc
+
+            self._hf_datasets = load_from_disk(self.save_path)
+            required = {"train", "validation"}
+            missing = required.difference(self._hf_datasets)
+            if missing:
+                raise ValueError(
+                    f"ImageNet dataset at {self.save_path} is missing splits: "
+                    f"{sorted(missing)}"
+                )
+        return self._hf_datasets
 
     @property
     def train_path(self):
@@ -164,7 +222,7 @@ class ImagenetDataProvider(DataProvider):
 
     def build_train_transform(self):
         train_transforms = [
-            transforms.RandomResizedCrop(224),
+            transforms.RandomResizedCrop(self.image_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             self.normalize,
@@ -174,10 +232,11 @@ class ImagenetDataProvider(DataProvider):
         return train_transforms
 
     def build_valid_transform(self):
+        resize_size = round(self.image_size * 256 / 224)
         return transforms.Compose(
             [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
+                transforms.Resize(resize_size),
+                transforms.CenterCrop(self.image_size),
                 transforms.ToTensor(),
                 self.normalize,
             ]
@@ -191,7 +250,7 @@ class ImagenetDataProvider(DataProvider):
             if num_worker is None:
                 num_worker = 4
 
-            n_samples = len(self.train_loader)
+            n_samples = len(self.train_loader.dataset)
             g = torch.Generator()
             g.manual_seed(DataProvider.SUB_SEED)
             rand_indexes = torch.randperm(n_samples, generator=g).tolist()

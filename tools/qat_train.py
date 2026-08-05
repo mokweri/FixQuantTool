@@ -48,6 +48,8 @@ parser.add_argument("--lr_schedule_type", type=str, default="cosine", choices=["
 # Performance options
 parser.add_argument("--n_worker", type=int, default=8,
                     help='Number of Workers')
+parser.add_argument("--image_size", type=int, default=224,
+                    help='Input crop size (224 for ImageNet).')
 parser.add_argument("--pin-memory", default=True, action="store_true")
 parser.add_argument("--device", type=torch.device, default="cuda")
 parser.add_argument('--gpus',
@@ -111,7 +113,14 @@ if __name__ == '__main__':
         "FIXQUANT_DATA_DIR", args.dataroot
     )
 
-    data_provider = ImagenetDataProvider()
+    data_provider = ImagenetDataProvider(
+        save_path=args.dataroot,
+        train_batch_size=args.train_batch_size,
+        test_batch_size=args.test_batch_size,
+        n_worker=args.n_worker,
+        image_size=args.image_size,
+        pin_memory=True,
+    )
 
     n_calib_images = args.calib_batches * args.train_batch_size
     calib_loader = data_provider.build_sub_train_loader(n_calib_images, args.train_batch_size)

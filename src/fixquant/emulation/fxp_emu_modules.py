@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-torch.backends.quantized.engine = "fbgemm"      # use 'qnnpack' on ARM/Apple
 torch.manual_seed(0)
 
 

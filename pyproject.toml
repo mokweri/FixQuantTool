@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 distributed = ["horovod"]
+imagenet-arrow = ["datasets==4.1.1"]
 dev = ["pytest", "flake8"]
 
 [tool.setuptools.packages.find]

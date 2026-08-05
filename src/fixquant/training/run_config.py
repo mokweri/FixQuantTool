@@ -189,6 +189,7 @@ class RunConfig(BaseConfig):
 
         self.n_worker = n_worker
         self.image_size = image_size
+        self.dataroot = kwargs.get("dataroot")
         # Fraction of QAT epochs after which TQT thresholds are frozen so the
         # exported frac bits are stable. None disables freezing.
         self.threshold_freeze_frac = threshold_freeze_frac
@@ -205,6 +206,7 @@ class RunConfig(BaseConfig):
             else:
                 raise NotImplementedError
             self.__dict__["_data_provider"] = DataProviderClass(
+                save_path=self.dataroot,
                 train_batch_size=self.train_batch_size,
                 test_batch_size=self.test_batch_size,
                 valid_size=self.valid_size,
@@ -283,6 +285,7 @@ class DistributedRunConfig(RunConfig):
                 raise NotImplementedError
             if self.dataset == "imagenet":
                 self.__dict__["_data_provider"] = DataProviderClass(
+                    save_path=self.dataroot,
                     train_batch_size=self.train_batch_size,
                     test_batch_size=self.test_batch_size,
                     valid_size=self.valid_size,
@@ -294,6 +297,7 @@ class DistributedRunConfig(RunConfig):
                 )
             else:
                 self.__dict__["_data_provider"] = DataProviderClass(
+                    save_path=self.dataroot,
                     train_batch_size=self.train_batch_size,
                     test_batch_size=self.test_batch_size,
                     valid_size=self.valid_size,
@@ -322,5 +326,3 @@ class DistributedRunConfig(RunConfig):
         for param_group in optimizer.param_groups:
             param_group["lr"] = new_lr
         return new_lr
-
-        
