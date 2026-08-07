@@ -171,3 +171,6 @@ sbatch --array=2 scripts/jobs/qat_imagenet_model_sweep.sbatch  # ResNet-50
 Each model receives separate `latest.pth.tar` and `model_best.pth.tar`
 checkpoints. If validation is still improving at epoch five, increase the
 total with `--export=ALL,FIXQUANT_EPOCHS=<epochs>` for a subsequent run.
+Successful future jobs also register candidates under the repository-local
+`model_zoo/` registry.
+See [model_zoo.md](model_zoo.md) for automated validation and manual promotion.

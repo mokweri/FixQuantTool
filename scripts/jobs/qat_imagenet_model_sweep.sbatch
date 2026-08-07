@@ -16,6 +16,8 @@ STORAGE_BASE="${FIXQUANT_STORAGE_BASE:-/nobackup/proj/disk/naiss2024-22-1352/per
 REPO="${FIXQUANT_REPO:-$STORAGE_BASE/projects/FixQuantTool}"
 DATASET="${FIXQUANT_DATA_DIR:-/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b}"
 TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
+ZOO_ROOT="${FIXQUANT_ZOO_ROOT:-$REPO/model_zoo}"
+AUTO_REGISTER="${FIXQUANT_AUTO_REGISTER:-1}"
 
 MODELS=(vgg16 resnet18 resnet50)
 TRAIN_BATCH_SIZES=(32 128 64)
@@ -60,6 +62,7 @@ export APPTAINERENV_TORCH_HOME="$TORCH_CACHE"
 export APPTAINERENV_PYTHONUNBUFFERED=1
 export APPTAINERENV_OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 export APPTAINERENV_PYTHONHASHSEED="$SEED"
+export APPTAINERENV_FIXQUANT_ZOO_ROOT="$ZOO_ROOT"
 
 printf 'FixQuant ImageNet QAT model sweep\n'
 printf 'Array job/task: %s/%s\n' "$SLURM_ARRAY_JOB_ID" "$TASK_ID"
@@ -94,5 +97,15 @@ srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
     --manual_seed "$SEED" \
     --gpus 0 \
     --save_dir "$RUN_DIR"
+
+if [[ "$AUTO_REGISTER" == "1" ]]; then
+    printf 'Registering model-zoo candidate...\n'
+    srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
+        python tools/model_zoo.py --root "$ZOO_ROOT" register \
+        "$RUN_DIR/$MODEL" \
+        --model "$MODEL" \
+        --dataset-name imagenet1k \
+        --dataset-path "$DATASET"
+fi
 
 printf 'QAT completed for %s. Results: %s/%s\n' "$MODEL" "$RUN_DIR" "$MODEL"

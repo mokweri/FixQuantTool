@@ -39,6 +39,12 @@ parser.add_argument("--cle", action="store_true", default=False,
                     help="Apply cross-layer equalization before quantizing. Must match how "
                          "the checkpoint was trained (BN-free, ReLU6->ReLU). Required for "
                          "checkpoints produced by 'qat_train.py --cle'.")
+parser.add_argument("--zoo-model", default=None,
+                    help="Released model ID: model/dataset/profile@version")
+parser.add_argument("--zoo-root", default=None,
+                    help="Override FIXQUANT_ZOO_ROOT for --zoo-model")
+parser.add_argument("--metrics-output", default=None,
+                    help="Write machine-readable evaluation metrics JSON")
 
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
@@ -57,6 +63,14 @@ parser.add_argument('--manual_seed', default=0, type=int, help='Seed.')
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     args = parser.parse_args()
+    if args.zoo_model:
+        from fixquant.model_zoo import resolve_release
+        released = resolve_release(args.zoo_root, args.zoo_model)
+        args.model = released["model"]
+        args.checkpoint = released["checkpoint"]
+        args.cle = released["cle"]
+        if released["dataset"].get("path"):
+            args.dataroot = released["dataset"]["path"]
     args.cuda = torch.cuda.is_available()
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
@@ -97,3 +111,22 @@ if __name__ == '__main__':
         f"QAT evaluation: loss={float(loss):.6f}, "
         f"top1={float(top1):.4f}, top5={float(top5):.4f}"
     )
+    if args.metrics_output:
+        from fixquant.model_zoo import sha256_file, utc_now, write_json
+        write_json(args.metrics_output, {
+            "schema_version": 1,
+            "created_at": utc_now(),
+            "representation": "qat",
+            "model": args.model,
+            "dataset": {"name": args.dataset, "path": args.dataroot},
+            "validation_samples": len(run_config.val_loader.sampler),
+            "checkpoint": os.path.abspath(checkpoint),
+            "checkpoint_sha256": sha256_file(checkpoint),
+            "cle": args.cle,
+            "metrics": {
+                "loss": float(loss),
+                "top1": float(top1),
+                "top5": float(top5),
+            },
+        })
+        print(f"Metrics written to {args.metrics_output}")

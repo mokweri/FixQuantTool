@@ -6,6 +6,7 @@ import torchvision.models as models
 import torch
 from torch.utils.checkpoint import checkpoint
 import platform
+import sys
 import yaml
 import logging
 
@@ -107,6 +108,57 @@ if __name__ == '__main__':
 
     # keep checkpoints of different models separate
     args.save_dir = os.path.join(args.save_dir, args.model)
+    os.makedirs(args.save_dir, exist_ok=True)
+
+    from pathlib import Path
+    from fixquant.model_zoo import git_commit, utc_now, write_yaml
+    repo_root = Path(__file__).resolve().parent.parent
+    manifest_path = Path(args.save_dir) / "run_manifest.yaml"
+    run_manifest = {
+        "schema_version": 1,
+        "status": "running",
+        "created_at": utc_now(),
+        "model": {
+            "name": args.model,
+            "initialization": "torchvision pretrained weights",
+        },
+        "dataset": {
+            "name": "imagenet1k" if args.dataset == "imagenet" else args.dataset,
+            "path": os.path.abspath(args.dataroot),
+        },
+        "quantization": {
+            "method": "tqt",
+            "weight_bits": 8,
+            "activation_bits": 8,
+            "cle": args.cle,
+            "bias_correction": args.bias_corr,
+            "calibration_batches": args.calib_batches,
+            "calibration_scope": args.calib_scope,
+            "threshold_freeze_fraction": args.threshold_freeze_frac,
+        },
+        "training": {
+            "epochs": args.n_epochs,
+            "train_batch_size": args.train_batch_size,
+            "test_batch_size": args.test_batch_size,
+            "workers": args.n_worker,
+            "image_size": args.image_size,
+            "initial_lr": args.init_lr,
+            "quantizer_lr": args.quantizer_lr,
+            "weight_decay": args.weight_decay,
+            "seed": args.manual_seed,
+        },
+        "provenance": {
+            "git_commit": git_commit(repo_root),
+            "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+            "slurm_array_job_id": os.environ.get("SLURM_ARRAY_JOB_ID"),
+            "slurm_array_task_id": os.environ.get("SLURM_ARRAY_TASK_ID"),
+            "node": os.environ.get("SLURMD_NODENAME") or platform.node(),
+            "python": platform.python_version(),
+            "pytorch": torch.__version__,
+            "command": [sys.executable, *sys.argv],
+        },
+    }
+    write_yaml(manifest_path, run_manifest)
 
     """Calibration Dataset"""
     ImagenetDataProvider.DEFAULT_PATH = os.environ.get(
@@ -121,6 +173,11 @@ if __name__ == '__main__':
         image_size=args.image_size,
         pin_memory=True,
     )
+    run_manifest["dataset"].update({
+        "train_samples": len(data_provider.train_loader.dataset),
+        "validation_samples": len(data_provider.val_loader.sampler),
+    })
+    write_yaml(manifest_path, run_manifest)
 
     n_calib_images = args.calib_batches * args.train_batch_size
     calib_loader = data_provider.build_sub_train_loader(n_calib_images, args.train_batch_size)
@@ -128,8 +185,7 @@ if __name__ == '__main__':
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
 
-    from pathlib import Path
-    config_path = Path(__file__).resolve().parent.parent / "configs/quant_config.yaml"
+    config_path = repo_root / "configs/quant_config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
@@ -152,7 +208,6 @@ if __name__ == '__main__':
 
     from fixquant.diagnostics import quantizer_report, write_report_csv
     report_path = os.path.join(args.save_dir, f"{args.model}_calib_report.csv")
-    os.makedirs(args.save_dir, exist_ok=True)
     write_report_csv(quantizer_report(model), report_path)
     print(f"Post-calibration quantizer report written to {report_path}")
 
@@ -164,6 +219,30 @@ if __name__ == '__main__':
         During QAT of VGG16 if you encounter CUDA out of Memory Issue,
         reduce the train batch size to 50 or less
     """
-    run_manager.train()
+    training_summary = run_manager.train()
 
-    run_manager.validate(0)
+    final_loss, final_top1, final_top5 = run_manager.validate(0)
+    run_manifest.update({
+        "status": "completed",
+        "completed_at": utc_now(),
+        "best": {
+            "epoch": (
+                training_summary["best_epoch"] + 1
+                if training_summary["best_epoch"] is not None else None
+            ),
+            "metrics": training_summary["best_metrics"],
+        },
+        "final_evaluation": {
+            "loss": float(final_loss),
+            "top1": float(final_top1),
+            "top5": float(final_top5),
+        },
+        "artifacts": {
+            "best_checkpoint": "checkpoint/model_best.pth.tar",
+            "latest_checkpoint": "checkpoint/latest.pth.tar",
+            "calibration_report": os.path.basename(report_path),
+            "threshold_log": "logs/quant_thresholds.csv",
+        },
+    })
+    write_yaml(manifest_path, run_manifest)
+    print(f"Run manifest written to {manifest_path}")

@@ -10,6 +10,7 @@ REPO="${FIXQUANT_REPO:-$STORAGE_BASE/projects/FixQuantTool}"
 CONTAINER_TAG="${FIXQUANT_CONTAINER_TAG:-25.09-py3}"
 CONTAINER="${FIXQUANT_CONTAINER:-$STORAGE_BASE/software/containers/pytorch-$CONTAINER_TAG.sif}"
 VENV="${FIXQUANT_VENV:-$STORAGE_BASE/software/venvs/fixquant-ngc-$CONTAINER_TAG}"
+ZOO_ROOT="${FIXQUANT_ZOO_ROOT:-$REPO/model_zoo}"
 
 if (($# == 0)); then
     printf 'Usage: %s <command> [args...]\n' "$0" >&2
@@ -39,9 +40,13 @@ bind_args=(--bind "$STORAGE_BASE:$STORAGE_BASE")
 if [[ -d /dataset ]]; then
     bind_args+=(--bind /dataset:/dataset)
 fi
+if [[ -d "$ZOO_ROOT" ]]; then
+    bind_args+=(--bind "$ZOO_ROOT:$ZOO_ROOT")
+fi
 
 export APPTAINERENV_PYTHONNOUSERSITE=1
 export APPTAINERENV_FIXQUANT_REPO="$REPO"
+export APPTAINERENV_FIXQUANT_ZOO_ROOT="$ZOO_ROOT"
 
 exec apptainer exec \
     --cleanenv \

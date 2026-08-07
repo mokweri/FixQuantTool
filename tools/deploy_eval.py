@@ -39,6 +39,14 @@ parser.add_argument("--checkpoint", type=str, default=None,
 parser.add_argument("--cle", action="store_true", default=False,
                     help="Apply cross-layer equalization before quantizing. Must match how "
                          "the checkpoint was trained (required for 'qat_train.py --cle' checkpoints).")
+parser.add_argument("--zoo-model", default=None,
+                    help="Released model ID: model/dataset/profile@version")
+parser.add_argument("--zoo-root", default=None,
+                    help="Override FIXQUANT_ZOO_ROOT for --zoo-model")
+parser.add_argument("--metrics-output", default=None,
+                    help="Write machine-readable evaluation metrics JSON")
+parser.add_argument("--qconfig-output", default=None,
+                    help="Write the generated hardware qconfig JSON")
 
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
@@ -70,6 +78,14 @@ if __name__ == '__main__':
     logger = logging.getLogger("deploy_eval")
 
     args = parser.parse_args()
+    if args.zoo_model:
+        from fixquant.model_zoo import resolve_release
+        released = resolve_release(args.zoo_root, args.zoo_model)
+        args.model = released["model"]
+        args.checkpoint = released["checkpoint"]
+        args.cle = released["cle"]
+        if released["dataset"].get("path"):
+            args.dataroot = released["dataset"]["path"]
     args.cuda = torch.cuda.is_available()
 
     # GPU selection remains via args.gpus for RunManager compatibility
@@ -110,6 +126,10 @@ if __name__ == '__main__':
 
     qconfig = infer_processor.generate_qconfig()
     logger.info("Model type: %s | qconfig entries: %d", args.model_type, len(qconfig))
+    if args.qconfig_output:
+        from fixquant.model_zoo import write_json
+        write_json(args.qconfig_output, qconfig)
+        logger.info("Hardware qconfig written to %s", args.qconfig_output)
 
     # Evaluation-only script: uncomment below to run validation
     args_dict = args.__dict__.copy()
@@ -124,3 +144,22 @@ if __name__ == '__main__':
         f"Deploy evaluation ({args.model_type}): loss={float(loss):.6f}, "
         f"top1={float(top1):.4f}, top5={float(top5):.4f}"
     )
+    if args.metrics_output:
+        from fixquant.model_zoo import sha256_file, utc_now, write_json
+        write_json(args.metrics_output, {
+            "schema_version": 1,
+            "created_at": utc_now(),
+            "representation": args.model_type,
+            "model": args.model,
+            "dataset": {"name": args.dataset, "path": args.dataroot},
+            "validation_samples": len(run_config.val_loader.sampler),
+            "checkpoint": os.path.abspath(checkpoint),
+            "checkpoint_sha256": sha256_file(checkpoint),
+            "cle": args.cle,
+            "metrics": {
+                "loss": float(loss),
+                "top1": float(top1),
+                "top5": float(top5),
+            },
+        })
+        print(f"Metrics written to {args.metrics_output}")

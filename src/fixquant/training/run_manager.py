@@ -28,6 +28,8 @@ class RunManager:
         self.run_config = run_config
 
         self.best_acc = 0
+        self.best_epoch = None
+        self.best_metrics = None
         self.start_epoch = 0
 
         os.makedirs(self.save_dir, exist_ok=True)
@@ -289,6 +291,13 @@ class RunManager:
 
                 is_best = float(val_acc) > float(self.best_acc)
                 self.best_acc = max(float(self.best_acc), float(val_acc))
+                if is_best:
+                    self.best_epoch = epoch
+                    self.best_metrics = {
+                        "loss": float(val_loss),
+                        "top1": float(val_acc),
+                        "top5": float(val_acc5),
+                    }
             else:
                 is_best = False
 
@@ -308,6 +317,12 @@ class RunManager:
                     "val_top5": float(val_acc5),
                 })
             self.save_checkpoint(checkpoint, is_best=is_best)
+
+        return {
+            "best_epoch": self.best_epoch,
+            "best_acc": self.best_acc,
+            "best_metrics": self.best_metrics,
+        }
 
     @staticmethod
     def quantizer_parameters(model):

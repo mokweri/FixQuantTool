@@ -174,6 +174,8 @@ The digital twin fuses residual additions into the convolution write-back stage 
 Accuracy baselines (per model: float / PTQ / QAT / twin) are tracked in
 [docs/baselines.md](docs/baselines.md). Numbers recorded before the 2026-07
 rework are not comparable (see [docs/improvements_2026-07.md](docs/improvements_2026-07.md)).
+Validated, versioned checkpoints and hardware metadata are managed by the
+[FixQuant model zoo](docs/model_zoo.md).
 
 ### 4. Export Hardware Test Cases
 
@@ -195,6 +197,7 @@ Produces self-contained test artifact directories under `outputs/hw_testcases/`,
 | Variable | Description | Default |
 |---|---|---|
 | `FIXQUANT_DATA_DIR` | Path to dataset directory | `/home/obed/Documents/imagenet-mini` |
+| `FIXQUANT_ZOO_ROOT` | Model-zoo registry | `<FixQuantTool>/model_zoo` |
 
 ### Quantization Config
 

@@ -34,6 +34,10 @@ qat_models/
 checkpoints/
 outputs/
 saved_models-FP/
+# Mutable model-zoo candidates contain machine-specific run paths.
+model_zoo/.candidates/
+# Release metadata remains tracked; heavyweight checkpoint binaries do not.
+model_zoo/releases/**/qat/model_best.pth.tar
 *.pth
 *.pth.tar
 *.onnx

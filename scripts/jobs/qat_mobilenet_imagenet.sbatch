@@ -16,6 +16,8 @@ REPO="${FIXQUANT_REPO:-$STORAGE_BASE/projects/FixQuantTool}"
 DATASET="${FIXQUANT_DATA_DIR:-/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b}"
 RUN_DIR="${FIXQUANT_RUN_DIR:-$STORAGE_BASE/results/qat/mobilenet_v2/$SLURM_JOB_ID}"
 TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
+ZOO_ROOT="${FIXQUANT_ZOO_ROOT:-$REPO/model_zoo}"
+AUTO_REGISTER="${FIXQUANT_AUTO_REGISTER:-1}"
 
 EPOCHS="${FIXQUANT_EPOCHS:-10}"
 TRAIN_BATCH_SIZE="${FIXQUANT_TRAIN_BATCH_SIZE:-64}"
@@ -48,6 +50,7 @@ export APPTAINERENV_TORCH_HOME="$TORCH_CACHE"
 export APPTAINERENV_PYTHONUNBUFFERED=1
 export APPTAINERENV_OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 export APPTAINERENV_PYTHONHASHSEED="$SEED"
+export APPTAINERENV_FIXQUANT_ZOO_ROOT="$ZOO_ROOT"
 
 printf 'FixQuant MobileNetV2 QAT\n'
 printf 'Job ID: %s\n' "$SLURM_JOB_ID"
@@ -82,5 +85,16 @@ srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
     --manual_seed "$SEED" \
     --gpus 0 \
     --save_dir "$RUN_DIR"
+
+if [[ "$AUTO_REGISTER" == "1" ]]; then
+    printf 'Registering model-zoo candidate...\n'
+    srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
+        python tools/model_zoo.py --root "$ZOO_ROOT" register \
+        "$RUN_DIR/mobilenet_v2" \
+        --model mobilenet_v2 \
+        --dataset-name imagenet1k \
+        --dataset-path "$DATASET" \
+        --cle
+fi
 
 printf 'QAT job completed successfully. Results: %s/mobilenet_v2\n' "$RUN_DIR"
