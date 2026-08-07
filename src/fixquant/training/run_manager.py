@@ -1,5 +1,6 @@
 import os
 import random
+import tempfile
 import time
 import json
 import numpy as np
@@ -108,21 +109,38 @@ class RunManager:
         return self.net.module if isinstance(self.net, nn.DataParallel) else self.net
 
     """ save and load models """
+    @staticmethod
+    def _atomic_torch_save(checkpoint, path):
+        """Write a checkpoint completely before replacing its destination."""
+        directory = os.path.dirname(path)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(path)}.",
+            suffix=".tmp",
+        )
+        os.close(fd)
+        try:
+            torch.save(checkpoint, tmp_path)
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     def save_checkpoint(self, checkpoint=None, is_best=False, model_name=None):
         if checkpoint is None:
             checkpoint = {"state_dict": self.network.state_dict()}
+        checkpoint = dict(checkpoint)
 
         if model_name is None:
-            model_name = "model_best.pth.tar"
+            model_name = "latest.pth.tar"
 
         checkpoint["dataset"] = self.run_config.dataset  # add `dataset` info to the checkpoint
         model_path = os.path.join(self.save_path, model_name)
 
-        torch.save(checkpoint, model_path)
+        self._atomic_torch_save(checkpoint, model_path)
         if is_best:
             best_path = os.path.join(self.save_path, "model_best.pth.tar")
-            torch.save({"state_dict": checkpoint["state_dict"]}, best_path)
+            self._atomic_torch_save(checkpoint, best_path)
 
     """ metric related """
     def get_metric_dict(self):
@@ -265,23 +283,31 @@ class RunManager:
             if self.run_config.is_qat:
                 self.log_quantizer_state(epoch)
 
-            if (epoch + 1) % self.run_config.validation_frequency == 0:
+            validated = (epoch + 1) % self.run_config.validation_frequency == 0
+            if validated:
                 val_loss, val_acc, val_acc5 = self.validate( epoch=epoch, is_test=False)
 
-                is_best = val_acc > self.best_acc
-                self.best_acc = max(self.best_acc, val_acc)
+                is_best = float(val_acc) > float(self.best_acc)
+                self.best_acc = max(float(self.best_acc), float(val_acc))
             else:
                 is_best = False
 
-            self.save_checkpoint(
-                {
-                    "epoch": epoch,
-                    "best_acc": self.best_acc,
-                    "optimizer": self.optimizer.state_dict(),
-                    "state_dict": self.network.state_dict(),
-                },
-                is_best=is_best,
-            )
+            checkpoint = {
+                "epoch": epoch,
+                "best_acc": self.best_acc,
+                "train_loss": float(train_loss),
+                "train_top1": float(train_top1),
+                "train_top5": float(train_top5),
+                "optimizer": self.optimizer.state_dict(),
+                "state_dict": self.network.state_dict(),
+            }
+            if validated:
+                checkpoint.update({
+                    "val_loss": float(val_loss),
+                    "val_top1": float(val_acc),
+                    "val_top5": float(val_acc5),
+                })
+            self.save_checkpoint(checkpoint, is_best=is_best)
 
     @staticmethod
     def quantizer_parameters(model):

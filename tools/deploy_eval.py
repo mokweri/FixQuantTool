@@ -119,4 +119,8 @@ if __name__ == '__main__':
     run_config = RunConfig(**args_dict, is_qat=False)
     run_config.print_config()
     run_manager = RunManager(args.save_dir, eval_model, run_config)
-    run_manager.validate(0)
+    loss, top1, top5 = run_manager.validate(0)
+    print(
+        f"Deploy evaluation ({args.model_type}): loss={float(loss):.6f}, "
+        f"top1={float(top1):.4f}, top5={float(top5):.4f}"
+    )

@@ -135,3 +135,39 @@ sbatch --time=12:00:00 --cpus-per-task=8 \
     --export=ALL,FIXQUANT_WORKERS=6 \
     scripts/jobs/qat_mobilenet_imagenet.sbatch
 ```
+
+## VGG16 and ResNet QAT sweep
+
+The model-sweep job trains VGG16, ResNet-18, and ResNet-50 as three Slurm
+array tasks. Each task uses one GH200 and writes to an independent result
+directory. Defaults are five epochs with model-specific batch sizes:
+
+| Array task | Model | Train batch | Validation batch |
+|---:|---|---:|---:|
+| 0 | VGG16 | 32 | 64 |
+| 1 | ResNet-18 | 128 | 256 |
+| 2 | ResNet-50 | 64 | 128 |
+
+Submit all three concurrently:
+
+```bash
+sbatch scripts/jobs/qat_imagenet_model_sweep.sbatch
+```
+
+To limit the sweep to one running GPU job at a time:
+
+```bash
+sbatch --array=0-2%1 scripts/jobs/qat_imagenet_model_sweep.sbatch
+```
+
+Individual models can be selected by array index:
+
+```bash
+sbatch --array=0 scripts/jobs/qat_imagenet_model_sweep.sbatch  # VGG16
+sbatch --array=1 scripts/jobs/qat_imagenet_model_sweep.sbatch  # ResNet-18
+sbatch --array=2 scripts/jobs/qat_imagenet_model_sweep.sbatch  # ResNet-50
+```
+
+Each model receives separate `latest.pth.tar` and `model_best.pth.tar`
+checkpoints. If validation is still improving at epoch five, increase the
+total with `--export=ALL,FIXQUANT_EPOCHS=<epochs>` for a subsequent run.

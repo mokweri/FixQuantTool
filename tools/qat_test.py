@@ -55,19 +55,12 @@ parser.add_argument('--output_dir',
 parser.add_argument('--manual_seed', default=0, type=int, help='Seed.')
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)  # Set desired logging level
+    logging.basicConfig(level=logging.INFO)
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
 
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
     device = f"cuda:{device_ids[0]}" if device_ids is not None and args.cuda else "cpu"
-
-    """Calibration Dataset"""
-    ImagenetDataProvider.DEFAULT_PATH = os.environ.get(
-        "FIXQUANT_DATA_DIR", args.dataroot
-    )
-
-    data_provider = ImagenetDataProvider()
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
@@ -99,4 +92,8 @@ if __name__ == '__main__':
     # with torch.autograd.set_detect_anomaly(True):
     #     run_manager.train()
     #
-    run_manager.validate(0)
+    loss, top1, top5 = run_manager.validate(0)
+    print(
+        f"QAT evaluation: loss={float(loss):.6f}, "
+        f"top1={float(top1):.4f}, top5={float(top5):.4f}"
+    )
