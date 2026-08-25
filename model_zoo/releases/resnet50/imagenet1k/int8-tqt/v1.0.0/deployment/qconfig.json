@@ -1,0 +1,561 @@
+{
+  "add": {
+    "in": [
+      3,
+      3
+    ],
+    "out": 3
+  },
+  "add_1": {
+    "in": [
+      2,
+      3
+    ],
+    "out": 2
+  },
+  "add_10": {
+    "in": [
+      4,
+      2
+    ],
+    "out": 3
+  },
+  "add_11": {
+    "in": [
+      3,
+      3
+    ],
+    "out": 3
+  },
+  "add_12": {
+    "in": [
+      3,
+      3
+    ],
+    "out": 2
+  },
+  "add_13": {
+    "in": [
+      1,
+      1
+    ],
+    "out": 1
+  },
+  "add_14": {
+    "in": [
+      2,
+      1
+    ],
+    "out": 1
+  },
+  "add_15": {
+    "in": [
+      2,
+      1
+    ],
+    "out": 1
+  },
+  "add_2": {
+    "in": [
+      1,
+      2
+    ],
+    "out": 1
+  },
+  "add_3": {
+    "in": [
+      1,
+      2
+    ],
+    "out": 0
+  },
+  "add_4": {
+    "in": [
+      2,
+      0
+    ],
+    "out": 1
+  },
+  "add_5": {
+    "in": [
+      2,
+      1
+    ],
+    "out": 1
+  },
+  "add_6": {
+    "in": [
+      2,
+      1
+    ],
+    "out": 1
+  },
+  "add_7": {
+    "in": [
+      2,
+      1
+    ],
+    "out": 1
+  },
+  "add_8": {
+    "in": [
+      4,
+      1
+    ],
+    "out": 1
+  },
+  "add_9": {
+    "in": [
+      3,
+      1
+    ],
+    "out": 2
+  },
+  "avgpool": {
+    "in": [
+      1
+    ],
+    "out": 3
+  },
+  "conv1": {
+    "bias": 2,
+    "in": [
+      5
+    ],
+    "out": 1,
+    "weight": 4
+  },
+  "fc": {
+    "bias": 8,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer1_0_conv1": {
+    "bias": 2,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer1_0_conv2": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer1_0_conv3": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer1_0_downsample_0": {
+    "bias": 2,
+    "in": [
+      1
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer1_1_conv1": {
+    "bias": 1,
+    "in": [
+      3
+    ],
+    "out": 2,
+    "weight": 5
+  },
+  "layer1_1_conv2": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer1_1_conv3": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 5
+  },
+  "layer1_2_conv1": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer1_2_conv2": {
+    "bias": 3,
+    "in": [
+      3
+    ],
+    "out": 1,
+    "weight": 7
+  },
+  "layer1_2_conv3": {
+    "bias": 3,
+    "in": [
+      1
+    ],
+    "out": 1,
+    "weight": 5
+  },
+  "layer2_0_conv1": {
+    "bias": 3,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_0_conv2": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 8
+  },
+  "layer2_0_conv3": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 1,
+    "weight": 6
+  },
+  "layer2_0_downsample_0": {
+    "bias": 3,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_1_conv1": {
+    "bias": 3,
+    "in": [
+      0
+    ],
+    "out": 4,
+    "weight": 8
+  },
+  "layer2_1_conv2": {
+    "bias": 3,
+    "in": [
+      4
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_1_conv3": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 6
+  },
+  "layer2_2_conv1": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_2_conv2": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_2_conv3": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 6
+  },
+  "layer2_3_conv1": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 1,
+    "weight": 7
+  },
+  "layer2_3_conv2": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer2_3_conv3": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 6
+  },
+  "layer3_0_conv1": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer3_0_conv2": {
+    "bias": 5,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 8
+  },
+  "layer3_0_conv3": {
+    "bias": 3,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 7
+  },
+  "layer3_0_downsample_0": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 1,
+    "weight": 7
+  },
+  "layer3_1_conv1": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 2,
+    "weight": 8
+  },
+  "layer3_1_conv2": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 8
+  },
+  "layer3_1_conv3": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 4,
+    "weight": 6
+  },
+  "layer3_2_conv1": {
+    "bias": 5,
+    "in": [
+      1
+    ],
+    "out": 3,
+    "weight": 8
+  },
+  "layer3_2_conv2": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 7
+  },
+  "layer3_2_conv3": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer3_3_conv1": {
+    "bias": 5,
+    "in": [
+      2
+    ],
+    "out": 3,
+    "weight": 9
+  },
+  "layer3_3_conv2": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 4,
+    "weight": 8
+  },
+  "layer3_3_conv3": {
+    "bias": 4,
+    "in": [
+      4
+    ],
+    "out": 4,
+    "weight": 6
+  },
+  "layer3_4_conv1": {
+    "bias": 5,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 9
+  },
+  "layer3_4_conv2": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 4,
+    "weight": 8
+  },
+  "layer3_4_conv3": {
+    "bias": 4,
+    "in": [
+      4
+    ],
+    "out": 3,
+    "weight": 6
+  },
+  "layer3_5_conv1": {
+    "bias": 5,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 8
+  },
+  "layer3_5_conv2": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 8
+  },
+  "layer3_5_conv3": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 7
+  },
+  "layer4_0_conv1": {
+    "bias": 5,
+    "in": [
+      2
+    ],
+    "out": 2,
+    "weight": 8
+  },
+  "layer4_0_conv2": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 3,
+    "weight": 9
+  },
+  "layer4_0_conv3": {
+    "bias": 3,
+    "in": [
+      3
+    ],
+    "out": 1,
+    "weight": 7
+  },
+  "layer4_0_downsample_0": {
+    "bias": 4,
+    "in": [
+      2
+    ],
+    "out": 1,
+    "weight": 6
+  },
+  "layer4_1_conv1": {
+    "bias": 4,
+    "in": [
+      1
+    ],
+    "out": 3,
+    "weight": 9
+  },
+  "layer4_1_conv2": {
+    "bias": 4,
+    "in": [
+      3
+    ],
+    "out": 3,
+    "weight": 8
+  },
+  "layer4_1_conv3": {
+    "bias": 3,
+    "in": [
+      3
+    ],
+    "out": 2,
+    "weight": 6
+  },
+  "layer4_2_conv1": {
+    "bias": 3,
+    "in": [
+      1
+    ],
+    "out": 4,
+    "weight": 8
+  },
+  "layer4_2_conv2": {
+    "bias": 3,
+    "in": [
+      4
+    ],
+    "out": 3,
+    "weight": 7
+  },
+  "layer4_2_conv3": {
+    "bias": 3,
+    "in": [
+      3
+    ],
+    "out": 2,
+    "weight": 6
+  },
+  "maxpool": {
+    "in": [
+      1
+    ],
+    "out": 1
+  },
+  "x": {
+    "out": 5
+  }
+}

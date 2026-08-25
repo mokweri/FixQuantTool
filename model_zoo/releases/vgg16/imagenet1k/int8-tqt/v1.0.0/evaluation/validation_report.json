@@ -1,0 +1,91 @@
+{
+  "candidate_id": "vgg16-run-949945",
+  "checkpoint_sha256": "abf42ebb74794219f6026108427effebf83b325b89d1d141fad9b74721940faa",
+  "checks": [
+    {
+      "actual": "abf42ebb74794219f6026108427effebf83b325b89d1d141fad9b74721940faa",
+      "expected": "abf42ebb74794219f6026108427effebf83b325b89d1d141fad9b74721940faa",
+      "name": "qat_checkpoint_hash",
+      "passed": true
+    },
+    {
+      "actual": "abf42ebb74794219f6026108427effebf83b325b89d1d141fad9b74721940faa",
+      "expected": "abf42ebb74794219f6026108427effebf83b325b89d1d141fad9b74721940faa",
+      "name": "tilecnn_checkpoint_hash",
+      "passed": true
+    },
+    {
+      "actual": 50000,
+      "minimum": 50000,
+      "name": "validation_samples",
+      "passed": true
+    },
+    {
+      "actual": 0.23600006103515625,
+      "maximum": 1.0,
+      "name": "tilecnn_top1_drop",
+      "passed": true
+    },
+    {
+      "actual": 0.19000244140625,
+      "maximum": 0.5,
+      "name": "tilecnn_top5_drop",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/vgg16/949945/vgg16/checkpoint/model_best.pth.tar",
+      "expected": "existing file",
+      "name": "artifact_best_checkpoint",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/vgg16/949945/vgg16/vgg16_calib_report.csv",
+      "expected": "existing file",
+      "name": "artifact_calibration_report",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/vgg16/949945/vgg16/logs/quant_thresholds.csv",
+      "expected": "existing file",
+      "name": "artifact_threshold_log",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/projects/FixQuantTool/model_zoo/.candidates/vgg16-run-949945/evaluation/qconfig.json",
+      "expected": "existing file",
+      "name": "artifact_qconfig",
+      "passed": true
+    }
+  ],
+  "metrics": {
+    "qat": {
+      "loss": 1.1560194620513915,
+      "top1": 71.23600006103516,
+      "top5": 90.33200073242188
+    },
+    "tilecnn": {
+      "loss": 1.1614179871559143,
+      "top1": 71.0,
+      "top5": 90.14199829101562
+    },
+    "tilecnn_delta": {
+      "top1": -0.23600006103515625,
+      "top5": -0.19000244140625
+    }
+  },
+  "passed": true,
+  "policy": {
+    "maximum_tilecnn_top1_drop": 1.0,
+    "maximum_tilecnn_top5_drop": 0.5,
+    "minimum_validation_samples": 50000,
+    "required_artifacts": [
+      "best_checkpoint",
+      "calibration_report",
+      "threshold_log",
+      "qconfig"
+    ]
+  },
+  "schema_version": 1,
+  "validated_at": "2026-08-07T15:05:19+00:00",
+  "validation_samples": 50000
+}

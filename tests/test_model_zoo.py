@@ -10,10 +10,36 @@ from fixquant.model_zoo import (
     promote_candidate,
     register_candidate,
     resolve_release,
+    select_dataset_path,
     sha256_file,
     validate_candidate,
     verify_release,
 )
+
+
+def test_dataset_path_selection_is_machine_portable():
+    environment = {"FIXQUANT_DATA_DIR": "/local/imagenet"}
+
+    assert select_dataset_path(
+        "/explicit/imagenet",
+        "/arrhenius/imagenet",
+        environ=environment,
+        fallback="/fallback/imagenet",
+    ) == "/explicit/imagenet"
+    assert select_dataset_path(
+        release_path="/arrhenius/imagenet",
+        environ=environment,
+        fallback="/fallback/imagenet",
+    ) == "/local/imagenet"
+    assert select_dataset_path(
+        release_path="/arrhenius/imagenet",
+        environ={},
+        fallback="/fallback/imagenet",
+    ) == "/arrhenius/imagenet"
+    assert select_dataset_path(
+        environ={},
+        fallback="/fallback/imagenet",
+    ) == "/fallback/imagenet"
 
 
 def _write(path, value):

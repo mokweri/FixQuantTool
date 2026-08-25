@@ -1,0 +1,75 @@
+quantizer,tensor_type,bitwidth,log2_t,frac,bounded_range,sqnr_db,clip_rate
+conv1.weight_quantizer,weight,8,-1.0,8,,17.77,0.01031
+conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+conv1.act_quantizer,act,8,2.0,5,"(0.0, None)",,
+maxpool.quantizer,act,8,2.0,5,,,
+layer1.0.conv1.weight_quantizer,weight,8,-1.0,8,,26.35,0.00049
+layer1.0.conv1.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer1.0.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer1.0.conv2.weight_quantizer,weight,8,0.0,7,,26.06,0.0
+layer1.0.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer1.0.conv2.act_quantizer,act,8,3.0,4,,,
+layer1.1.conv1.weight_quantizer,weight,8,-1.0,8,,29.25,0.00024
+layer1.1.conv1.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer1.1.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer1.1.conv2.weight_quantizer,weight,8,1.0,6,,19.78,0.0
+layer1.1.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer1.1.conv2.act_quantizer,act,8,3.0,4,,,
+layer2.0.conv1.weight_quantizer,weight,8,-2.0,9,,31.89,0.00058
+layer2.0.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer2.0.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer2.0.conv2.weight_quantizer,weight,8,0.0,7,,23.57,0.0
+layer2.0.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer2.0.conv2.act_quantizer,act,8,2.0,5,,,
+layer2.0.downsample.0.weight_quantizer,weight,8,0.0,7,,29.99,0.0
+layer2.0.downsample.0.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer2.0.downsample.0.act_quantizer,act,8,1.0,6,,,
+layer2.1.conv1.weight_quantizer,weight,8,-1.0,8,,29.64,0.0
+layer2.1.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer2.1.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer2.1.conv2.weight_quantizer,weight,8,0.0,7,,22.48,0.0
+layer2.1.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer2.1.conv2.act_quantizer,act,8,2.0,5,,,
+layer3.0.conv1.weight_quantizer,weight,8,-2.0,9,,30.76,0.00013
+layer3.0.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer3.0.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer3.0.conv2.weight_quantizer,weight,8,-1.0,8,,26.94,0.0
+layer3.0.conv2.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer3.0.conv2.act_quantizer,act,8,2.0,5,,,
+layer3.0.downsample.0.weight_quantizer,weight,8,-1.0,8,,29.31,0.0
+layer3.0.downsample.0.bias_quantizer,weight,8,-1.0,8,,zero-tensor,0.0
+layer3.0.downsample.0.act_quantizer,act,8,1.0,6,,,
+layer3.1.conv1.weight_quantizer,weight,8,-2.0,9,,31.88,1e-05
+layer3.1.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer3.1.conv1.act_quantizer,act,8,0.0,7,"(0.0, None)",,
+layer3.1.conv2.weight_quantizer,weight,8,0.0,7,,19.27,0.0
+layer3.1.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer3.1.conv2.act_quantizer,act,8,2.0,5,,,
+layer4.0.conv1.weight_quantizer,weight,8,-2.0,9,,30.7,0.0
+layer4.0.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer4.0.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer4.0.conv2.weight_quantizer,weight,8,0.0,7,,17.74,0.0
+layer4.0.conv2.bias_quantizer,weight,8,1.0,6,,zero-tensor,0.0
+layer4.0.conv2.act_quantizer,act,8,2.0,5,,,
+layer4.0.downsample.0.weight_quantizer,weight,8,0.0,7,,23.26,0.0
+layer4.0.downsample.0.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer4.0.downsample.0.act_quantizer,act,8,1.0,6,,,
+layer4.1.conv1.weight_quantizer,weight,8,-1.0,8,,24.05,0.0
+layer4.1.conv1.bias_quantizer,weight,8,0.0,7,,zero-tensor,0.0
+layer4.1.conv1.act_quantizer,act,8,1.0,6,"(0.0, None)",,
+layer4.1.conv2.weight_quantizer,weight,8,2.0,5,,3.68,0.0
+layer4.1.conv2.bias_quantizer,weight,8,2.0,5,,zero-tensor,0.0
+layer4.1.conv2.act_quantizer,act,8,5.0,2,,,
+avgpool.quantizer,act,8,3.0,4,,,
+fc.weight_quantizer,weight,8,0.0,7,,29.76,0.0
+fc.bias_quantizer,weight,8,-4.0,11,,41.19,0.0
+fc.act_quantizer,act,8,5.0,2,,,
+add.quantizer,act,8,3.0,4,"(0.0, None)",,
+add_1.quantizer,act,8,2.0,5,"(0.0, None)",,
+add_2.quantizer,act,8,2.0,5,"(0.0, None)",,
+add_3.quantizer,act,8,3.0,4,"(0.0, None)",,
+add_4.quantizer,act,8,1.0,6,"(0.0, None)",,
+add_5.quantizer,act,8,2.0,5,"(0.0, None)",,
+add_6.quantizer,act,8,2.0,5,"(0.0, None)",,
+add_7.quantizer,act,8,5.0,2,"(0.0, None)",,
+quant_stub.quantizer,act,8,2.0,5,,,

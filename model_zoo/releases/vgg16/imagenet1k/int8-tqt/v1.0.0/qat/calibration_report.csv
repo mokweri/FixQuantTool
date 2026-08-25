@@ -1,0 +1,56 @@
+quantizer,tensor_type,bitwidth,log2_t,frac,bounded_range,sqnr_db,clip_rate
+features.0.weight_quantizer,weight,8,1.0,6,,34.74,0.0
+features.0.bias_quantizer,weight,8,1.0,6,,41.59,0.0
+features.0.act_quantizer,act,8,4.0,3,"(0.0, None)",,
+features.2.weight_quantizer,weight,8,0.0,7,,27.89,0.0
+features.2.bias_quantizer,weight,8,0.0,7,,41.42,0.0
+features.2.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.4.quantizer,act,8,4.0,3,,,
+features.5.weight_quantizer,weight,8,0.0,7,,26.86,0.0
+features.5.bias_quantizer,weight,8,-1.0,8,,40.35,0.0
+features.5.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.7.weight_quantizer,weight,8,-1.0,8,,30.68,0.0
+features.7.bias_quantizer,weight,8,0.0,7,,37.18,0.0
+features.7.act_quantizer,act,8,6.0,1,"(0.0, None)",,
+features.9.quantizer,act,8,5.0,2,,,
+features.10.weight_quantizer,weight,8,-1.0,8,,28.9,1e-05
+features.10.bias_quantizer,weight,8,-1.0,8,,38.82,0.0
+features.10.act_quantizer,act,8,6.0,1,"(0.0, None)",,
+features.12.weight_quantizer,weight,8,-1.0,8,,26.77,0.0
+features.12.bias_quantizer,weight,8,-1.0,8,,38.11,0.0
+features.12.act_quantizer,act,8,6.0,1,"(0.0, None)",,
+features.14.weight_quantizer,weight,8,-1.0,8,,26.99,0.0
+features.14.bias_quantizer,weight,8,-1.0,8,,39.55,0.0
+features.14.act_quantizer,act,8,6.0,1,"(0.0, None)",,
+features.16.quantizer,act,8,6.0,1,,,
+features.17.weight_quantizer,weight,8,-1.0,8,,25.64,0.0
+features.17.bias_quantizer,weight,8,-1.0,8,,38.61,0.0
+features.17.act_quantizer,act,8,6.0,1,"(0.0, None)",,
+features.19.weight_quantizer,weight,8,-2.0,9,,29.26,0.0
+features.19.bias_quantizer,weight,8,1.0,6,,29.49,0.0
+features.19.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.21.weight_quantizer,weight,8,-2.0,9,,29.25,0.0
+features.21.bias_quantizer,weight,8,0.0,7,,34.22,0.0
+features.21.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.23.quantizer,act,8,6.0,1,,,
+features.24.weight_quantizer,weight,8,-2.0,9,,29.73,0.0
+features.24.bias_quantizer,weight,8,-1.0,8,,39.91,0.0
+features.24.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.26.weight_quantizer,weight,8,-3.0,10,,35.07,1e-05
+features.26.bias_quantizer,weight,8,1.0,6,,31.35,0.0
+features.26.act_quantizer,act,8,5.0,2,"(0.0, None)",,
+features.28.weight_quantizer,weight,8,-3.0,10,,35.13,0.0
+features.28.bias_quantizer,weight,8,0.0,7,,36.94,0.0
+features.28.act_quantizer,act,8,4.0,3,"(0.0, None)",,
+features.30.quantizer,act,8,4.0,3,,,
+avgpool.quantizer,act,8,4.0,3,,,
+classifier.0.weight_quantizer,weight,8,-5.0,12,,37.06,0.0
+classifier.0.bias_quantizer,weight,8,-3.0,10,,37.88,0.0
+classifier.0.act_quantizer,act,8,4.0,3,"(0.0, None)",,
+classifier.3.weight_quantizer,weight,8,-4.0,11,,37.04,0.0
+classifier.3.bias_quantizer,weight,8,-2.0,9,,40.22,0.0
+classifier.3.act_quantizer,act,8,4.0,3,"(0.0, None)",,
+classifier.6.weight_quantizer,weight,8,-3.0,10,,36.32,0.0
+classifier.6.bias_quantizer,weight,8,-3.0,10,,41.18,0.0
+classifier.6.act_quantizer,act,8,5.0,2,,,
+quant_stub.quantizer,act,8,2.0,5,,,

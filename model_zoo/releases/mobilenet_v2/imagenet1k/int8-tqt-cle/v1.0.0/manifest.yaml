@@ -1,0 +1,48 @@
+schema_version: 1
+release_id: mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0
+status: released
+version: v1.0.0
+released_at: '2026-08-25T09:50:33+00:00'
+model: mobilenet_v2
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+quantization:
+  profile: int8-tqt-cle
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: true
+provenance:
+  run_dir: /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/mobilenet_v2/904116/mobilenet_v2
+  git_commit: null
+  slurm_job_id: '904116'
+metrics:
+  qat:
+    loss: 1.150241865463257
+    top1: 71.56800079345703
+    top5: 90.35199737548828
+  tilecnn:
+    loss: 1.1754689603042603
+    top1: 70.95399475097656
+    top5: 90.00199890136719
+  tilecnn_delta:
+    top1: -0.6140060424804688
+    top5: -0.34999847412109375
+validation_samples: 50000
+artifacts:
+  best_checkpoint: qat/model_best.pth.tar
+  calibration_report: qat/calibration_report.csv
+  threshold_log: qat/quant_thresholds.csv
+  run_manifest: null
+  qconfig: deployment/qconfig.json
+checksums:
+  deployment/qconfig.json: 4e084bf725087dd124a8e99ddcc9f95f5154d3f9c40f1195072ce3f2f7499e9c
+  evaluation/qat_metrics.json: 3e971050a45de9aa05f0db9705e4813da8da78e43de6db7044dcae919d478dc2
+  evaluation/tilecnn_metrics.json: 262ed2879725138416bf42dd57bf47940204dde95b6371b6b35d2dee856cb211
+  evaluation/validation_report.json: c9b212fc3ac24cb5e90086f20a19bdf3614bee888fa3dc96e0cb3f3f6f33c96a
+  metrics.json: 5852f4666188dafbc6ae777ee3363a8e5e562eee321a8d07a47a58cb95d137f4
+  model_card.md: 0760b1265736946da6de62ded7382ec1692a08505481287b159b8b8e401430fd
+  qat/calibration_report.csv: 4b20ac15f39f2a473c061eef2f198928e2605691ed8be6905aa72bc00e868675
+  qat/model_best.pth.tar: aa10e5a5c96232c006fccd7cbf9b44d0b38f4c23545e8cdebeccd1db908afbb9
+  qat/quant_thresholds.csv: 599118a1f5df94a51636aa05dfe4048028854642e42bd4c6fb4421d4f3cd2022

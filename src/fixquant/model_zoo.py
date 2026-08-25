@@ -43,6 +43,27 @@ def get_zoo_root(root: Optional[os.PathLike | str] = None) -> Path:
     return Path(value).expanduser().resolve()
 
 
+def select_dataset_path(
+    explicit_path: Optional[str] = None,
+    release_path: Optional[str] = None,
+    *,
+    environ: Optional[Dict[str, str]] = None,
+    fallback: Optional[str] = None,
+) -> Optional[str]:
+    """Choose a dataset path without binding a release to its training host.
+
+    Precedence is explicit CLI value, local environment, recorded release path,
+    then the caller's fallback.
+    """
+    environment = os.environ if environ is None else environ
+    return (
+        explicit_path
+        or environment.get("FIXQUANT_DATA_DIR")
+        or release_path
+        or fallback
+    )
+
+
 def sha256_file(path: os.PathLike | str, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:

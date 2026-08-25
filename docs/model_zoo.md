@@ -187,6 +187,24 @@ python tools/deploy_eval.py \
 This prevents incompatible combinations such as loading CLE-trained weights
 into a non-CLE graph.
 
+Dataset locations are machine-local. Selection uses the following precedence:
+
+1. explicit `--dataroot`;
+2. `FIXQUANT_DATA_DIR` on the current machine;
+3. the original path recorded in the release;
+4. the tool's local fallback.
+
+For example, after pulling the repository onto an accelerator PC:
+
+```bash
+export FIXQUANT_DATA_DIR=/home/obed/datasets/imagenet
+python tools/deploy_eval.py \
+    --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
+    --model_type tilecnn
+```
+
+An explicit `--dataroot` overrides the environment for one invocation.
+
 ## Current scope
 
 Version 1 of the registry releases the genuine-best QAT checkpoint, structured

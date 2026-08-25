@@ -1,0 +1,19 @@
+{
+  "checkpoint": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/mobilenet_v2/904116/mobilenet_v2/checkpoint/model_best.pth.tar",
+  "checkpoint_sha256": "aa10e5a5c96232c006fccd7cbf9b44d0b38f4c23545e8cdebeccd1db908afbb9",
+  "cle": true,
+  "created_at": "2026-08-07T15:08:24+00:00",
+  "dataset": {
+    "name": "imagenet",
+    "path": "/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b"
+  },
+  "metrics": {
+    "loss": 1.1754689603042603,
+    "top1": 70.95399475097656,
+    "top5": 90.00199890136719
+  },
+  "model": "mobilenet_v2",
+  "representation": "tilecnn",
+  "schema_version": 1,
+  "validation_samples": 50000
+}

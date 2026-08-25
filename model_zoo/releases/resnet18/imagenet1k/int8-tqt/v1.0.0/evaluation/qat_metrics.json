@@ -1,0 +1,19 @@
+{
+  "checkpoint": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/resnet18/949946/resnet18/checkpoint/model_best.pth.tar",
+  "checkpoint_sha256": "7e40cecc7c57f104d8c95b9e0b9331833ff6cea240ee06e947660b1dd3ce9f58",
+  "cle": false,
+  "created_at": "2026-08-07T14:54:51+00:00",
+  "dataset": {
+    "name": "imagenet",
+    "path": "/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b"
+  },
+  "metrics": {
+    "loss": 1.2321938636016845,
+    "top1": 70.04999542236328,
+    "top5": 89.29399871826172
+  },
+  "model": "resnet18",
+  "representation": "qat",
+  "schema_version": 1,
+  "validation_samples": 50000
+}

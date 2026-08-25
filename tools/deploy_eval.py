@@ -51,7 +51,11 @@ parser.add_argument("--qconfig-output", default=None,
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
-                    default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/datasets/imagenet-mini"), )
+                    default=None,
+                    help=(
+                        "Dataset path. Precedence: this option, FIXQUANT_DATA_DIR, "
+                        "released-model path, local fallback."
+                    ))
 
 parser.add_argument('--display_freq',
                     default=10, type=int, help='Display training metrics every n steps.')
@@ -78,23 +82,27 @@ if __name__ == '__main__':
     logger = logging.getLogger("deploy_eval")
 
     args = parser.parse_args()
+    release_dataset_path = None
     if args.zoo_model:
         from fixquant.model_zoo import resolve_release
         released = resolve_release(args.zoo_root, args.zoo_model)
         args.model = released["model"]
         args.checkpoint = released["checkpoint"]
         args.cle = released["cle"]
-        if released["dataset"].get("path"):
-            args.dataroot = released["dataset"]["path"]
+        release_dataset_path = released["dataset"].get("path")
+    from fixquant.model_zoo import select_dataset_path
+    args.dataroot = select_dataset_path(
+        args.dataroot,
+        release_dataset_path,
+        fallback="/home/obed/Documents/datasets/imagenet-mini",
+    )
     args.cuda = torch.cuda.is_available()
 
     # GPU selection remains via args.gpus for RunManager compatibility
     device_ids = None if args.gpus == "" else [int(i) for i in args.gpus.split(",")]
 
     """Set Dataset"""
-    ImagenetDataProvider.DEFAULT_PATH = os.environ.get(
-        "FIXQUANT_DATA_DIR", args.dataroot
-    )
+    ImagenetDataProvider.DEFAULT_PATH = args.dataroot
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)

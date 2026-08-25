@@ -1,4 +1,40 @@
 schema_version: 1
-generated_at: null
+generated_at: '2026-08-25T09:54:12+00:00'
 zoo_root: .
-releases: []
+releases:
+- release_id: mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0
+  status: released
+  model: mobilenet_v2
+  dataset: imagenet1k
+  profile: int8-tqt-cle
+  version: v1.0.0
+  qat_top1: 71.56800079345703
+  tilecnn_top1: 70.95399475097656
+  git_commit: null
+- release_id: resnet18/imagenet1k/int8-tqt@v1.0.0
+  status: released
+  model: resnet18
+  dataset: imagenet1k
+  profile: int8-tqt
+  version: v1.0.0
+  qat_top1: 70.04999542236328
+  tilecnn_top1: 69.74199676513672
+  git_commit: null
+- release_id: resnet50/imagenet1k/int8-tqt@v1.0.0
+  status: released
+  model: resnet50
+  dataset: imagenet1k
+  profile: int8-tqt
+  version: v1.0.0
+  qat_top1: 79.95399475097656
+  tilecnn_top1: 79.57799530029297
+  git_commit: null
+- release_id: vgg16/imagenet1k/int8-tqt@v1.0.0
+  status: released
+  model: vgg16
+  dataset: imagenet1k
+  profile: int8-tqt
+  version: v1.0.0
+  qat_top1: 71.23600006103516
+  tilecnn_top1: 71.0
+  git_commit: null

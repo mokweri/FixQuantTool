@@ -1,0 +1,48 @@
+schema_version: 1
+release_id: resnet18/imagenet1k/int8-tqt@v1.0.0
+status: released
+version: v1.0.0
+released_at: '2026-08-25T09:51:14+00:00'
+model: resnet18
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+quantization:
+  profile: int8-tqt
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: false
+provenance:
+  run_dir: /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/resnet18/949946/resnet18
+  git_commit: null
+  slurm_job_id: '949946'
+metrics:
+  qat:
+    loss: 1.2321938636016845
+    top1: 70.04999542236328
+    top5: 89.29399871826172
+  tilecnn:
+    loss: 1.2418642990875244
+    top1: 69.74199676513672
+    top5: 89.13800048828125
+  tilecnn_delta:
+    top1: -0.3079986572265625
+    top5: -0.15599822998046875
+validation_samples: 50000
+artifacts:
+  best_checkpoint: qat/model_best.pth.tar
+  calibration_report: qat/calibration_report.csv
+  threshold_log: qat/quant_thresholds.csv
+  run_manifest: null
+  qconfig: deployment/qconfig.json
+checksums:
+  deployment/qconfig.json: 16852c6105a02c8111164b401dba1d589df4b5472372ace42e23d216f7c5e60f
+  evaluation/qat_metrics.json: 3995a7e189ed572c5e8171bd7272db4a1c02616b5aed27b8e01048b211b9935c
+  evaluation/tilecnn_metrics.json: db5ff5609d3e07f97e092ddd2d786c2822699414aa0c2ca466f62d1cf6d31ac8
+  evaluation/validation_report.json: 54b666679c971e37ed6af2e77e94564eefefb56706bfb1601c77b16c3ae56736
+  metrics.json: 7c791967b9bf9db9be8b7490d51c45aa09494c526222dd91ec9b06134a11962a
+  model_card.md: b02288b5a57a723f9da9ea965ad4fe3ca0eaffece4bfc8e4b5570a950aa26818
+  qat/calibration_report.csv: cf7546eddd2c697367b2df24b064e92a3c82f94d1e5a4c623bf0a91aabf9ce2d
+  qat/model_best.pth.tar: 7e40cecc7c57f104d8c95b9e0b9331833ff6cea240ee06e947660b1dd3ce9f58
+  qat/quant_thresholds.csv: 104379796a3454f8d27ff1f53fc882319a2d97491e958a110c16dfa74cc95e1f
