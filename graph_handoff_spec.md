@@ -46,6 +46,7 @@ binary tensor files.
 
 ```text
 resnet18_int8_tilecnn/
+  manifest.json
   graph.json
 
   inputs/
@@ -74,6 +75,19 @@ resnet18_int8_tilecnn/
 
 Use separate files per tensor. This makes debugging, partial regeneration, and
 per-layer comparison much easier than a single monolithic binary archive.
+
+## Model Package Manifest
+
+Released-model exports include `manifest.json` with schema
+`tilecnn.model-package.v1`. This package-level record identifies the model-zoo
+release, FixQuant version and Git revision, checkpoint and configuration
+checksums, reference-image preprocessing, and checksums for `graph.json` and
+the exported validation inputs and references.
+
+`manifest.json` describes how the package was produced. `graph.json` remains
+the compiler input and graph/tensor contract. Consumers may ignore the package
+manifest when reading legacy fixtures, but release-oriented workflows should
+validate it before accepting a newly generated package.
 
 ## Binary File Format
 

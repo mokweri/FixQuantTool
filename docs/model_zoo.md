@@ -182,10 +182,18 @@ python tools/qat_test.py \
 python tools/deploy_eval.py \
     --zoo-model mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0 \
     --model_type tilecnn
+
+python tools/export_tilecnn_graph.py \
+    --zoo-model mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0 \
+    --out_dir outputs/mobilenet_v2_int8_tilecnn
 ```
 
 This prevents incompatible combinations such as loading CLE-trained weights
-into a non-CLE graph.
+into a non-CLE graph. The graph exporter resolves the model, checkpoint, and
+CLE setting from the same release record used by the evaluation tools. It
+verifies the released checkpoint checksum and writes a
+`tilecnn.model-package.v1` `manifest.json` into the exported package with the
+release, producer, preprocessing, graph, input, and reference provenance.
 
 Dataset locations are machine-local. Selection uses the following precedence:
 

@@ -591,11 +591,13 @@ def verify_release(root: os.PathLike | str, release_id: str) -> Dict[str, Any]:
 def resolve_release(root: os.PathLike | str, release_id: str) -> Dict[str, Any]:
     directory = release_directory(root, release_id)
     manifest = load_release(root, release_id)
-    checkpoint = directory / manifest["artifacts"]["best_checkpoint"]
+    checkpoint_relative = manifest["artifacts"]["best_checkpoint"]
+    checkpoint = directory / checkpoint_relative
     return {
         "release_id": release_id,
         "release_dir": str(directory),
         "checkpoint": str(checkpoint),
+        "checkpoint_sha256": manifest.get("checksums", {}).get(checkpoint_relative),
         "model": manifest["model"],
         "dataset": manifest["dataset"],
         "profile": manifest["quantization"]["profile"],

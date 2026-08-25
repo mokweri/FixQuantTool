@@ -12,6 +12,13 @@ from fixquant.graph.qat_processor import QatProcessor
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
 from fixquant.export.tilecnn_exporter import TileCNNGraphExporter, _check_shift_legality
+from tools.export_tilecnn_graph import (
+    PREPROCESSING,
+    build_parser,
+    resolve_export_model,
+    sha256_file,
+    write_package_manifest,
+)
 
 from tests.models import TinyMobileBlockNet, synthetic_loader
 
@@ -124,3 +131,89 @@ def test_cle_preserves_function_and_equalizes():
         got = eq_model(x)
     assert torch.allclose(ref, got, atol=1e-4), (ref - got).abs().max()
     assert ratio_after < ratio_before / 2, (ratio_before, ratio_after)
+
+
+def test_export_resolves_model_zoo_release(tmp_path):
+    release_id = "mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0"
+    release_dir = (
+        tmp_path / "releases" / "mobilenet_v2" / "imagenet1k" /
+        "int8-tqt-cle" / "v1.0.0"
+    )
+    checkpoint = release_dir / "qat" / "model_best.pth.tar"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"checkpoint")
+    checkpoint_hash = sha256_file(checkpoint)
+    manifest = {
+        "release_id": release_id,
+        "model": "mobilenet_v2",
+        "dataset": {"name": "imagenet1k", "path": "/dataset/imagenet"},
+        "quantization": {"profile": "int8-tqt-cle", "cle": True},
+        "metrics": {},
+        "artifacts": {"best_checkpoint": "qat/model_best.pth.tar"},
+        "checksums": {"qat/model_best.pth.tar": checkpoint_hash},
+    }
+    (release_dir / "manifest.yaml").write_text(yaml.safe_dump(manifest))
+
+    args = build_parser().parse_args([
+        "--zoo-model", release_id,
+        "--zoo-root", str(tmp_path),
+    ])
+    resolved = resolve_export_model(args, Path("/unused/repo"))
+
+    assert resolved == checkpoint
+    assert args.model == "mobilenet_v2"
+    assert args.cle is True
+    assert args.zoo_release["checkpoint_sha256"] == checkpoint_hash
+
+
+def test_package_manifest_records_release_and_artifact_provenance(tmp_path):
+    out_dir = tmp_path / "package"
+    (out_dir / "inputs").mkdir(parents=True)
+    (out_dir / "refs").mkdir()
+    (out_dir / "inputs" / "input.int8.bin").write_bytes(b"input")
+    (out_dir / "refs" / "output.int8.bin").write_bytes(b"output")
+    graph = {
+        "schema": "tilecnn.graph.v1",
+        "tensors": {
+            "input": {"kind": "input", "file": "inputs/input.int8.bin"},
+            "output_ref": {
+                "kind": "reference", "file": "refs/output.int8.bin"
+            },
+        },
+    }
+    (out_dir / "graph.json").write_text(json.dumps(graph))
+    checkpoint = tmp_path / "model_best.pth.tar"
+    quant_config = tmp_path / "quant_config.yaml"
+    image = tmp_path / "image.JPEG"
+    checkpoint.write_bytes(b"checkpoint")
+    quant_config.write_text("quant: config\n")
+    image.write_bytes(b"image")
+    release = {
+        "release_id": "resnet50/imagenet1k/int8-tqt@v1.0.0",
+        "dataset": {"name": "imagenet1k"},
+        "profile": "int8-tqt",
+        "checkpoint_sha256": sha256_file(checkpoint),
+    }
+    args = build_parser().parse_args([
+        "--zoo-model", release["release_id"],
+    ])
+
+    manifest = write_package_manifest(
+        out_dir, Path(__file__).resolve().parents[1], args, checkpoint,
+        quant_config, image, release,
+    )
+
+    assert manifest["schema"] == "tilecnn.model-package.v1"
+    assert manifest["model"]["release_id"] == release["release_id"]
+    assert manifest["producer"]["git_revision"]
+    assert manifest["sources"]["checkpoint"]["sha256"] == release[
+        "checkpoint_sha256"
+    ]
+    assert manifest["preprocessing"] == PREPROCESSING
+    assert manifest["artifacts"]["graph"]["sha256"] == sha256_file(
+        out_dir / "graph.json"
+    )
+    assert manifest["artifacts"]["references"][0]["sha256"] == sha256_file(
+        out_dir / "refs" / "output.int8.bin"
+    )
+    assert (out_dir / "manifest.json").is_file()

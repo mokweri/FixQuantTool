@@ -50,14 +50,27 @@ in between is int8 with TileCNN's exact two-step rounding.
 
 ## Exporting a graph bundle
 
+For a validated model-zoo release, the exporter resolves the model,
+checkpoint, and CLE setting from the release ID:
+
+```bash
+python tools/export_tilecnn_graph.py \
+    --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
+    --out_dir outputs/resnet50_int8_tilecnn
+```
+
+Use the explicit options when exporting an unreleased checkpoint:
+
 ```bash
 python tools/export_tilecnn_graph.py --model resnet50 \
     --checkpoint qat_models/resnet50/checkpoint/model_best.pth.tar \
     --out_dir outputs/resnet50_int8_tilecnn
 ```
 
-Produces `graph.json`, `inputs/`, `params/`, `refs/` — with references
-recomputed using the fused bit-exact TileCNN arithmetic, and export-time
+Produces `manifest.json`, `graph.json`, `inputs/`, `params/`, and `refs/`.
+The manifest records release identity, source checksums, the FixQuant revision,
+reference preprocessing, and validation-artifact checksums. References are
+recomputed using the fused bit-exact TileCNN arithmetic, with export-time
 legality checks on all derived shifts. Missing quantization parameters raise
 errors; nothing falls back to silent defaults.
 
