@@ -169,13 +169,18 @@ def test_export_resolves_model_zoo_release(tmp_path):
 def test_package_manifest_records_release_and_artifact_provenance(tmp_path):
     out_dir = tmp_path / "package"
     (out_dir / "inputs").mkdir(parents=True)
+    (out_dir / "params").mkdir()
     (out_dir / "refs").mkdir()
     (out_dir / "inputs" / "input.int8.bin").write_bytes(b"input")
+    (out_dir / "params" / "weight.int8.bin").write_bytes(b"weight")
     (out_dir / "refs" / "output.int8.bin").write_bytes(b"output")
     graph = {
         "schema": "tilecnn.graph.v1",
         "tensors": {
             "input": {"kind": "input", "file": "inputs/input.int8.bin"},
+            "weight": {
+                "kind": "param", "file": "params/weight.int8.bin"
+            },
             "output_ref": {
                 "kind": "reference", "file": "refs/output.int8.bin"
             },
@@ -210,10 +215,17 @@ def test_package_manifest_records_release_and_artifact_provenance(tmp_path):
         "checkpoint_sha256"
     ]
     assert manifest["preprocessing"] == PREPROCESSING
+    assert manifest["integrity"] == {
+        "algorithm": "sha256",
+        "coverage": "all-graph-artifacts",
+    }
     assert manifest["artifacts"]["graph"]["sha256"] == sha256_file(
         out_dir / "graph.json"
     )
     assert manifest["artifacts"]["references"][0]["sha256"] == sha256_file(
         out_dir / "refs" / "output.int8.bin"
+    )
+    assert manifest["artifacts"]["parameters"][0]["sha256"] == sha256_file(
+        out_dir / "params" / "weight.int8.bin"
     )
     assert (out_dir / "manifest.json").is_file()

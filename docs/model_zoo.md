@@ -19,12 +19,12 @@ not consume home-directory quota. Override the location with
 `FIXQUANT_ZOO_ROOT` when testing against a temporary registry or using external
 storage.
 
-Git tracks release manifests, model cards, metrics, qconfigs, and the catalog.
-Checkpoint binaries and mutable `.candidates/` state are ignored. A clone can
-therefore inspect the release history without downloading multi-gigabyte model
-weights; the local checkpoint must be restored before evaluating that release.
-Lightweight registry commands can run on the login node through
-`scripts/model_zoo.sh`; they do not require a GPU allocation.
+Git tracks release manifests, model cards, metrics, qconfigs, download records,
+and the catalog. Checkpoint binaries, fetched `.artifacts/`, and mutable
+`.candidates/` state are ignored. A clone can therefore inspect the release
+history without downloading multi-gigabyte model weights and explicitly fetch
+only the model it needs. Lightweight registry commands can run on the login
+node through `scripts/model_zoo.sh`; they do not require a GPU allocation.
 
 ## Lifecycle
 
@@ -37,6 +37,9 @@ QAT training
     -> validated candidate
     -> explicit human promotion
     -> immutable semantic-version release
+    -> metadata commit
+    -> draft GitHub Release upload
+    -> explicit publication
 ```
 
 Automation stops at `validated`. Promotion remains a deliberate login-node
@@ -145,8 +148,9 @@ scripts/model_zoo.sh promote resnet18-run-1234 --version 1.0.0
 ```
 
 Promotion copies artifacts into an immutable release, calculates checksums,
-writes a release manifest and model card, and marks the candidate `released`.
-A second attempt to create the same version fails rather than overwriting it.
+writes a release manifest and model card, records the deterministic GitHub
+Release location, and marks the candidate `released`. A second attempt to
+create the same version fails rather than overwriting it.
 
 Regenerate the Git-trackable catalog afterward:
 
@@ -154,6 +158,60 @@ Regenerate the Git-trackable catalog afterward:
 scripts/model_zoo.sh catalog --output model_zoo/catalog.yaml
 git add model_zoo/catalog.yaml
 ```
+
+## Publish a checkpoint
+
+Publishing is a deliberate login-node operation after promotion. Authenticate
+the GitHub CLI once with `gh auth login`; never store a token in the repository
+or a Slurm job file.
+
+First commit and push the promoted metadata. Then bind the binary release to
+that exact FixQuant commit and create it as a draft:
+
+```bash
+scripts/model_zoo.sh publish \
+    resnet18/imagenet1k/int8-tqt@v1.0.0 \
+    --target <full-40-character-FixQuant-commit>
+```
+
+`publish` verifies the local checkpoint against the manifest, checks the
+canonical tag, asset, URL, and size, confirms that the target commit contains
+the exact current manifest, and calls `gh release create --draft`.
+Inspect the draft on GitHub and publish it explicitly:
+
+```bash
+gh release edit \
+    model-zoo-resnet18-imagenet1k-int8-tqt-v1.0.0 \
+    --repo mokweri/FixQuantTool \
+    --draft=false
+```
+
+Use `publish ... --dry-run` to inspect the generated GitHub CLI command without
+changing GitHub. Releases promoted before download metadata was introduced can
+be prepared once before their metadata commit:
+
+```bash
+scripts/model_zoo.sh prepare-publish \
+    resnet50/imagenet1k/int8-tqt@v1.0.0
+```
+
+Every different checkpoint receives a new semantic version. Never replace an
+asset belonging to an existing published version.
+
+## Fetch a checkpoint
+
+Fetch is explicit and does not run silently during export or evaluation:
+
+```bash
+scripts/model_zoo.sh fetch \
+    resnet50/imagenet1k/int8-tqt@v1.0.0
+```
+
+The command reuses a verified local release checkpoint or cached copy. A
+missing payload is streamed to a temporary file, checked for exact size and
+SHA-256, and atomically installed under `model_zoo/.artifacts/`. Override that
+location with `--cache-dir` or `FIXQUANT_ZOO_CACHE`. Consumers resolve the
+verified cache automatically.
 
 ## List, resolve, and verify releases
 
@@ -172,10 +230,13 @@ modified files.
 
 ## Consume a released model
 
-The evaluation tools resolve the model, checkpoint, dataset, and CLE setting
-from a release ID:
+Fetch the checkpoint, then let the evaluation tools resolve the model,
+checkpoint, dataset, and CLE setting from the same release ID:
 
 ```bash
+scripts/model_zoo.sh fetch \
+    mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0
+
 python tools/qat_test.py \
     --zoo-model mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0
 

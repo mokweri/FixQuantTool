@@ -36,6 +36,8 @@ outputs/
 saved_models-FP/
 # Mutable model-zoo candidates contain machine-specific run paths.
 model_zoo/.candidates/
+# Downloaded release payloads are verified against tracked manifests.
+model_zoo/.artifacts/
 # Release metadata remains tracked; heavyweight checkpoint binaries do not.
 model_zoo/releases/**/qat/model_best.pth.tar
 *.pth

@@ -76,6 +76,10 @@ def write_package_manifest(
         spec["file"] for spec in graph["tensors"].values()
         if spec.get("kind") == "input" and spec.get("file")
     })
+    parameter_paths = sorted({
+        spec["file"] for spec in graph["tensors"].values()
+        if spec.get("kind") == "param" and spec.get("file")
+    })
     reference_paths = sorted({
         spec["file"] for spec in graph["tensors"].values()
         if spec.get("kind") == "reference" and spec.get("file")
@@ -121,8 +125,15 @@ def write_package_manifest(
             "reference_image": image_record,
         },
         "preprocessing": PREPROCESSING,
+        "integrity": {
+            "algorithm": "sha256",
+            "coverage": "all-graph-artifacts",
+        },
         "artifacts": {
             "graph": artifact_record(out_dir, "graph.json"),
+            "parameters": [
+                artifact_record(out_dir, path) for path in parameter_paths
+            ],
             "inputs": [artifact_record(out_dir, path) for path in input_paths],
             "references": [
                 artifact_record(out_dir, path) for path in reference_paths
@@ -199,7 +210,10 @@ def main():
     out_dir = Path(args.out_dir) if args.out_dir else (REPO_ROOT / f"outputs/{args.model}_int8_tilecnn")
 
     if args.zoo_model and not checkpoint.is_file():
-        raise FileNotFoundError(f"Released checkpoint not found: {checkpoint}")
+        raise FileNotFoundError(
+            f"Released checkpoint not found: {checkpoint}. Fetch it with "
+            f"'scripts/model_zoo.sh fetch {args.zoo_model}'"
+        )
     expected_checkpoint_hash = release.get("checkpoint_sha256") if release else None
     if expected_checkpoint_hash:
         checkpoint_hash = sha256_file(checkpoint)

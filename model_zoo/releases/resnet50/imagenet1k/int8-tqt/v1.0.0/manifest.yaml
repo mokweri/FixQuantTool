@@ -46,3 +46,12 @@ checksums:
   qat/calibration_report.csv: 843ac6600a31576d3497521493e9ae98e611cdd0ec8ff009ffeb07794aad1fca
   qat/model_best.pth.tar: ade0f1693ac2036d2604c95cfe243dd5479871968123ed664ff86dad55aeb160
   qat/quant_thresholds.csv: 860de9d87f2db8a537a0d29a63dc749fd95316159abf3217d0cdf35f38ad1656
+downloads:
+  qat/model_best.pth.tar:
+    provider: github-release
+    repository: mokweri/FixQuantTool
+    tag: model-zoo-resnet50-imagenet1k-int8-tqt-v1.0.0
+    asset: model_best.pth.tar
+    urls:
+    - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-resnet50-imagenet1k-int8-tqt-v1.0.0/model_best.pth.tar
+    size_bytes: 307880725

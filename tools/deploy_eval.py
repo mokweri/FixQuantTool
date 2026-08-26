@@ -86,6 +86,11 @@ if __name__ == '__main__':
     if args.zoo_model:
         from fixquant.model_zoo import resolve_release
         released = resolve_release(args.zoo_root, args.zoo_model)
+        if not released["checkpoint_available"]:
+            parser.error(
+                "released checkpoint is unavailable; fetch it with "
+                f"'scripts/model_zoo.sh fetch {args.zoo_model}'"
+            )
         args.model = released["model"]
         args.checkpoint = released["checkpoint"]
         args.cle = released["cle"]

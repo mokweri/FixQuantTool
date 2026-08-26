@@ -6,14 +6,18 @@ import json
 import sys
 
 from fixquant.model_zoo import (
+    DEFAULT_RELEASE_REPOSITORY,
     ZooError,
     build_catalog,
+    configure_release_download,
+    fetch_release,
     get_zoo_root,
     list_candidates,
     list_releases,
     load_candidate,
     load_release,
     promote_candidate,
+    publish_release,
     register_candidate,
     resolve_release,
     validate_candidate,
@@ -53,6 +57,27 @@ def build_parser():
     promote = subparsers.add_parser("promote", help="Create an immutable release")
     promote.add_argument("candidate_id")
     promote.add_argument("--version", required=True)
+    promote.add_argument("--repository", default=DEFAULT_RELEASE_REPOSITORY)
+
+    fetch = subparsers.add_parser("fetch", help="Fetch a released checkpoint")
+    fetch.add_argument("release_id")
+    fetch.add_argument("--cache-dir")
+    fetch.add_argument("--force", action="store_true")
+
+    prepare = subparsers.add_parser(
+        "prepare-publish",
+        help="Add GitHub download metadata to an older release",
+    )
+    prepare.add_argument("release_id")
+    prepare.add_argument("--repository", default=DEFAULT_RELEASE_REPOSITORY)
+
+    publish = subparsers.add_parser(
+        "publish",
+        help="Upload a verified checkpoint to a draft GitHub Release",
+    )
+    publish.add_argument("release_id")
+    publish.add_argument("--target", required=True, help="Full FixQuant commit SHA")
+    publish.add_argument("--dry-run", action="store_true")
 
     verify = subparsers.add_parser("verify", help="Verify all release checksums")
     verify.add_argument("release_id")
@@ -117,8 +142,41 @@ def main():
         if not report["passed"]:
             return 1
     elif args.command == "promote":
-        manifest, path = promote_candidate(root, args.candidate_id, args.version)
+        manifest, path = promote_candidate(
+            root,
+            args.candidate_id,
+            args.version,
+            repository=args.repository,
+        )
         print(json.dumps({"release": manifest, "path": str(path)}, indent=2))
+    elif args.command == "fetch":
+        print(f"Resolving checkpoint for {args.release_id}", file=sys.stderr)
+        print(json.dumps(fetch_release(
+            root,
+            args.release_id,
+            cache_root=args.cache_dir,
+            force=args.force,
+        ), indent=2))
+    elif args.command == "prepare-publish":
+        download = configure_release_download(
+            root,
+            args.release_id,
+            repository=args.repository,
+        )
+        catalog_path = root / "catalog.yaml"
+        write_yaml(catalog_path, build_catalog(root))
+        print(json.dumps({
+            "release_id": args.release_id,
+            "download": download,
+            "catalog": str(catalog_path),
+        }, indent=2))
+    elif args.command == "publish":
+        print(json.dumps(publish_release(
+            root,
+            args.release_id,
+            target_commit=args.target,
+            execute=not args.dry_run,
+        ), indent=2))
     elif args.command == "verify":
         report = verify_release(root, args.release_id)
         print(json.dumps(report, indent=2))

@@ -46,3 +46,12 @@ checksums:
   qat/calibration_report.csv: 4b20ac15f39f2a473c061eef2f198928e2605691ed8be6905aa72bc00e868675
   qat/model_best.pth.tar: aa10e5a5c96232c006fccd7cbf9b44d0b38f4c23545e8cdebeccd1db908afbb9
   qat/quant_thresholds.csv: 599118a1f5df94a51636aa05dfe4048028854642e42bd4c6fb4421d4f3cd2022
+downloads:
+  qat/model_best.pth.tar:
+    provider: github-release
+    repository: mokweri/FixQuantTool
+    tag: model-zoo-mobilenet_v2-imagenet1k-int8-tqt-cle-v1.0.0
+    asset: model_best.pth.tar
+    urls:
+    - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-mobilenet_v2-imagenet1k-int8-tqt-cle-v1.0.0/model_best.pth.tar
+    size_bytes: 42122201

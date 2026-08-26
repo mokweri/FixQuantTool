@@ -1,275 +1,273 @@
-# FixQuantTool
+# FixQuant
 
-A fixed-point quantization toolkit for Quantization-Aware Training (QAT), bit-exact hardware emulation, and FPGA deployment.
+FixQuant is a fixed-point quantization toolkit for quantization-aware training
+(QAT), hardware-faithful integer inference, and reproducible FPGA deployment.
+It is the model-preparation component used by the TileCNN framework: FixQuant
+trains and validates quantized models, then exports versioned graph packages
+that TileCNN can compile and execute without manually transcribing model data.
 
-## Overview
+The Python package is named `fixquant`; the standalone repository is
+`FixQuantTool` and is pinned as the root-level `FixQuant/` submodule in
+TileCNN.
 
-FixQuantTool provides an end-to-end workflow for deploying neural networks on fixed-point FPGA accelerators:
+## What it provides
 
-1. **Quantization-Aware Training (QAT)** — Fine-tune a pretrained model with learnable quantization thresholds (TQT-based approach) so quantization noise is minimized.
-2. **Inference Conversion** — Convert a QAT-trained model to a standard `nn.Module` with folded batch normalization and fixed-point quantized parameters.
-3. **Hardware Emulation** — Bit-exact emulation of HLS/FPGA convolution kernels (rounding, saturation, ReLU) for validation before synthesis.
-4. **TileCNN Digital Twin** — A PyTorch model that fuses residual additions and uses hardware-accurate GAP/MaxPool kernels, producing bit-identical results to the real FPGA accelerator.
-5. **Hardware Test-Case Export** — Extracts per-layer weights, inputs, and bit-exact reference outputs as binary blobs for use by the TileCNN C-simulation testbench.
+- TQT-based QAT with configurable weight and activation precision.
+- Calibration using an MSE fixed-point search and optional cross-layer
+  equalization (CLE) and bias correction.
+- FX-based Conv-BN fusion, quantized operator replacement, and model freezing.
+- Hardware-faithful `HardwareConv2d`, `HardwareLinear`, pooling, activation,
+  and residual arithmetic for pre-deployment validation.
+- Full-model and subgraph TileCNN export with `graph.json`, integer parameters,
+  validation inputs, and integer reference outputs.
+- A versioned model zoo with validation gates, immutable release identities,
+  checksum-pinned checkpoint delivery, and GitHub Release publishing.
+- ImageNet training and evaluation workflows for ResNet-18, ResNet-50, VGG-16,
+  and MobileNetV2.
 
-## Features
+## Framework flow
 
-- **Fixed-point quantization** with configurable bit-widths and fractional positions
-- **TQT (Trained Quantization Thresholds)** for learning optimal quantization ranges
-- **Automatic Conv-BN fusion** via `torch.fx` graph transformations
-- **Fused ConvBN module** with proper handling of frozen/running BN statistics
-- **Multiple rounding modes** (round-nearest, round-to-zero, truncation, convergent)
-- **Model introspection** for graph analysis, activation capture, and parameter export
-- **Bit-exact hardware modules** — `HardwareConv2d` / `HardwareLinear` / `HardwareGAP` / `HardwareMaxPool2d` reproducing the exact two-step rounding of the hardware `EMIT_LOOP` (guarded by kernel + golden tests)
-- **TileCNN graph exporter** — Produces `graph.json` + binary artifacts satisfying the TileCNN Graph Handoff Specification, with bit-exact references overwritten using fused hardware arithmetic
-- **ONNX export** with fixed-point metadata attributes
-- **Distributed training** support via Horovod
+```mermaid
+flowchart LR
+    A[QAT training] --> B[Model-zoo candidate]
+    B --> C[QAT and TileCNN validation]
+    C --> D[Versioned release]
+    D --> E[Verified checkpoint fetch]
+    E --> F[TileCNN ModelPackage export]
+    F --> G[TileCNN compiler and runtime]
+```
+
+FixQuant owns training, quantization, the integer digital twin, and model
+export. TileCNN owns hardware-specific legality checks, packing, tiling,
+scheduling, descriptor generation, and FPGA execution. Their external boundary
+is the [TileCNN Graph Handoff Specification](graph_handoff_spec.md).
 
 ## Installation
 
-### Prerequisites
+FixQuant requires Python 3.9 or newer. A CUDA-capable GPU is recommended for
+training and full-dataset evaluation but is not required for the fast test
+suite or model-zoo administration.
 
-- Python ≥ 3.9
-- CUDA-capable GPU (recommended)
-- Conda environment with PyTorch (the project uses the `Obed_Cuda` conda environment)
-
-### Install (development mode)
+For a standalone checkout:
 
 ```bash
-conda activate Obed_Cuda
-cd FixQuantTool
-pip install -e .
+python -m pip install -e .
 ```
 
-This makes the `fixquant` package importable from anywhere while allowing in-place edits.
-
-### Dependencies
-
-Core dependencies are listed in `pyproject.toml` and `requirements.txt`:
-
-- `torch >= 2.0`, `torchvision >= 0.15`
-- `numpy`, `pyyaml`, `onnx`, `tqdm`, `Pillow`
-- Optional: `horovod` (for distributed training)
-
-## Project Structure
-
-```
-FixQuantTool/
-├── pyproject.toml              # Package metadata (PEP 621)
-├── setup.cfg                   # Backward-compat packaging config
-├── requirements.txt            # Dependency list
-│
-├── src/fixquant/               # Main Python package
-│   ├── quantization/           # Core quantization modules
-│   │   ├── fix_ops.py          # Fixed-point operations & rounding
-│   │   ├── fused_conv_bn.py    # Conv-BN fusion module
-│   │   ├── qat_modules.py      # QAT-aware layer wrappers
-│   │   ├── equalization.py     # BN fold + cross-layer equalization + bias corr.
-│   │   └── tqt_quantizer.py    # Learnable threshold quantizer + calibration
-│   │
-│   ├── graph/                  # FX graph processing
-│   │   ├── qat_processor.py    # QatProcessor: model → QAT model; preflight_check
-│   │   └── inference_processor.py  # InferProcessor: QAT → std/hardware model
-│   │
-│   ├── diagnostics.py          # Per-layer quant reports, threshold logs, parity sweep
-│   │
-│   ├── emulation/              # Hardware emulation
-│   │   ├── fxp_emu_modules.py  # Bit-exact TileCNN modules (HardwareConv2d, ...)
-│   │   └── model_introspector.py   # Graph inspection & activation export
-│   │
-│   ├── export/                 # Hardware artifact export
-│   │   └── tilecnn_exporter.py # TileCNNGraphExporter + bit-exact ref rewrite
-│   │
-│   ├── data/                   # Dataset providers
-│   │   ├── imagenet.py         # ImageNet data provider
-│   │   ├── cifar10.py          # CIFAR-10 data provider
-│   │   ├── cifar100.py         # CIFAR-100 data provider
-│   │   └── data_utils.py       # Quick data loader utilities
-│   │
-│   ├── training/               # Training orchestration
-│   │   ├── run_config.py       # Training configuration
-│   │   ├── run_manager.py      # Training loop manager
-│   │   └── distributed_run_manager.py  # Horovod DDP support
-│   │
-│   ├── models/                 # Model architectures
-│   │   ├── resnet.py           # ImageNet-scale ResNet
-│   │   └── cifar/              # CIFAR-specific models
-│   │
-│   └── utils/                  # General utilities
-│       ├── common_tools.py     # Metrics, logging helpers
-│       └── pytorch_utils.py    # Optimizer, checkpoint utilities
-│
-├── tools/                      # CLI entry-point scripts (all take --model)
-│   ├── qat_train.py            # Run QAT training (--cle, --calib_batches, ...)
-│   ├── qat_test.py             # Evaluate a QAT checkpoint
-│   ├── deploy_eval.py          # Convert QAT → hardware model & evaluate
-│   ├── layer_sensitivity.py    # Per-layer quantization sensitivity probes
-│   ├── export_hw_testcases.py  # Export TileCNN subgraph test artifacts (resnet50)
-│   ├── export_tilecnn_graph.py # Export a full model as a TileCNN graph bundle
-│   ├── export_fixA_refactor_testcases.py  # URAM-refactor test cases (resnet50)
-│   ├── train.py                # Float (non-QAT) training / baseline eval
-│   ├── print_model_graph.py    # Dump model graph summary
-│   └── archive/                # Retired scripts (see archive/README.md)
-│
-├── tests/                      # pytest suite (kernel bit-exactness, QAT flow,
-│                                 # export, golden regression) — run: pytest tests/
-├── configs/                    # Configuration files
-│   ├── quant_config.yaml       # Layer replacement mapping, freeze_bn_delay
-│   └── qconfig_files/          # Saved quantization configs
-│
-├── docs/                       # Technical documentation
-│   ├── quantization_repo_analysis_and_roadmap.md  # ★ Analysis & roadmap
-│   ├── improvements_2026-07.md # Phase 0-5 rework: what changed and why
-│   ├── baselines.md            # Reproducibility baselines & commands
-│   ├── conv_fused.md           # Conv-BN fusion details
-│   ├── qmodules.md             # Quantized module reference
-│   ├── tqt.md                  # TQT quantizer details
-│   └── tilecnn_exporter_and_digital_twin.md  # Exporter & Digital Twin
-│
-├── graph_handoff_spec.md       # TileCNN Graph Handoff Specification
-├── scripts/                    # HPC job scripts
-├── assets/                     # Test images
-├── checkpoints/                # Saved model weights (gitignored)
-├── outputs/                    # Runtime outputs (gitignored)
-└── qat_models/                 # QAT checkpoints (gitignored)
-```
-
-## Quick Start
-
-### 1. QAT Training
+For development inside the TileCNN repository, use the pinned submodule as the
+active editable installation:
 
 ```bash
-conda activate Obed_Cuda
-python tools/qat_train.py \
-    --model resnet50 \
-    --dataroot /path/to/imagenet \
-    --n_epochs 10 \
-    --init_lr 1e-5
-
-# MobileNetV2: fold BN + cross-layer equalization first (recommended)
-python tools/qat_train.py --model mobilenet_v2 --cle --n_epochs 10
+git submodule update --init FixQuant
+python -m pip install --no-deps -e ./FixQuant
 ```
 
-Calibration runs on `--calib_batches` batches with an MSE fix-position search;
-TQT thresholds freeze after `--threshold_freeze_frac` of the epochs. Per-epoch
-threshold/frac state is logged to `<save_dir>/logs/quant_thresholds.csv`.
+Core dependencies are declared in [pyproject.toml](pyproject.toml). Arrhenius
+uses an ARM-compatible NGC PyTorch container and a persistent virtual
+environment; follow the
+[Arrhenius environment guide](docs/arrhenius_environment.md) instead of
+installing ordinary x86 PyTorch wheels there.
 
-### 2. Evaluate with the TileCNN Digital Twin (bit-identical to FPGA)
+## Use a released model
+
+A model-zoo release ID has this form:
+
+```text
+model/dataset/quantization-profile@version
+```
+
+List the available releases and fetch one checkpoint explicitly:
+
+```bash
+scripts/model_zoo.sh list
+scripts/model_zoo.sh fetch \
+    resnet50/imagenet1k/int8-tqt@v1.0.0
+```
+
+Fetch verifies the recorded byte size and SHA-256 before atomically installing
+the checkpoint in the ignored model-zoo cache. Evaluation and export never make
+an implicit network request.
+
+Evaluate the same release with the TileCNN integer digital twin:
 
 ```bash
 python tools/deploy_eval.py \
-    --model resnet50 \
+    --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
     --dataroot /path/to/imagenet \
     --model_type tilecnn
 ```
 
-### 3. Run the test suite
+Export a complete TileCNN package:
 
 ```bash
-python -m pytest tests/            # add -m "not slow" to skip full-MobileNet tests
+python tools/export_tilecnn_graph.py \
+    --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
+    --out_dir outputs/resnet50_int8_tilecnn
 ```
 
-The digital twin fuses residual additions into the convolution write-back stage and uses hardware-accurate GAP/MaxPool kernels, reproducing the exact integer arithmetic of the TileCNN FPGA accelerator.
+The result contains:
 
-Accuracy baselines (per model: float / PTQ / QAT / twin) are tracked in
-[docs/baselines.md](docs/baselines.md). Numbers recorded before the 2026-07
-rework are not comparable (see [docs/improvements_2026-07.md](docs/improvements_2026-07.md)).
-Validated, versioned checkpoints and hardware metadata are managed by the
-[FixQuant model zoo](docs/model_zoo.md).
+```text
+outputs/resnet50_int8_tilecnn/
+|-- manifest.json
+|-- graph.json
+|-- inputs/
+|-- params/
+`-- refs/
+```
 
-### 4. Export Hardware Test Cases
+`manifest.json` records the release identity, producer revision,
+preprocessing, and a complete SHA-256 inventory of the graph and its referenced
+artifacts.
+
+### TileCNN wrapper
+
+From the parent TileCNN repository, the supported framework entry points are:
 
 ```bash
-python tools/export_hw_testcases.py
+make -C scripts model-fetch \
+    ZOO_MODEL=resnet50/imagenet1k/int8-tqt@v1.0.0
+make -C scripts model-export \
+    ZOO_MODEL=resnet50/imagenet1k/int8-tqt@v1.0.0
 ```
 
-Produces self-contained test artifact directories under `outputs/hw_testcases/`, each containing:
+The validated ModelPackage is written below `build/models/` using the same
+release identity.
 
-- `inputs/*.int8.bin` — boundary input activations at the correct fractional scale
-- `params/*.int8.bin` — INT8 weights and biases
-- `refs/*.int8.bin` — bit-exact reference outputs matching TileCNN hardware semantics
-- `graph.json` — graph topology with full quantization metadata
+## Train and release a model
+
+Run QAT directly for local development:
+
+```bash
+python tools/qat_train.py \
+    --model resnet50 \
+    --dataset imagenet \
+    --dataroot /path/to/imagenet \
+    --n_epochs 10 \
+    --init_lr 1e-5
+```
+
+MobileNetV2 releases currently use CLE; every consumer of that checkpoint must
+rebuild the same transformed model:
+
+```bash
+python tools/qat_train.py \
+    --model mobilenet_v2 \
+    --dataroot /path/to/imagenet \
+    --cle \
+    --n_epochs 10
+```
+
+Training writes the best checkpoint, run manifest, calibration report, and
+threshold log beneath the selected `--save_dir`. The supported release
+lifecycle is:
+
+```bash
+# Register the completed run.
+scripts/model_zoo.sh register /path/to/run/<model>
+
+# Evaluate both QAT and TileCNN representations and apply quality gates.
+sbatch scripts/jobs/validate_zoo_candidate.sbatch <candidate-id>
+
+# Promote only after reviewing the validation report.
+scripts/model_zoo.sh promote <candidate-id> --version 1.1.0
+scripts/model_zoo.sh catalog --output model_zoo/catalog.yaml
+```
+
+Commit and push the release metadata before uploading its ignored checkpoint.
+Publishing always creates a draft GitHub Release bound to the exact commit that
+contains the manifest:
+
+```bash
+scripts/model_zoo.sh publish \
+    <model/dataset/profile@version> \
+    --target <full-40-character-FixQuant-commit>
+```
+
+Inspect the draft on GitHub before making it public. Never replace the asset of
+an existing version; a different checkpoint always receives a new version.
+The complete candidate, validation, promotion, legacy-release preparation,
+fetch, and publication procedures are in the
+[model-zoo guide](docs/model_zoo.md).
+
+## Arrhenius workflows
+
+The maintained Slurm workflows are under `scripts/jobs/`:
+
+| Workflow | Entry point |
+|---|---|
+| Environment and dataset smoke test | `imagenet_smoke.sbatch` |
+| ResNet/VGG QAT sweep | `qat_imagenet_model_sweep.sbatch` |
+| MobileNetV2 QAT | `qat_mobilenet_imagenet.sbatch` |
+| Released-model evaluation | `eval_imagenet_model_sweep.sbatch`, `eval_mobilenet_imagenet.sbatch` |
+| Candidate quality gates | `validate_zoo_candidate.sbatch` |
+
+Use [scripts/run_arrhenius.sh](scripts/run_arrhenius.sh) inside a GPU allocation
+to run commands in the pinned container environment. Site setup, storage,
+interactive allocation, and job-submission details are documented in the
+[Arrhenius GPU guide](docs/arrhenius_gpu_guide.md).
+
+## Testing
+
+Run the normal CPU-oriented validation set with:
+
+```bash
+python -m pytest -q -m "not slow"
+```
+
+Run every test, including the heavier full-MobileNet export coverage, with:
+
+```bash
+python -m pytest -q
+```
+
+The suite covers quantization and calibration, checkpointing, integer kernels,
+QAT conversion, golden arithmetic, model-zoo integrity, and TileCNN export.
+
+## Repository map
+
+| Path | Responsibility |
+|---|---|
+| `src/fixquant/quantization/` | Quantizers, QAT modules, fixed-point operations, fusion, and equalization |
+| `src/fixquant/graph/` | FX graph transformation for QAT and integer inference |
+| `src/fixquant/emulation/` | Hardware-faithful integer modules and model inspection |
+| `src/fixquant/export/` | TileCNN graph and binary-artifact export |
+| `src/fixquant/training/` | Training configuration, checkpoints, and run management |
+| `tools/` | Training, evaluation, inspection, model-zoo, and export commands |
+| `model_zoo/` | Tracked release metadata and ignored checkpoint payloads |
+| `scripts/jobs/` | Maintained Arrhenius training and validation jobs |
+| `tests/` | Unit, regression, model-zoo, and export validation |
 
 ## Configuration
 
-### Environment Variables
-
-| Variable | Description | Default |
+| Variable | Purpose | Default |
 |---|---|---|
-| `FIXQUANT_DATA_DIR` | Path to dataset directory | `/home/obed/Documents/imagenet-mini` |
-| `FIXQUANT_ZOO_ROOT` | Model-zoo registry | `<FixQuantTool>/model_zoo` |
+| `FIXQUANT_DATA_DIR` | Machine-local dataset root | Tool or release-specific fallback |
+| `FIXQUANT_ZOO_ROOT` | Model-zoo registry | `<repository>/model_zoo` |
+| `FIXQUANT_ZOO_CACHE` | Downloaded checkpoint cache | `<model-zoo>/.artifacts` |
 
-### Quantization Config
-
-The quantization configuration is defined in `configs/quant_config.yaml`. It specifies:
-- Layer replacement mappings (which standard layers get replaced with QAT equivalents)
-- Default quantization bit-widths
-
-## Programmatic Usage
-
-### Full Pipeline (QAT → TileCNN Digital Twin)
-
-```python
-import torch
-import yaml
-import torchvision.models as models
-from fixquant.graph.qat_processor import QatProcessor
-from fixquant.graph.inference_processor import InferProcessor
-
-# Load config
-with open("configs/quant_config.yaml") as f:
-    config = yaml.safe_load(f)
-
-# Build and quantize model
-model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-qat = QatProcessor(model, config)
-qat_model = qat.quantize()
-qat.load_qat_weights("qat_models/resnet50/checkpoint/model_best.pth.tar")
-qat.freeze()
-
-# Bit-exact INT8 hardware model (Hardware* modules, TileCNN arithmetic)
-infer    = InferProcessor(qat_model, config)
-hw_model = infer.convert_to_hardware_model(backend="tilecnn")   # or "hls"
-
-# Accepts float32 input, returns float32 logits (I/O quantizers injected)
-hw_model.eval()
-with torch.no_grad():
-    logits = hw_model(image_tensor)
-```
-
-### Exporting Hardware Test Artifacts
-
-```python
-from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
-
-inspector = StdModelInspector(hw_model, default_input_frac=infer.input_frac or 5)
-all_nodes = inspector.topological_order()
-inspector.register_activation_hooks(all_nodes, capture_input=True, capture_output=True)
-
-with torch.no_grad():
-    inspector.run_and_capture(input_image)
-
-exporter = TileCNNGraphExporter(inspector, model_name="resnet50")
-exporter.export("outputs/hw_testcases/my_subgraph",
-                subgraph_nodes=["conv1", "maxpool", "layer1_0_conv1"])
-```
-
-The exporter automatically rewrites the reference files using TileCNN's fused bit-exact arithmetic, so C-simulation results will match without false mismatches.
+Quantizer defaults and module replacement rules are maintained in
+[configs/quant_config.yaml](configs/quant_config.yaml). Model promotion gates
+are maintained separately in
+[configs/model_zoo_policy.yaml](configs/model_zoo_policy.yaml).
 
 ## Documentation
 
-- [Repo Analysis & Roadmap](docs/quantization_repo_analysis_and_roadmap.md)
-- [2026-07 Rework (Phases 0–5)](docs/improvements_2026-07.md)
-- [Reproducibility Baselines](docs/baselines.md)
-- [Arrhenius (NAISS) GPU Guide](docs/arrhenius_gpu_guide.md) + [job template](scripts/jobscript_arrhenius.sh)
-- [QAT Training Guide](QAT.md)
-- [Deployment Guide](DEPLOY.md)
-- [Fused Conv-BN](docs/conv_fused.md)
-- [Quantized Modules](docs/qmodules.md)
-- [TQT Quantizer](docs/tqt.md)
-- [TileCNN Exporter & Digital Twin](docs/tilecnn_exporter_and_digital_twin.md)
+- [Model-zoo lifecycle and releases](docs/model_zoo.md)
+- [QAT guide](QAT.md)
+- [Deployment and graph export](DEPLOY.md)
+- [TileCNN exporter and integer digital twin](docs/tilecnn_exporter_and_digital_twin.md)
 - [TileCNN Graph Handoff Specification](graph_handoff_spec.md)
+- [TQT quantization](docs/tqt.md)
+- [Quantized modules](docs/qmodules.md)
+- [Fused Conv-BN](docs/conv_fused.md)
+- [Accuracy baselines](docs/baselines.md)
+- [Arrhenius environment](docs/arrhenius_environment.md)
+- [Arrhenius GPU workflow](docs/arrhenius_gpu_guide.md)
+
+Historical implementation notes remain under `docs/` for development context;
+the model-zoo manifests and current command help are authoritative for released
+models and executable interfaces.
 
 ## License
 
