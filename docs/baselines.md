@@ -42,12 +42,27 @@ experiment record. "PTQ" = after calibration, before any QAT epoch.
 | vgg16 | | | 69.6 / 90.3 | 69.9 / 90.3 | 2026-07-13 regression | pre-rework checkpoint (`qat_models/checkpoint/vgg16_best.pth.tar`), no BatchNorm. Twin matches QAT. |
 | resnet50 | *TBD* | *TBD* | *TBD* | *TBD* | | (retrain post-rework) |
 | mobilenet_v2 | 77.3 (subset) | 54.3 (subset, no CLE) | 69.9 / 89.2 | 69.7 / 89.2 | 2026-07-10 train, 2026-07-13 eval | trained with `--cle`; QAT via `qat_test.py --cle`, twin via `deploy_eval.py --cle --model_type tilecnn`. Twin now matches QAT (was 56.0/79.7 before the rounding-bias fix). Float/PTQ are quick non-CLE subset probes, not final. |
-| mobilenet_v2 | *TBD* | *TBD* | **71.568 / 90.352** | **70.954 / 90.002** | `cdaffe8`, 2026-08-05 train / 2026-08-07 eval | Full ImageNet-1k validation set; Arrhenius GH200; CLE; final epoch-10 checkpoint. Twin delta: −0.614 top-1 / −0.350 top-5 percentage points. |
+| mobilenet_v2 | 72.014 / 90.614 | *TBD* | **71.568 / 90.352** | **70.954 / 90.002** | `cdaffe8`, 2026-08-05 train / 2026-08-07 eval | Full ImageNet-1k validation set; Arrhenius GH200; CLE; final epoch-10 checkpoint. Twin delta: −0.614 top-1 / −0.350 top-5 percentage points. |
 
 > The 2026-07 rework (see `docs/improvements_2026-07.md`) fixed a bug that froze
 > all conv weights on the first QAT batch, and a digital-twin rounding
 > regression from commit `a30fc02`. Numbers recorded before it (including the
 > 69.5% ResNet-50 twin figure) are not comparable and must be re-measured.
+
+## FP32 reference on full ImageNet-1k
+
+Pretrained floating-point accuracy, top-1 / top-5, on the Arrhenius ImageNet-1k
+validation split (50,000 images), with the same loader and preprocessing as the
+released QAT and integer-twin metrics.
+
+| Model | Float | Date | Notes |
+|---|---|---|---|
+| resnet18 | 69.754 / 89.074 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
+| resnet50 | 80.336 / 95.122 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
+| vgg16 | 71.580 / 90.394 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
+| mobilenet_v2 | 72.014 / 90.614 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
+
+The metrics files are in [`model_zoo/fp32_reference/`](../model_zoo/fp32_reference/).
 
 ## Rules
 

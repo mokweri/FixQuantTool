@@ -41,19 +41,23 @@ framework.
 ## Model zoo
 
 Top-1 accuracy (%) on the full ImageNet-1k validation set (50,000 images,
-256-pixel resize, 224-pixel centre crop). *QAT* is the trained fixed-point model;
-*Integer twin* is the bit-exact integer model that the FPGA executes.
+256-pixel resize, 224-pixel centre crop). *FP32* is the pretrained floating-point
+model QAT starts from, *QAT* is the trained fixed-point model, and *Integer twin*
+is the bit-exact integer model that the FPGA executes. Δ is the end-to-end
+change from FP32 to the integer twin.
 
-| Release | QAT | Integer twin | Δ | Checkpoint |
-|---|---:|---:|---:|---|
-| `resnet18/imagenet1k/int8-tqt@v1.0.0` | 70.05 | 69.74 | −0.31 | Not yet published |
-| `resnet50/imagenet1k/int8-tqt@v1.0.0` | 79.95 | 79.58 | −0.38 | GitHub Release |
-| `vgg16/imagenet1k/int8-tqt@v1.0.0` | 71.24 | 71.00 | −0.24 | Not yet published |
-| `mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0` | 71.57 | 70.95 | −0.61 | GitHub Release |
+| Release | FP32 | QAT | Integer twin | Δ | Checkpoint |
+|---|---:|---:|---:|---:|---|
+| `resnet18/imagenet1k/int8-tqt@v1.0.0` | 69.75 | 70.05 | 69.74 | −0.01 | Not yet published |
+| `resnet50/imagenet1k/int8-tqt@v1.0.0` | 80.34 | 79.95 | 79.58 | −0.76 | GitHub Release |
+| `vgg16/imagenet1k/int8-tqt@v1.0.0` | 71.58 | 71.24 | 71.00 | −0.58 | Not yet published |
+| `mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0` | 72.01 | 71.57 | 70.95 | −1.06 | GitHub Release |
 
-Values are transcribed from each release's `metrics.json` under
-`model_zoo/releases/`, where top-5 accuracy and the validation reports are also
-recorded. MobileNetV2 uses cross-layer equalization, so every consumer of that
+QAT and integer-twin values are transcribed from each release's `metrics.json`
+under `model_zoo/releases/`, where top-5 accuracy, the QAT-to-twin difference,
+and the validation reports are also recorded. FP32 values were measured with
+`tools/fp32_eval.py` on the same data pipeline and are kept in
+[`model_zoo/fp32_reference/`](model_zoo/fp32_reference/). MobileNetV2 uses cross-layer equalization, so every consumer of that
 checkpoint rebuilds the same transformed model.
 
 ## Quickstart
