@@ -1,94 +1,74 @@
+<div align="center">
+
 # FixQuant
 
-FixQuant is a fixed-point quantization toolkit for quantization-aware training
-(QAT), hardware-faithful integer inference, and reproducible FPGA deployment.
-It is the model-preparation component used by the TileCNN framework: FixQuant
-trains and validates quantized models, then exports versioned graph packages
-that TileCNN can compile and execute without manually transcribing model data.
+**Fixed-point quantization for CNNs that must run bit-exactly on FPGA accelerators.**
 
-The Python package is named `fixquant`; the standalone repository is
-`FixQuantTool` and is pinned as the root-level `FixQuant/` submodule in
-TileCNN.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2A62A8)](LICENSE)
+[![Paper: DDECS 2025](https://img.shields.io/badge/paper-DDECS%202025-59636E)](https://doi.org/10.1109/DDECS63720.2025.11006791)
 
-## What it provides
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/fixquant-pipeline-dark.svg">
+  <img alt="FixQuant pipeline: an FP32 model is trained in fixed point, validated by an integer digital twin that is bit-exact with the FPGA, released as a versioned, checksummed model, and exported as a deployment package." src="docs/images/fixquant-pipeline-light.svg" width="100%">
+</picture>
 
-- TQT-based QAT with configurable weight and activation precision.
-- Calibration using an MSE fixed-point search and optional cross-layer
-  equalization (CLE) and bias correction.
-- FX-based Conv-BN fusion, quantized operator replacement, and model freezing.
-- Hardware-faithful `HardwareConv2d`, `HardwareLinear`, pooling, activation,
-  and residual arithmetic for pre-deployment validation.
-- Full-model and subgraph TileCNN export with `graph.json`, integer parameters,
-  validation inputs, and integer reference outputs.
-- A versioned model zoo with validation gates, immutable release identities,
-  checksum-pinned checkpoint delivery, and GitHub Release publishing.
-- ImageNet training and evaluation workflows for ResNet-18, ResNet-50, VGG-16,
-  and MobileNetV2.
+</div>
 
-## Framework flow
+FixQuant trains 8-bit fixed-point CNNs, proves their integer arithmetic in
+software before any hardware is involved, and ships them as versioned,
+checksum-verified packages that an FPGA accelerator can compile directly. It is
+the model-preparation component of the [TileCNN](https://github.com/mokweri/TileCNN)
+framework.
 
-```mermaid
-flowchart LR
-    A[QAT training] --> B[Model-zoo candidate]
-    B --> C[QAT and TileCNN validation]
-    C --> D[Versioned release]
-    D --> E[Verified checkpoint fetch]
-    E --> F[TileCNN ModelPackage export]
-    F --> G[TileCNN compiler and runtime]
-```
+## Why FixQuant
 
-FixQuant owns training, quantization, the integer digital twin, and model
-export. TileCNN owns hardware-specific legality checks, packing, tiling,
-scheduling, descriptor generation, and FPGA execution. Their external boundary
-is the [TileCNN Graph Handoff Specification](graph_handoff_spec.md).
+- **Train in fixed point.** Quantization-aware training with Trained
+  Quantization Thresholds (TQT): learnable power-of-two scales for 8-bit weights
+  and activations, with MSE calibration and optional cross-layer equalization.
+- **Validate before hardware.** An integer digital twin reproduces the
+  accelerator's convolution, requantization, pooling, and residual arithmetic
+  bit for bit, so deployed accuracy is known before a bitstream is built.
+- **Ship reproducible releases.** Every model is an immutable, versioned release
+  with recorded accuracy, quality gates, and SHA-256-pinned artifacts. Nothing
+  is fetched implicitly, and nothing is transcribed by hand.
 
-## Installation
+## Model zoo
 
-FixQuant requires Python 3.9 or newer. A CUDA-capable GPU is recommended for
-training and full-dataset evaluation but is not required for the fast test
-suite or model-zoo administration.
+Top-1 accuracy (%) on the full ImageNet-1k validation set (50,000 images,
+256-pixel resize, 224-pixel centre crop). *QAT* is the trained fixed-point model;
+*Integer twin* is the bit-exact integer model that the FPGA executes.
 
-For a standalone checkout:
+| Release | QAT | Integer twin | Δ | Checkpoint |
+|---|---:|---:|---:|---|
+| `resnet18/imagenet1k/int8-tqt@v1.0.0` | 70.05 | 69.74 | −0.31 | Not yet published |
+| `resnet50/imagenet1k/int8-tqt@v1.0.0` | 79.95 | 79.58 | −0.38 | GitHub Release |
+| `vgg16/imagenet1k/int8-tqt@v1.0.0` | 71.24 | 71.00 | −0.24 | Not yet published |
+| `mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0` | 71.57 | 70.95 | −0.61 | GitHub Release |
+
+Values are transcribed from each release's `metrics.json` under
+`model_zoo/releases/`, where top-5 accuracy and the validation reports are also
+recorded. MobileNetV2 uses cross-layer equalization, so every consumer of that
+checkpoint rebuilds the same transformed model.
+
+## Quickstart
+
+FixQuant requires Python 3.9 or newer. A CUDA GPU is recommended for training and
+full-dataset evaluation, but not for the fast test suite or model-zoo tasks.
 
 ```bash
 python -m pip install -e .
 ```
 
-For development inside the TileCNN repository, use the pinned submodule as the
-active editable installation:
-
-```bash
-git submodule update --init FixQuant
-python -m pip install --no-deps -e ./FixQuant
-```
-
-Core dependencies are declared in [pyproject.toml](pyproject.toml). Arrhenius
-uses an ARM-compatible NGC PyTorch container and a persistent virtual
-environment; follow the
-[Arrhenius environment guide](docs/arrhenius_environment.md) instead of
-installing ordinary x86 PyTorch wheels there.
-
-## Use a released model
-
-A model-zoo release ID has this form:
-
-```text
-model/dataset/quantization-profile@version
-```
-
-List the available releases and fetch one checkpoint explicitly:
+Fetch a released model. The download is verified against its recorded size and
+SHA-256 before it is installed; evaluation and export never touch the network.
 
 ```bash
 scripts/model_zoo.sh list
-scripts/model_zoo.sh fetch \
-    resnet50/imagenet1k/int8-tqt@v1.0.0
+scripts/model_zoo.sh fetch resnet50/imagenet1k/int8-tqt@v1.0.0
 ```
 
-Fetch verifies the recorded byte size and SHA-256 before atomically installing
-the checkpoint in the ignored model-zoo cache. Evaluation and export never make
-an implicit network request.
-
-Evaluate the same release with the TileCNN integer digital twin:
+Evaluate it with the integer digital twin:
 
 ```bash
 python tools/deploy_eval.py \
@@ -97,7 +77,7 @@ python tools/deploy_eval.py \
     --model_type tilecnn
 ```
 
-Export a complete TileCNN package:
+Export a deployment package:
 
 ```bash
 python tools/export_tilecnn_graph.py \
@@ -105,38 +85,21 @@ python tools/export_tilecnn_graph.py \
     --out_dir outputs/resnet50_int8_tilecnn
 ```
 
-The result contains:
-
 ```text
 outputs/resnet50_int8_tilecnn/
-|-- manifest.json
-|-- graph.json
-|-- inputs/
-|-- params/
-`-- refs/
+├── manifest.json   release identity, producer revision, preprocessing, SHA-256 inventory
+├── graph.json      network graph
+├── params/         integer weights and biases
+├── inputs/         validation inputs
+└── refs/           integer reference outputs
 ```
 
-`manifest.json` records the release identity, producer revision,
-preprocessing, and a complete SHA-256 inventory of the graph and its referenced
-artifacts.
-
-### TileCNN wrapper
-
-From the parent TileCNN repository, the supported framework entry points are:
-
-```bash
-make -C scripts model-fetch \
-    ZOO_MODEL=resnet50/imagenet1k/int8-tqt@v1.0.0
-make -C scripts model-export \
-    ZOO_MODEL=resnet50/imagenet1k/int8-tqt@v1.0.0
-```
-
-The validated ModelPackage is written below `build/models/` using the same
-release identity.
+The package format is defined by the
+[TileCNN Graph Handoff Specification](graph_handoff_spec.md).
 
 ## Train and release a model
 
-Run QAT directly for local development:
+Run quantization-aware training:
 
 ```bash
 python tools/qat_train.py \
@@ -147,82 +110,33 @@ python tools/qat_train.py \
     --init_lr 1e-5
 ```
 
-MobileNetV2 releases currently use CLE; every consumer of that checkpoint must
-rebuild the same transformed model:
+Add `--cle` for MobileNetV2. Training writes the best checkpoint, a run
+manifest, a calibration report, and a threshold log beneath `--save_dir`.
+
+A completed run becomes a release through a gated lifecycle:
 
 ```bash
-python tools/qat_train.py \
-    --model mobilenet_v2 \
-    --dataroot /path/to/imagenet \
-    --cle \
-    --n_epochs 10
-```
-
-Training writes the best checkpoint, run manifest, calibration report, and
-threshold log beneath the selected `--save_dir`. The supported release
-lifecycle is:
-
-```bash
-# Register the completed run.
-scripts/model_zoo.sh register /path/to/run/<model>
-
-# Evaluate both QAT and TileCNN representations and apply quality gates.
-sbatch scripts/jobs/validate_zoo_candidate.sbatch <candidate-id>
-
-# Promote only after reviewing the validation report.
-scripts/model_zoo.sh promote <candidate-id> --version 1.1.0
+scripts/model_zoo.sh register /path/to/run/<model>                   # register the run
+sbatch scripts/jobs/validate_zoo_candidate.sbatch <candidate-id>     # QAT and twin quality gates
+scripts/model_zoo.sh promote <candidate-id> --version 1.1.0          # after reviewing the report
 scripts/model_zoo.sh catalog --output model_zoo/catalog.yaml
 ```
 
-Commit and push the release metadata before uploading its ignored checkpoint.
-Publishing always creates a draft GitHub Release bound to the exact commit that
-contains the manifest:
-
-```bash
-scripts/model_zoo.sh publish \
-    <model/dataset/profile@version> \
-    --target <full-40-character-FixQuant-commit>
-```
-
-Inspect the draft on GitHub before making it public. Never replace the asset of
-an existing version; a different checkpoint always receives a new version.
-The complete candidate, validation, promotion, legacy-release preparation,
-fetch, and publication procedures are in the
-[model-zoo guide](docs/model_zoo.md).
-
-## Arrhenius workflows
-
-The maintained Slurm workflows are under `scripts/jobs/`:
-
-| Workflow | Entry point |
-|---|---|
-| Environment and dataset smoke test | `imagenet_smoke.sbatch` |
-| ResNet/VGG QAT sweep | `qat_imagenet_model_sweep.sbatch` |
-| MobileNetV2 QAT | `qat_mobilenet_imagenet.sbatch` |
-| Released-model evaluation | `eval_imagenet_model_sweep.sbatch`, `eval_mobilenet_imagenet.sbatch` |
-| Candidate quality gates | `validate_zoo_candidate.sbatch` |
-
-Use [scripts/run_arrhenius.sh](scripts/run_arrhenius.sh) inside a GPU allocation
-to run commands in the pinned container environment. Site setup, storage,
-interactive allocation, and job-submission details are documented in the
-[Arrhenius GPU guide](docs/arrhenius_gpu_guide.md).
+Publishing creates a draft GitHub Release bound to the exact commit that holds
+the release manifest. An existing version's asset is never replaced; a
+different checkpoint always receives a new version. The full procedure is in the
+[model-zoo guide](docs/model_zoo.md), and training options are in the
+[QAT guide](QAT.md).
 
 ## Testing
 
-Run the normal CPU-oriented validation set with:
-
 ```bash
-python -m pytest -q -m "not slow"
-```
-
-Run every test, including the heavier full-MobileNet export coverage, with:
-
-```bash
-python -m pytest -q
+python -m pytest -q -m "not slow"   # fast CPU suite
+python -m pytest -q                 # everything, including full-MobileNet export
 ```
 
 The suite covers quantization and calibration, checkpointing, integer kernels,
-QAT conversion, golden arithmetic, model-zoo integrity, and TileCNN export.
+QAT conversion, golden arithmetic, model-zoo integrity, and export.
 
 ## Repository map
 
@@ -235,7 +149,7 @@ QAT conversion, golden arithmetic, model-zoo integrity, and TileCNN export.
 | `src/fixquant/training/` | Training configuration, checkpoints, and run management |
 | `tools/` | Training, evaluation, inspection, model-zoo, and export commands |
 | `model_zoo/` | Tracked release metadata and ignored checkpoint payloads |
-| `scripts/jobs/` | Maintained Arrhenius training and validation jobs |
+| `scripts/jobs/` | Maintained Slurm training and validation jobs |
 | `tests/` | Unit, regression, model-zoo, and export validation |
 
 ## Configuration
@@ -246,29 +160,45 @@ QAT conversion, golden arithmetic, model-zoo integrity, and TileCNN export.
 | `FIXQUANT_ZOO_ROOT` | Model-zoo registry | `<repository>/model_zoo` |
 | `FIXQUANT_ZOO_CACHE` | Downloaded checkpoint cache | `<model-zoo>/.artifacts` |
 
-Quantizer defaults and module replacement rules are maintained in
-[configs/quant_config.yaml](configs/quant_config.yaml). Model promotion gates
-are maintained separately in
-[configs/model_zoo_policy.yaml](configs/model_zoo_policy.yaml).
+Quantizer defaults and module replacement rules live in
+[configs/quant_config.yaml](configs/quant_config.yaml); model promotion gates
+live in [configs/model_zoo_policy.yaml](configs/model_zoo_policy.yaml).
 
 ## Documentation
 
-- [Model-zoo lifecycle and releases](docs/model_zoo.md)
-- [QAT guide](QAT.md)
-- [Deployment and graph export](DEPLOY.md)
-- [TileCNN exporter and integer digital twin](docs/tilecnn_exporter_and_digital_twin.md)
-- [TileCNN Graph Handoff Specification](graph_handoff_spec.md)
-- [TQT quantization](docs/tqt.md)
-- [Quantized modules](docs/qmodules.md)
-- [Fused Conv-BN](docs/conv_fused.md)
-- [Accuracy baselines](docs/baselines.md)
-- [Arrhenius environment](docs/arrhenius_environment.md)
-- [Arrhenius GPU workflow](docs/arrhenius_gpu_guide.md)
+| Topic | Guide |
+|---|---|
+| Releases and the model-zoo lifecycle | [docs/model_zoo.md](docs/model_zoo.md) |
+| Quantization-aware training | [QAT.md](QAT.md) |
+| Deployment and graph export | [DEPLOY.md](DEPLOY.md) |
+| Integer digital twin and exporter | [docs/tilecnn_exporter_and_digital_twin.md](docs/tilecnn_exporter_and_digital_twin.md) |
+| Using FixQuant inside TileCNN | [docs/tilecnn_integration.md](docs/tilecnn_integration.md) |
+| TQT quantization | [docs/tqt.md](docs/tqt.md) |
+| Quantized modules and fused Conv-BN | [docs/qmodules.md](docs/qmodules.md), [docs/conv_fused.md](docs/conv_fused.md) |
+| Accuracy baselines | [docs/baselines.md](docs/baselines.md) |
+| Running on the Arrhenius GPU cluster | [docs/arrhenius_gpu_guide.md](docs/arrhenius_gpu_guide.md), [docs/arrhenius_environment.md](docs/arrhenius_environment.md) |
 
-Historical implementation notes remain under `docs/` for development context;
-the model-zoo manifests and current command help are authoritative for released
-models and executable interfaces.
+Historical implementation notes remain under `docs/`; the model-zoo manifests and
+current command help are authoritative for released models and interfaces.
+
+## Citation
+
+If you use FixQuant in your research, please cite:
+
+```bibtex
+@inproceedings{mogaka2025fixquant,
+  author    = {Mogaka, Obed M. and Forsberg, H{\aa}kan and Daneshtalab, Masoud},
+  title     = {Bridging Quantization and Deployment: A Fixed-Point Workflow for
+               {FPGA} Accelerators},
+  booktitle = {2025 IEEE 28th International Symposium on Design and Diagnostics
+               of Electronic Circuits and Systems (DDECS)},
+  pages     = {123--126},
+  year      = {2025},
+  publisher = {IEEE},
+  doi       = {10.1109/DDECS63720.2025.11006791}
+}
+```
 
 ## License
 
-MIT
+FixQuant is released under the [MIT License](LICENSE).

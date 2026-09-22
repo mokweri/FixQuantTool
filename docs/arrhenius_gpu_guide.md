@@ -219,6 +219,34 @@ sbatch scripts/jobscript_arrhenius.sh                       # defaults: mobilene
 MODEL=resnet50 EXTRA_ARGS= sbatch scripts/jobscript_arrhenius.sh
 ```
 
+## 10. Maintained workflows
+
+The maintained Slurm workflows are under `scripts/jobs/`:
+
+| Workflow | Entry point |
+|---|---|
+| Environment and dataset smoke test | `imagenet_smoke.sbatch` |
+| ResNet/VGG QAT sweep | `qat_imagenet_model_sweep.sbatch` |
+| MobileNetV2 QAT | `qat_mobilenet_imagenet.sbatch` |
+| Released-model evaluation | `eval_imagenet_model_sweep.sbatch`, `eval_mobilenet_imagenet.sbatch` |
+| FP32 reference accuracy | `eval_fp32_imagenet.sbatch` |
+| Candidate quality gates | `validate_zoo_candidate.sbatch` |
+
+Use [`scripts/run_arrhenius.sh`](../scripts/run_arrhenius.sh) inside a GPU
+allocation to run commands in the pinned container environment.
+
+`eval_fp32_imagenet.sbatch` evaluates the floating-point reference for every
+released model with [`tools/fp32_eval.py`](../tools/fp32_eval.py). It uses the
+same ImageNet validation set, loader, and preprocessing as the QAT and TileCNN
+evaluations, so its top-1 figures are directly comparable with the released
+metrics:
+
+```bash
+sbatch scripts/jobs/eval_fp32_imagenet.sbatch
+```
+
+Results are written to `results/eval/fp32/<array-job-id>/<model>_fp32_metrics.json`.
+
 ---
 
 ### Sources
