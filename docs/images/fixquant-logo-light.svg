@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="FixQuant logo">
+<rect x="36" y="36" width="184" height="184" rx="22" fill="none" stroke="#1F2328" stroke-width="12"/>
+<line x1="92" y1="30.0" x2="92" y2="12.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="92" y1="226.0" x2="92" y2="244.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="30.0" y1="92" x2="12.0" y2="92" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="226.0" y1="92" x2="244.0" y2="92" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="128" y1="30.0" x2="128" y2="12.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="128" y1="226.0" x2="128" y2="244.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="30.0" y1="128" x2="12.0" y2="128" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="226.0" y1="128" x2="244.0" y2="128" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="164" y1="30.0" x2="164" y2="12.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="164" y1="226.0" x2="164" y2="244.0" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="30.0" y1="164" x2="12.0" y2="164" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<line x1="226.0" y1="164" x2="244.0" y2="164" stroke="#1F2328" stroke-width="11" stroke-linecap="round"/>
+<rect x="52" y="86" width="17" height="72" fill="#2A62A8"/>
+<rect x="52" y="86" width="50" height="17" fill="#2A62A8"/>
+<rect x="52" y="118" width="41" height="16" fill="#2A62A8"/>
+<circle cx="152" cy="120" r="32" fill="none" stroke="#2A62A8" stroke-width="17"/>
+<path d="M158,130 h12 v12 h12 v12 h12 v12 h8" fill="none" stroke="#C2701A" stroke-width="11" stroke-linecap="butt" stroke-linejoin="miter"/>
+</svg>

@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/fixquant-logo-dark.svg">
+  <img alt="FixQuant logo" src="docs/images/fixquant-logo-light.svg" width="128">
+</picture>
+
 # FixQuant
 
 **Fixed-point quantization for CNNs that must run bit-exactly on FPGA accelerators.**

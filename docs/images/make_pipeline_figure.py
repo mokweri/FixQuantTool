@@ -21,7 +21,7 @@ THEMES = {
                   muted='#59636E', accent='#2A62A8', accent_fill='#EEF4FB',
                   badge_ink='#FFFFFF', arrow='#59636E'),
     'dark': dict(card='#161B22', card_edge='#30363D', ink='#E6EDF3',
-                 muted='#9198A1', accent='#6CA6F0', accent_fill='#12243A',
+                 muted='#9198A1', accent='#5A94E0', accent_fill='#12243A',
                  badge_ink='#0D1117', arrow='#9198A1'),
 }
 
