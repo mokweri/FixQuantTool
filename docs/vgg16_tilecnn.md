@@ -112,16 +112,18 @@ fine-tune is expected to close further. Job 2859117.
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
 | 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
-
-Stage 2 per-epoch validation top-1: 59.6, 62.5, 63.5, 65.2, 66.2, 67.5, 68.5,
-69.7, 70.8, 71.5, 71.9, 72.0. The first epoch dips below the warm-up as the
-cosine schedule opens at lr 0.005 and the BatchNorm statistics start moving,
-then recovers monotonically.
+| 5 | 2884083 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0 | _pending_ |
 
 Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
 backbone parameters and their BatchNorm running statistics were held fixed, so
 the 62.016 figure is still measured against the stale statistics the ablation
 exposed. Stage 2 unfreezes them.
+
+Stage 2 per-epoch validation top-1: 59.6, 62.5, 63.5, 65.2, 66.2, 67.5, 68.5,
+69.7, 70.8, 71.5, 71.9, 72.0. The first epoch dips below the warm-up as the
+cosine schedule opens at lr 0.005 and the BatchNorm statistics start moving,
+then recovers monotonically. Throughput was 45.6 it/s with the backbone frozen
+and 13.5 it/s once it was trainable, at batch 64 on one GH200.
 
 Checkpoints:
 
@@ -129,8 +131,6 @@ Checkpoints:
 results/float/vgg16_tilecnn/2859325/warmup/vgg16_tilecnn/checkpoint/model_best.pth.tar
 results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best.pth.tar
 ```
-
-| 5 | 2884083 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70%, 20 calibration batches, scope 5, batch 32/64, seed 0 | _pending_ |
 
 ## Acceptance check
 
