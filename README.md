@@ -52,6 +52,7 @@ change from FP32 to the integer twin.
 | `resnet50/imagenet1k/int8-tqt@v1.0.0` | 80.34 | 79.95 | 79.58 | −0.76 | GitHub Release |
 | `vgg16/imagenet1k/int8-tqt@v1.0.0` | 71.58 | 71.24 | 71.00 | −0.58 | Not yet published |
 | `mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0` | 72.01 | 71.57 | 70.95 | −1.06 | GitHub Release |
+| `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` | 71.98 | 72.25 | 72.20 | +0.23 | Not yet published |
 
 QAT and integer-twin values are transcribed from each release's `metrics.json`
 under `model_zoo/releases/`, where top-5 accuracy, the QAT-to-twin difference,
@@ -59,6 +60,13 @@ and the validation reports are also recorded. FP32 values were measured with
 `tools/fp32_eval.py` on the same data pipeline and are kept in
 [`model_zoo/fp32_reference/`](model_zoo/fp32_reference/). MobileNetV2 uses cross-layer equalization, so every consumer of that
 checkpoint rebuilds the same transformed model.
+
+`vgg16_tilecnn` is FixQuant's own VGG-16 variant, the one the TileCNN fabric can
+actually run: legal 3x3/s2/p1 pooling and a convolutional classifier head that
+fits the accelerator's weight buffer. Its FP32 column is the fine-tuned variant,
+not a torchvision checkpoint, and its positive delta reflects that QAT ran five
+further epochs of fine-tuning on top of that float model. See
+[`docs/vgg16_tilecnn.md`](docs/vgg16_tilecnn.md).
 
 ## Quickstart
 

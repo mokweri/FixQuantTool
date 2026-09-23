@@ -27,7 +27,7 @@ python tools/deploy_eval.py --model <name> --model_type tilecnn
 python tools/layer_sensitivity.py --model <name> --eval_batches 4
 ```
 
-`<name>` ∈ `resnet18 | resnet50 | vgg16 | mobilenet_v2`.
+`<name>` ∈ `resnet18 | resnet50 | vgg16 | vgg16_bn | vgg16_tilecnn | mobilenet_v2`.
 
 ## Baseline table
 
@@ -61,6 +61,9 @@ released QAT and integer-twin metrics.
 | resnet50 | 80.336 / 95.122 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
 | vgg16 | 71.580 / 90.394 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
 | mobilenet_v2 | 72.014 / 90.614 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
+| vgg16_bn | 73.378 / 91.500 | 2026-09-23 | `sbatch scripts/jobs/vgg16_pooling_ablation.sbatch` task 0; weights from `fixquant.models.get_model(pretrained=True)`. |
+| vgg16_bn_pool3 | 48.534 / 73.508 | 2026-09-23 | Same weights, TileCNN pooling geometry, no retraining. 69.170 / 89.204 after BatchNorm re-estimation alone (`tools/bn_recalibrate.py`, job 2859117). Evaluation probe, not an export target. |
+| vgg16_tilecnn | 71.978 / 90.662 | 2026-09-23 | Fine-tuned in this repo, not a torchvision checkpoint: `sbatch scripts/jobs/vgg16_tilecnn_finetune.sbatch` (job 2859325). See [vgg16_tilecnn.md](vgg16_tilecnn.md). |
 
 The metrics files are in [`model_zoo/fp32_reference/`](../model_zoo/fp32_reference/).
 

@@ -115,7 +115,27 @@ fine-tune is expected to close further. Job 2859117.
 | 5 | 2884083 | `vgg16_tilecnn` QAT, first attempt | failed in 20s writing the run manifest: `torch.__version__` is a `TorchVersion`, a `str` subclass `yaml.safe_dump` refuses. Pre-existing, fixed |
 | 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | best 72.252 top-1 / 90.762 top-5 at epoch 3; candidate `vgg16_tilecnn-run-2884234` |
 | 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact TileCNN deploy evaluation, then the policy gates | passed; promoted to `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` |
-| 8 | 2892584 | ModelPackage export from the release plus the legality acceptance check | _pending_ |
+| 8 | 2892584 | ModelPackage export from the release plus the legality acceptance check | passed: 14 conv2d, 5 maxpool2d, 1 gap2d, 2 linear; 32 parameters, 1 input, 1 reference, 35 checksums verified |
+
+The exported package is at `outputs/vgg16_tilecnn_int8_tilecnn/` (53 MB,
+gitignored like every other binary artifact).
+
+```
+graph.json                                 the INT8 graph
+manifest.json                              tilecnn.model-package.v1, sha256 over every artifact
+inputs/input_0.int8.bin                    validation input, [3,224,224] int8, frac 5
+params/{features_*,classifier_*}.{weight,bias}.int8.bin
+refs/classifier_8_out_ref.int8.bin         integer reference output, [1000,1,1] int8, frac 2
+```
+
+Weight-buffer cost per layer, against the 512 budget: 9, 36, 36, 72, 72, 144,
+144, 144, 288, 288, 288, 288, 288 for the feature convolutions, 288 for the
+`fc1` head convolution, and 256 for each of `fc2` and `fc3`. The peak is 288,
+56% of the budget. For comparison, stock VGG's `classifier.0` needs 1568.
+
+`classifier_5` (`fc2`) carries `post_ops: {"relu": true}` -- the exporter change
+this work required, without which the activation would have been silently
+dropped from the handoff.
 
 QAT per-epoch validation top-1: 71.4, 71.9, 72.3, 72.2, 72.1. The INT8 model
 ends up **above** its own float starting point (71.978), because five epochs of
