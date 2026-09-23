@@ -61,7 +61,7 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 | stock `vgg16_bn` | FP32 | **73.378** | 91.500 | job 2858888_0 |
 | stock + pooling swap, no retraining | FP32 | **48.534** | 73.508 | job 2858888_1 |
 | `vgg16_tilecnn` after fine-tuning | FP32 | **71.978** | 90.662 | job 2859325 |
-| `vgg16_tilecnn` | INT8 QAT | _pending_ | | job 2884083 |
+| `vgg16_tilecnn` | INT8 QAT | **72.252** | 90.762 | job 2884234 |
 | `vgg16_tilecnn` | INT8 TileCNN deploy | _pending_ | | |
 
 The variant lands **1.400 top-1 points** below stock `vgg16_bn` (73.378 ->
@@ -113,7 +113,13 @@ fine-tune is expected to close further. Job 2859117.
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
 | 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
 | 5 | 2884083 | `vgg16_tilecnn` QAT, first attempt | failed in 20s writing the run manifest: `torch.__version__` is a `TorchVersion`, a `str` subclass `yaml.safe_dump` refuses. Pre-existing, fixed |
-| 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | _pending_ |
+| 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | best 72.252 top-1 / 90.762 top-5 at epoch 3; candidate `vgg16_tilecnn-run-2884234` |
+| 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact TileCNN deploy evaluation, then the policy gates | _pending_ |
+
+QAT per-epoch validation top-1: 71.4, 71.9, 72.3, 72.2, 72.1. The INT8 model
+ends up **above** its own float starting point (71.978), because five epochs of
+TQT are also five more epochs of fine-tuning; the honest quantization cost is
+the QAT-to-TileCNN-deploy gap, not the FP32-to-QAT one.
 
 Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
 backbone parameters and their BatchNorm running statistics were held fixed, so
