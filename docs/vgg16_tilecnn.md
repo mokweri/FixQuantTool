@@ -60,9 +60,14 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 |---|---|---|---|---|
 | stock `vgg16_bn` | FP32 | **73.378** | 91.500 | job 2858888_0 |
 | stock + pooling swap, no retraining | FP32 | **48.534** | 73.508 | job 2858888_1 |
-| `vgg16_tilecnn` after fine-tuning | FP32 | _not run_ | | blocked, see below |
-| `vgg16_tilecnn` | INT8 QAT | _not run_ | | |
-| `vgg16_tilecnn` | INT8 TileCNN deploy | _not run_ | | |
+| `vgg16_tilecnn` after fine-tuning | FP32 | **71.978** | 90.662 | job 2859325 |
+| `vgg16_tilecnn` | INT8 QAT | _pending_ | | job 2884083 |
+| `vgg16_tilecnn` | INT8 TileCNN deploy | _pending_ | | |
+
+The variant lands **1.400 top-1 points** below stock `vgg16_bn` (73.378 ->
+71.978). That is the full architectural cost of making VGG-16 runnable on
+TileCNN: legal pooling geometry plus a classifier head that fits the weight
+buffer, at 54.5M parameters against the stock model's 138M.
 
 73.378 for stock `vgg16_bn` matches torchvision's published 73.360, so the
 evaluation pipeline is sound.
@@ -106,7 +111,12 @@ fine-tune is expected to close further. Job 2859117.
 | 1 | 2859061 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | 10 passed; 74 existing tests still green |
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
-| 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | stage 1 done: 62.016 top-1 / 84.300 top-5; stage 2 running |
+| 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
+
+Stage 2 per-epoch validation top-1: 59.6, 62.5, 63.5, 65.2, 66.2, 67.5, 68.5,
+69.7, 70.8, 71.5, 71.9, 72.0. The first epoch dips below the warm-up as the
+cosine schedule opens at lr 0.005 and the BatchNorm statistics start moving,
+then recovers monotonically.
 
 Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
 backbone parameters and their BatchNorm running statistics were held fixed, so
@@ -119,6 +129,8 @@ Checkpoints:
 results/float/vgg16_tilecnn/2859325/warmup/vgg16_tilecnn/checkpoint/model_best.pth.tar
 results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best.pth.tar
 ```
+
+| 5 | 2884083 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70%, 20 calibration batches, scope 5, batch 32/64, seed 0 | _pending_ |
 
 ## Acceptance check
 
