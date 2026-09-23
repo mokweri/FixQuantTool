@@ -58,18 +58,41 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 
 | Model | Representation | top-1 | top-5 | Source |
 |---|---|---|---|---|
-| stock `vgg16_bn` | FP32 | _pending_ | | job 2858888_0 |
-| stock + pooling swap, no retraining | FP32 | _pending_ | | job 2858888_1 |
-| `vgg16_tilecnn` after fine-tuning | FP32 | _pending_ | | |
-| `vgg16_tilecnn` | INT8 QAT | _pending_ | | |
-| `vgg16_tilecnn` | INT8 TileCNN deploy | _pending_ | | |
+| stock `vgg16_bn` | FP32 | **73.378** | 91.500 | job 2858888_0 |
+| stock + pooling swap, no retraining | FP32 | **48.534** | 73.508 | job 2858888_1 |
+| `vgg16_tilecnn` after fine-tuning | FP32 | _not run_ | | blocked, see below |
+| `vgg16_tilecnn` | INT8 QAT | _not run_ | | |
+| `vgg16_tilecnn` | INT8 TileCNN deploy | _not run_ | | |
+
+73.378 for stock `vgg16_bn` matches torchvision's published 73.360, so the
+evaluation pipeline is sound.
+
+### Step 1 tripped a stop condition
+
+The free pooling ablation costs **24.84 top-1 points** (73.378 -> 48.534) with
+no retraining. The plan's stop condition is a drop of more than ~15 points, so
+work paused here rather than spending GPU hours on the fine-tune.
+
+Pooling is parameter-free: every weight in the ablation model is the
+pretrained weight, so nothing was lost, something was *shifted*. A 3x3/s2/p1
+max pools over nine elements where 2x2/s2 pooled over four, so each pooled
+activation is systematically larger, and the shift compounds across five
+stages. Downstream of each pool the convolutions' BatchNorm layers are
+normalizing against running statistics gathered under the old distribution.
+
+`tools/bn_recalibrate.py` measures how much of the drop that accounts for: it
+resets every BatchNorm's running statistics and re-estimates them over 400
+training batches without taking a single gradient step. Nothing learns, so the
+recovered accuracy is a lower bound on what fine-tuning would recover.
 
 ## Run log
 
 | # | Job ID | What | Status |
 |---|---|---|---|
-| 1 | 2858887 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | _pending_ |
-| 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | _pending_ |
+| 0 | 2858887 | `vgg16_tilecnn` smoke test, first attempt | failed on two test bugs (64x64 input too small for the head's 3x3 conv; repo root behind the environment on `sys.path`) |
+| 1 | 2859061 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | 10 passed; 74 existing tests still green |
+| 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
+| 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | _pending_ |
 
 ## Acceptance check
 
