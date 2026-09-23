@@ -158,7 +158,9 @@ if __name__ == '__main__':
             "slurm_array_task_id": os.environ.get("SLURM_ARRAY_TASK_ID"),
             "node": os.environ.get("SLURMD_NODENAME") or platform.node(),
             "python": platform.python_version(),
-            "pytorch": torch.__version__,
+            # torch.__version__ is a TorchVersion, a str subclass that
+            # yaml.safe_dump refuses to represent.
+            "pytorch": str(torch.__version__),
             "command": [sys.executable, *sys.argv],
         },
     }
