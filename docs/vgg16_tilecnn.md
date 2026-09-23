@@ -67,11 +67,13 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 73.378 for stock `vgg16_bn` matches torchvision's published 73.360, so the
 evaluation pipeline is sound.
 
-### Step 1 tripped a stop condition
+### Step 1 tripped a stop condition (resolved)
 
 The free pooling ablation costs **24.84 top-1 points** (73.378 -> 48.534) with
 no retraining. The plan's stop condition is a drop of more than ~15 points, so
-work paused here rather than spending GPU hours on the fine-tune.
+work paused here and reported rather than spending GPU hours on the fine-tune.
+The diagnostic below showed the figure to be largely a measurement artifact,
+and the fine-tune was approved and resumed.
 
 Pooling is parameter-free: every weight in the ablation model is the
 pretrained weight, so nothing was lost, something was *shifted*. A 3x3/s2/p1
@@ -104,6 +106,7 @@ fine-tune is expected to close further. Job 2859117.
 | 1 | 2859061 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | 10 passed; 74 existing tests still green |
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
+| 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | _pending_ |
 
 ## Acceptance check
 
