@@ -85,6 +85,17 @@ resets every BatchNorm's running statistics and re-estimates them over 400
 training batches without taking a single gradient step. Nothing learns, so the
 recovered accuracy is a lower bound on what fine-tuning would recover.
 
+| `vgg16_bn_pool3`, no retraining | top-1 | top-5 | vs stock |
+|---|---|---|---|
+| as evaluated (stale BN statistics) | 48.534 | 73.508 | -24.844 |
+| after BN re-estimation, 25600 images, zero gradient steps | **69.170** | 89.204 | **-4.208** |
+
+Re-estimating the statistics recovers **+20.64 points**. No weight changed, so
+the 24.8-point figure was mostly an artifact of measuring a batch-normalized
+network against statistics gathered under a different pooling operator; the
+architectural cost of the pooling swap is about **4.2 points**, which the
+fine-tune is expected to close further. Job 2859117.
+
 ## Run log
 
 | # | Job ID | What | Status |
@@ -92,7 +103,7 @@ recovered accuracy is a lower bound on what fine-tuning would recover.
 | 0 | 2858887 | `vgg16_tilecnn` smoke test, first attempt | failed on two test bugs (64x64 input too small for the head's 3x3 conv; repo root behind the environment on `sys.path`) |
 | 1 | 2859061 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | 10 passed; 74 existing tests still green |
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
-| 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | _pending_ |
+| 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
 
 ## Acceptance check
 
