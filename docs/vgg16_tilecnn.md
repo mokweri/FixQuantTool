@@ -106,7 +106,19 @@ fine-tune is expected to close further. Job 2859117.
 | 1 | 2859061 | `vgg16_tilecnn` smoke test: structural legality + full QAT -> export -> acceptance check on random weights, plus the `not slow` regression suite | 10 passed; 74 existing tests still green |
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
-| 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | _pending_ |
+| 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | stage 1 done: 62.016 top-1 / 84.300 top-5; stage 2 running |
+
+Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
+backbone parameters and their BatchNorm running statistics were held fixed, so
+the 62.016 figure is still measured against the stale statistics the ablation
+exposed. Stage 2 unfreezes them.
+
+Checkpoints:
+
+```
+results/float/vgg16_tilecnn/2859325/warmup/vgg16_tilecnn/checkpoint/model_best.pth.tar
+results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best.pth.tar
+```
 
 ## Acceptance check
 
