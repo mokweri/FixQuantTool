@@ -1,0 +1,276 @@
+epoch,quantizer,tensor_type,bitwidth,log2_t,frac,bounded_range,sqnr_db,clip_rate
+0,features.0.weight_quantizer,weight,8,1.0,6,,28.63,0.00116
+0,features.0.bias_quantizer,weight,8,-0.3336,7,,44.74,0.0
+0,features.0.act_quantizer,act,8,1.9992,5,"(0.0, None)",,
+0,features.3.weight_quantizer,weight,8,-1.8656,8,,29.23,0.0
+0,features.3.bias_quantizer,weight,8,0.8119,6,,42.28,0.0
+0,features.3.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+0,features.6.quantizer,act,8,1.1187,5,,,
+0,features.7.weight_quantizer,weight,8,-1.9548,8,,29.39,0.0
+0,features.7.bias_quantizer,weight,8,0.0787,6,,42.9,0.0
+0,features.7.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+0,features.10.weight_quantizer,weight,8,-1.8874,8,,29.07,0.0
+0,features.10.bias_quantizer,weight,8,0.5779,6,,38.91,0.0
+0,features.10.act_quantizer,act,8,0.9345,6,"(0.0, None)",,
+0,features.13.quantizer,act,8,1.0238,5,,,
+0,features.14.weight_quantizer,weight,8,-2.2099,9,,26.73,1e-05
+0,features.14.bias_quantizer,weight,8,0.309,6,,34.72,0.0
+0,features.14.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+0,features.17.weight_quantizer,weight,8,-2.209,9,,31.47,0.0
+0,features.17.bias_quantizer,weight,8,0.1959,6,,37.19,0.0
+0,features.17.act_quantizer,act,8,0.9762,6,"(0.0, None)",,
+0,features.20.weight_quantizer,weight,8,-2.0003,9,,31.94,1e-05
+0,features.20.bias_quantizer,weight,8,0.3852,6,,35.69,0.0
+0,features.20.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+0,features.23.quantizer,act,8,1.0052,5,,,
+0,features.24.weight_quantizer,weight,8,-2.0,9,,27.13,1e-05
+0,features.24.bias_quantizer,weight,8,-0.0904,7,,41.41,0.0
+0,features.24.act_quantizer,act,8,0.991,6,"(0.0, None)",,
+0,features.27.weight_quantizer,weight,8,-1.7578,8,,24.32,0.0
+0,features.27.bias_quantizer,weight,8,0.0081,6,,33.65,0.0
+0,features.27.act_quantizer,act,8,1.0188,5,"(0.0, None)",,
+0,features.30.weight_quantizer,weight,8,-2.0092,9,,30.58,0.0
+0,features.30.bias_quantizer,weight,8,-0.3073,7,,40.72,0.0
+0,features.30.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+0,features.33.quantizer,act,8,1.0311,5,,,
+0,features.34.weight_quantizer,weight,8,-2.0,9,,29.9,0.0
+0,features.34.bias_quantizer,weight,8,-0.7028,7,,36.93,0.0
+0,features.34.act_quantizer,act,8,2.053,4,"(0.0, None)",,
+0,features.37.weight_quantizer,weight,8,-2.0496,9,,31.16,0.0
+0,features.37.bias_quantizer,weight,8,-0.4551,7,,40.19,0.0
+0,features.37.act_quantizer,act,8,1.0737,5,"(0.0, None)",,
+0,features.40.weight_quantizer,weight,8,-0.9796,7,,28.66,0.0
+0,features.40.bias_quantizer,weight,8,0.4073,6,,35.76,0.0
+0,features.40.act_quantizer,act,8,3.0,3,"(0.0, None)",,
+0,features.43.quantizer,act,8,3.0329,3,,,
+0,classifier.0.weight_quantizer,weight,8,-3.4825,10,,29.41,0.0
+0,classifier.0.bias_quantizer,weight,8,-0.7047,7,,18.95,0.0
+0,classifier.0.act_quantizer,act,8,2.0144,4,"(0.0, None)",,
+0,classifier.2.quantizer,act,8,0.409,6,,,
+0,classifier.5.weight_quantizer,weight,8,-3.7095,10,,31.76,0.0
+0,classifier.5.bias_quantizer,weight,8,-0.8928,7,,25.76,0.0
+0,classifier.5.act_quantizer,act,8,0.929,6,"(0.0, None)",,
+0,classifier.8.weight_quantizer,weight,8,-3.2429,10,,38.27,0.0
+0,classifier.8.bias_quantizer,weight,8,-0.744,7,,21.81,0.0
+0,classifier.8.act_quantizer,act,8,4.0001,2,,,
+0,quant_stub.quantizer,act,8,1.0,5,,,
+1,features.0.weight_quantizer,weight,8,1.0,6,,30.25,0.00058
+1,features.0.bias_quantizer,weight,8,-0.3336,7,,44.76,0.0
+1,features.0.act_quantizer,act,8,1.9992,5,"(0.0, None)",,
+1,features.3.weight_quantizer,weight,8,-1.8656,8,,29.21,0.0
+1,features.3.bias_quantizer,weight,8,0.8119,6,,42.25,0.0
+1,features.3.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+1,features.6.quantizer,act,8,1.1187,5,,,
+1,features.7.weight_quantizer,weight,8,-1.9548,8,,29.37,0.0
+1,features.7.bias_quantizer,weight,8,0.0787,6,,42.89,0.0
+1,features.7.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+1,features.10.weight_quantizer,weight,8,-1.8874,8,,29.05,0.0
+1,features.10.bias_quantizer,weight,8,0.5779,6,,38.88,0.0
+1,features.10.act_quantizer,act,8,0.9345,6,"(0.0, None)",,
+1,features.13.quantizer,act,8,1.0238,5,,,
+1,features.14.weight_quantizer,weight,8,-2.2099,9,,27.91,0.0
+1,features.14.bias_quantizer,weight,8,0.309,6,,34.75,0.0
+1,features.14.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+1,features.17.weight_quantizer,weight,8,-2.209,9,,31.45,0.0
+1,features.17.bias_quantizer,weight,8,0.1959,6,,37.19,0.0
+1,features.17.act_quantizer,act,8,0.9762,6,"(0.0, None)",,
+1,features.20.weight_quantizer,weight,8,-2.0003,9,,32.0,0.0
+1,features.20.bias_quantizer,weight,8,0.3852,6,,35.7,0.0
+1,features.20.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+1,features.23.quantizer,act,8,1.0052,5,,,
+1,features.24.weight_quantizer,weight,8,-2.0,9,,27.78,0.0
+1,features.24.bias_quantizer,weight,8,-0.0904,7,,41.37,0.0
+1,features.24.act_quantizer,act,8,0.991,6,"(0.0, None)",,
+1,features.27.weight_quantizer,weight,8,-1.7578,8,,24.28,0.0
+1,features.27.bias_quantizer,weight,8,0.0081,6,,33.62,0.0
+1,features.27.act_quantizer,act,8,1.0188,5,"(0.0, None)",,
+1,features.30.weight_quantizer,weight,8,-2.0092,9,,30.55,0.0
+1,features.30.bias_quantizer,weight,8,-0.3073,7,,40.75,0.0
+1,features.30.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+1,features.33.quantizer,act,8,1.0311,5,,,
+1,features.34.weight_quantizer,weight,8,-2.0,9,,30.01,0.0
+1,features.34.bias_quantizer,weight,8,-0.7028,7,,36.9,0.0
+1,features.34.act_quantizer,act,8,2.053,4,"(0.0, None)",,
+1,features.37.weight_quantizer,weight,8,-2.0496,9,,31.13,0.0
+1,features.37.bias_quantizer,weight,8,-0.4551,7,,40.14,0.0
+1,features.37.act_quantizer,act,8,1.0737,5,"(0.0, None)",,
+1,features.40.weight_quantizer,weight,8,-0.9796,7,,28.55,0.0
+1,features.40.bias_quantizer,weight,8,0.4073,6,,35.73,0.0
+1,features.40.act_quantizer,act,8,3.0,3,"(0.0, None)",,
+1,features.43.quantizer,act,8,3.0329,3,,,
+1,classifier.0.weight_quantizer,weight,8,-3.4825,10,,29.34,0.0
+1,classifier.0.bias_quantizer,weight,8,-0.7047,7,,18.92,0.0
+1,classifier.0.act_quantizer,act,8,2.0144,4,"(0.0, None)",,
+1,classifier.2.quantizer,act,8,0.409,6,,,
+1,classifier.5.weight_quantizer,weight,8,-3.7095,10,,31.71,0.0
+1,classifier.5.bias_quantizer,weight,8,-0.8928,7,,25.74,0.0
+1,classifier.5.act_quantizer,act,8,0.929,6,"(0.0, None)",,
+1,classifier.8.weight_quantizer,weight,8,-3.2429,10,,38.35,0.0
+1,classifier.8.bias_quantizer,weight,8,-0.744,7,,21.8,0.0
+1,classifier.8.act_quantizer,act,8,4.0001,2,,,
+1,quant_stub.quantizer,act,8,1.0,5,,,
+2,features.0.weight_quantizer,weight,8,1.0,6,,30.25,0.00058
+2,features.0.bias_quantizer,weight,8,-0.3336,7,,44.85,0.0
+2,features.0.act_quantizer,act,8,1.9992,5,"(0.0, None)",,
+2,features.3.weight_quantizer,weight,8,-1.8656,8,,29.2,0.0
+2,features.3.bias_quantizer,weight,8,0.8119,6,,42.25,0.0
+2,features.3.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+2,features.6.quantizer,act,8,1.1187,5,,,
+2,features.7.weight_quantizer,weight,8,-1.9548,8,,29.36,0.0
+2,features.7.bias_quantizer,weight,8,0.0787,6,,42.88,0.0
+2,features.7.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+2,features.10.weight_quantizer,weight,8,-1.8874,8,,29.04,0.0
+2,features.10.bias_quantizer,weight,8,0.5779,6,,38.88,0.0
+2,features.10.act_quantizer,act,8,0.9345,6,"(0.0, None)",,
+2,features.13.quantizer,act,8,1.0238,5,,,
+2,features.14.weight_quantizer,weight,8,-2.2099,9,,28.27,0.0
+2,features.14.bias_quantizer,weight,8,0.309,6,,34.75,0.0
+2,features.14.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+2,features.17.weight_quantizer,weight,8,-2.209,9,,31.44,0.0
+2,features.17.bias_quantizer,weight,8,0.1959,6,,37.19,0.0
+2,features.17.act_quantizer,act,8,0.9762,6,"(0.0, None)",,
+2,features.20.weight_quantizer,weight,8,-2.0003,9,,31.99,0.0
+2,features.20.bias_quantizer,weight,8,0.3852,6,,35.7,0.0
+2,features.20.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+2,features.23.quantizer,act,8,1.0052,5,,,
+2,features.24.weight_quantizer,weight,8,-2.0,9,,27.87,0.0
+2,features.24.bias_quantizer,weight,8,-0.0904,7,,41.37,0.0
+2,features.24.act_quantizer,act,8,0.991,6,"(0.0, None)",,
+2,features.27.weight_quantizer,weight,8,-1.7578,8,,24.27,0.0
+2,features.27.bias_quantizer,weight,8,0.0081,6,,33.63,0.0
+2,features.27.act_quantizer,act,8,1.0188,5,"(0.0, None)",,
+2,features.30.weight_quantizer,weight,8,-2.0092,9,,30.54,0.0
+2,features.30.bias_quantizer,weight,8,-0.3073,7,,40.72,0.0
+2,features.30.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+2,features.33.quantizer,act,8,1.0311,5,,,
+2,features.34.weight_quantizer,weight,8,-2.0,9,,30.0,0.0
+2,features.34.bias_quantizer,weight,8,-0.7028,7,,36.9,0.0
+2,features.34.act_quantizer,act,8,2.053,4,"(0.0, None)",,
+2,features.37.weight_quantizer,weight,8,-2.0496,9,,31.12,0.0
+2,features.37.bias_quantizer,weight,8,-0.4551,7,,40.14,0.0
+2,features.37.act_quantizer,act,8,1.0737,5,"(0.0, None)",,
+2,features.40.weight_quantizer,weight,8,-0.9796,7,,28.51,0.0
+2,features.40.bias_quantizer,weight,8,0.4073,6,,35.72,0.0
+2,features.40.act_quantizer,act,8,3.0,3,"(0.0, None)",,
+2,features.43.quantizer,act,8,3.0329,3,,,
+2,classifier.0.weight_quantizer,weight,8,-3.4825,10,,29.31,0.0
+2,classifier.0.bias_quantizer,weight,8,-0.7047,7,,18.9,0.0
+2,classifier.0.act_quantizer,act,8,2.0144,4,"(0.0, None)",,
+2,classifier.2.quantizer,act,8,0.409,6,,,
+2,classifier.5.weight_quantizer,weight,8,-3.7095,10,,31.69,0.0
+2,classifier.5.bias_quantizer,weight,8,-0.8928,7,,25.73,0.0
+2,classifier.5.act_quantizer,act,8,0.929,6,"(0.0, None)",,
+2,classifier.8.weight_quantizer,weight,8,-3.2429,10,,38.37,0.0
+2,classifier.8.bias_quantizer,weight,8,-0.744,7,,21.79,0.0
+2,classifier.8.act_quantizer,act,8,4.0001,2,,,
+2,quant_stub.quantizer,act,8,1.0,5,,,
+3,features.0.weight_quantizer,weight,8,1.0,6,,30.24,0.00116
+3,features.0.bias_quantizer,weight,8,-0.3336,7,,44.87,0.0
+3,features.0.act_quantizer,act,8,1.9992,5,"(0.0, None)",,
+3,features.3.weight_quantizer,weight,8,-1.8656,8,,29.19,0.0
+3,features.3.bias_quantizer,weight,8,0.8119,6,,42.24,0.0
+3,features.3.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+3,features.6.quantizer,act,8,1.1187,5,,,
+3,features.7.weight_quantizer,weight,8,-1.9548,8,,29.36,0.0
+3,features.7.bias_quantizer,weight,8,0.0787,6,,42.88,0.0
+3,features.7.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+3,features.10.weight_quantizer,weight,8,-1.8874,8,,29.04,0.0
+3,features.10.bias_quantizer,weight,8,0.5779,6,,38.87,0.0
+3,features.10.act_quantizer,act,8,0.9345,6,"(0.0, None)",,
+3,features.13.quantizer,act,8,1.0238,5,,,
+3,features.14.weight_quantizer,weight,8,-2.2099,9,,28.39,0.0
+3,features.14.bias_quantizer,weight,8,0.309,6,,34.75,0.0
+3,features.14.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+3,features.17.weight_quantizer,weight,8,-2.209,9,,31.43,0.0
+3,features.17.bias_quantizer,weight,8,0.1959,6,,37.19,0.0
+3,features.17.act_quantizer,act,8,0.9762,6,"(0.0, None)",,
+3,features.20.weight_quantizer,weight,8,-2.0003,9,,31.99,0.0
+3,features.20.bias_quantizer,weight,8,0.3852,6,,35.71,0.0
+3,features.20.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+3,features.23.quantizer,act,8,1.0052,5,,,
+3,features.24.weight_quantizer,weight,8,-2.0,9,,27.9,0.0
+3,features.24.bias_quantizer,weight,8,-0.0904,7,,41.37,0.0
+3,features.24.act_quantizer,act,8,0.991,6,"(0.0, None)",,
+3,features.27.weight_quantizer,weight,8,-1.7578,8,,24.26,0.0
+3,features.27.bias_quantizer,weight,8,0.0081,6,,33.63,0.0
+3,features.27.act_quantizer,act,8,1.0188,5,"(0.0, None)",,
+3,features.30.weight_quantizer,weight,8,-2.0092,9,,30.54,0.0
+3,features.30.bias_quantizer,weight,8,-0.3073,7,,40.73,0.0
+3,features.30.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+3,features.33.quantizer,act,8,1.0311,5,,,
+3,features.34.weight_quantizer,weight,8,-2.0,9,,29.99,0.0
+3,features.34.bias_quantizer,weight,8,-0.7028,7,,36.9,0.0
+3,features.34.act_quantizer,act,8,2.053,4,"(0.0, None)",,
+3,features.37.weight_quantizer,weight,8,-2.0496,9,,31.11,0.0
+3,features.37.bias_quantizer,weight,8,-0.4551,7,,40.15,0.0
+3,features.37.act_quantizer,act,8,1.0737,5,"(0.0, None)",,
+3,features.40.weight_quantizer,weight,8,-0.9796,7,,28.5,0.0
+3,features.40.bias_quantizer,weight,8,0.4073,6,,35.72,0.0
+3,features.40.act_quantizer,act,8,3.0,3,"(0.0, None)",,
+3,features.43.quantizer,act,8,3.0329,3,,,
+3,classifier.0.weight_quantizer,weight,8,-3.4825,10,,29.3,0.0
+3,classifier.0.bias_quantizer,weight,8,-0.7047,7,,18.9,0.0
+3,classifier.0.act_quantizer,act,8,2.0144,4,"(0.0, None)",,
+3,classifier.2.quantizer,act,8,0.409,6,,,
+3,classifier.5.weight_quantizer,weight,8,-3.7095,10,,31.68,0.0
+3,classifier.5.bias_quantizer,weight,8,-0.8928,7,,25.72,0.0
+3,classifier.5.act_quantizer,act,8,0.929,6,"(0.0, None)",,
+3,classifier.8.weight_quantizer,weight,8,-3.2429,10,,38.38,0.0
+3,classifier.8.bias_quantizer,weight,8,-0.744,7,,21.8,0.0
+3,classifier.8.act_quantizer,act,8,4.0001,2,,,
+3,quant_stub.quantizer,act,8,1.0,5,,,
+4,features.0.weight_quantizer,weight,8,1.0,6,,30.24,0.0
+4,features.0.bias_quantizer,weight,8,-0.3336,7,,44.87,0.0
+4,features.0.act_quantizer,act,8,1.9992,5,"(0.0, None)",,
+4,features.3.weight_quantizer,weight,8,-1.8656,8,,29.19,0.0
+4,features.3.bias_quantizer,weight,8,0.8119,6,,42.24,0.0
+4,features.3.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+4,features.6.quantizer,act,8,1.1187,5,,,
+4,features.7.weight_quantizer,weight,8,-1.9548,8,,29.36,0.0
+4,features.7.bias_quantizer,weight,8,0.0787,6,,42.87,0.0
+4,features.7.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+4,features.10.weight_quantizer,weight,8,-1.8874,8,,29.04,0.0
+4,features.10.bias_quantizer,weight,8,0.5779,6,,38.87,0.0
+4,features.10.act_quantizer,act,8,0.9345,6,"(0.0, None)",,
+4,features.13.quantizer,act,8,1.0238,5,,,
+4,features.14.weight_quantizer,weight,8,-2.2099,9,,28.42,0.0
+4,features.14.bias_quantizer,weight,8,0.309,6,,34.75,0.0
+4,features.14.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+4,features.17.weight_quantizer,weight,8,-2.209,9,,31.43,0.0
+4,features.17.bias_quantizer,weight,8,0.1959,6,,37.19,0.0
+4,features.17.act_quantizer,act,8,0.9762,6,"(0.0, None)",,
+4,features.20.weight_quantizer,weight,8,-2.0003,9,,31.99,0.0
+4,features.20.bias_quantizer,weight,8,0.3852,6,,35.71,0.0
+4,features.20.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+4,features.23.quantizer,act,8,1.0052,5,,,
+4,features.24.weight_quantizer,weight,8,-2.0,9,,27.9,0.0
+4,features.24.bias_quantizer,weight,8,-0.0904,7,,41.37,0.0
+4,features.24.act_quantizer,act,8,0.991,6,"(0.0, None)",,
+4,features.27.weight_quantizer,weight,8,-1.7578,8,,24.26,0.0
+4,features.27.bias_quantizer,weight,8,0.0081,6,,33.63,0.0
+4,features.27.act_quantizer,act,8,1.0188,5,"(0.0, None)",,
+4,features.30.weight_quantizer,weight,8,-2.0092,9,,30.53,0.0
+4,features.30.bias_quantizer,weight,8,-0.3073,7,,40.74,0.0
+4,features.30.act_quantizer,act,8,1.0,5,"(0.0, None)",,
+4,features.33.quantizer,act,8,1.0311,5,,,
+4,features.34.weight_quantizer,weight,8,-2.0,9,,29.99,0.0
+4,features.34.bias_quantizer,weight,8,-0.7028,7,,36.9,0.0
+4,features.34.act_quantizer,act,8,2.053,4,"(0.0, None)",,
+4,features.37.weight_quantizer,weight,8,-2.0496,9,,31.11,0.0
+4,features.37.bias_quantizer,weight,8,-0.4551,7,,40.15,0.0
+4,features.37.act_quantizer,act,8,1.0737,5,"(0.0, None)",,
+4,features.40.weight_quantizer,weight,8,-0.9796,7,,28.5,0.0
+4,features.40.bias_quantizer,weight,8,0.4073,6,,35.72,0.0
+4,features.40.act_quantizer,act,8,3.0,3,"(0.0, None)",,
+4,features.43.quantizer,act,8,3.0329,3,,,
+4,classifier.0.weight_quantizer,weight,8,-3.4825,10,,29.3,0.0
+4,classifier.0.bias_quantizer,weight,8,-0.7047,7,,18.9,0.0
+4,classifier.0.act_quantizer,act,8,2.0144,4,"(0.0, None)",,
+4,classifier.2.quantizer,act,8,0.409,6,,,
+4,classifier.5.weight_quantizer,weight,8,-3.7095,10,,31.68,0.0
+4,classifier.5.bias_quantizer,weight,8,-0.8928,7,,25.72,0.0
+4,classifier.5.act_quantizer,act,8,0.929,6,"(0.0, None)",,
+4,classifier.8.weight_quantizer,weight,8,-3.2429,10,,38.38,0.0
+4,classifier.8.bias_quantizer,weight,8,-0.744,7,,21.8,0.0
+4,classifier.8.act_quantizer,act,8,4.0001,2,,,
+4,quant_stub.quantizer,act,8,1.0,5,,,

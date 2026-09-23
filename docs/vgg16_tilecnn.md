@@ -62,7 +62,7 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 | stock + pooling swap, no retraining | FP32 | **48.534** | 73.508 | job 2858888_1 |
 | `vgg16_tilecnn` after fine-tuning | FP32 | **71.978** | 90.662 | job 2859325 |
 | `vgg16_tilecnn` | INT8 QAT | **72.252** | 90.762 | job 2884234 |
-| `vgg16_tilecnn` | INT8 TileCNN deploy | _pending_ | | |
+| `vgg16_tilecnn` | INT8 TileCNN deploy | **72.204** | 90.706 | job 2892486 |
 
 The variant lands **1.400 top-1 points** below stock `vgg16_bn` (73.378 ->
 71.978). That is the full architectural cost of making VGG-16 runnable on
@@ -114,7 +114,8 @@ fine-tune is expected to close further. Job 2859117.
 | 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
 | 5 | 2884083 | `vgg16_tilecnn` QAT, first attempt | failed in 20s writing the run manifest: `torch.__version__` is a `TorchVersion`, a `str` subclass `yaml.safe_dump` refuses. Pre-existing, fixed |
 | 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | best 72.252 top-1 / 90.762 top-5 at epoch 3; candidate `vgg16_tilecnn-run-2884234` |
-| 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact TileCNN deploy evaluation, then the policy gates | _pending_ |
+| 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact TileCNN deploy evaluation, then the policy gates | passed; promoted to `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` |
+| 8 | 2892584 | ModelPackage export from the release plus the legality acceptance check | _pending_ |
 
 QAT per-epoch validation top-1: 71.4, 71.9, 72.3, 72.2, 72.1. The INT8 model
 ends up **above** its own float starting point (71.978), because five epochs of

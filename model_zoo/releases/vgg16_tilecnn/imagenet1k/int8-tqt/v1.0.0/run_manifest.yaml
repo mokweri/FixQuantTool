@@ -1,0 +1,94 @@
+schema_version: 1
+status: completed
+created_at: '2026-09-23T14:56:17+00:00'
+model:
+  name: vgg16_tilecnn
+  initialization: float checkpoint /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best.pth.tar
+  float_checkpoint_top1: 71.97799682617188
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+  train_samples: 1281167
+  validation_samples: 50000
+quantization:
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: false
+  bias_correction: false
+  calibration_batches: 20
+  calibration_scope: 5
+  threshold_freeze_fraction: 0.7
+training:
+  epochs: 5
+  train_batch_size: 32
+  test_batch_size: 64
+  workers: 12
+  image_size: 224
+  initial_lr: 1.0e-05
+  quantizer_lr: 0.01
+  weight_decay: 0.0001
+  seed: 0
+provenance:
+  git_commit: 3ab5e6672af8c7c94ff4bd479be750185b9d1ad1
+  slurm_job_id: null
+  slurm_array_job_id: null
+  slurm_array_task_id: null
+  node: n140
+  python: 3.12.3
+  pytorch: 2.9.0a0+50eac811a6.nv25.09
+  command:
+  - /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/software/venvs/fixquant-ngc-25.09-py3/bin/python
+  - tools/qat_train.py
+  - --dataset
+  - imagenet
+  - --dataroot
+  - /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+  - --model
+  - vgg16_tilecnn
+  - --fp32_checkpoint
+  - /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best.pth.tar
+  - --train_batch_size
+  - '32'
+  - --test_batch_size
+  - '64'
+  - --n_worker
+  - '12'
+  - --n_epochs
+  - '5'
+  - --init_lr
+  - 1e-5
+  - --quantizer_lr
+  - 1e-2
+  - --threshold_freeze_frac
+  - '0.7'
+  - --calib_batches
+  - '20'
+  - --calib_scope
+  - '5'
+  - --validation_frequency
+  - '1'
+  - --display_freq
+  - '200'
+  - --manual_seed
+  - '0'
+  - --gpus
+  - '0'
+  - --save_dir
+  - /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/vgg16_tilecnn/2884234
+completed_at: '2026-09-23T19:25:16+00:00'
+best:
+  epoch: 3
+  metrics:
+    loss: 1.114598347053528
+    top1: 72.25199890136719
+    top5: 90.76200103759766
+final_evaluation:
+  loss: 1.1150778009223938
+  top1: 72.0979995727539
+  top5: 90.77999877929688
+artifacts:
+  best_checkpoint: checkpoint/model_best.pth.tar
+  latest_checkpoint: checkpoint/latest.pth.tar
+  calibration_report: vgg16_tilecnn_calib_report.csv
+  threshold_log: logs/quant_thresholds.csv

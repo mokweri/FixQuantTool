@@ -1,0 +1,169 @@
+{
+  "classifier_0": {
+    "bias": 7,
+    "in": [
+      3
+    ],
+    "out": 4,
+    "weight": 10
+  },
+  "classifier_2": {
+    "in": [
+      4
+    ],
+    "out": 6
+  },
+  "classifier_5": {
+    "bias": 7,
+    "in": [
+      6
+    ],
+    "out": 6,
+    "weight": 10
+  },
+  "classifier_8": {
+    "bias": 7,
+    "in": [
+      6
+    ],
+    "out": 2,
+    "weight": 10
+  },
+  "features_0": {
+    "bias": 7,
+    "in": [
+      5
+    ],
+    "out": 5,
+    "weight": 6
+  },
+  "features_10": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 6,
+    "weight": 8
+  },
+  "features_13": {
+    "in": [
+      6
+    ],
+    "out": 5
+  },
+  "features_14": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 5,
+    "weight": 9
+  },
+  "features_17": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 6,
+    "weight": 9
+  },
+  "features_20": {
+    "bias": 6,
+    "in": [
+      6
+    ],
+    "out": 5,
+    "weight": 9
+  },
+  "features_23": {
+    "in": [
+      5
+    ],
+    "out": 5
+  },
+  "features_24": {
+    "bias": 7,
+    "in": [
+      5
+    ],
+    "out": 6,
+    "weight": 9
+  },
+  "features_27": {
+    "bias": 6,
+    "in": [
+      6
+    ],
+    "out": 5,
+    "weight": 8
+  },
+  "features_3": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 5,
+    "weight": 8
+  },
+  "features_30": {
+    "bias": 7,
+    "in": [
+      5
+    ],
+    "out": 5,
+    "weight": 9
+  },
+  "features_33": {
+    "in": [
+      5
+    ],
+    "out": 5
+  },
+  "features_34": {
+    "bias": 7,
+    "in": [
+      5
+    ],
+    "out": 4,
+    "weight": 9
+  },
+  "features_37": {
+    "bias": 7,
+    "in": [
+      4
+    ],
+    "out": 5,
+    "weight": 9
+  },
+  "features_40": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 3,
+    "weight": 7
+  },
+  "features_43": {
+    "in": [
+      3
+    ],
+    "out": 3
+  },
+  "features_6": {
+    "in": [
+      5
+    ],
+    "out": 5
+  },
+  "features_7": {
+    "bias": 6,
+    "in": [
+      5
+    ],
+    "out": 5,
+    "weight": 8
+  },
+  "x": {
+    "out": 5
+  }
+}

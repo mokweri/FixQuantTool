@@ -1,0 +1,58 @@
+schema_version: 1
+release_id: vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0
+status: released
+version: v1.0.0
+released_at: '2026-09-23T19:34:18+00:00'
+model: vgg16_tilecnn
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+quantization:
+  profile: int8-tqt
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: false
+provenance:
+  run_dir: /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/vgg16_tilecnn/2884234/vgg16_tilecnn
+  git_commit: 3ab5e6672af8c7c94ff4bd479be750185b9d1ad1
+  slurm_job_id: '2884234'
+metrics:
+  qat:
+    loss: 1.1145983463668823
+    top1: 72.25199890136719
+    top5: 90.76200103759766
+  tilecnn:
+    loss: 1.1163726251220703
+    top1: 72.20399475097656
+    top5: 90.70600128173828
+  tilecnn_delta:
+    top1: -0.048004150390625
+    top5: -0.055999755859375
+validation_samples: 50000
+artifacts:
+  best_checkpoint: qat/model_best.pth.tar
+  calibration_report: qat/calibration_report.csv
+  threshold_log: qat/quant_thresholds.csv
+  run_manifest: run_manifest.yaml
+  qconfig: deployment/qconfig.json
+checksums:
+  deployment/qconfig.json: 5032e791fd452d694a80744a6c0b9071af7c2cfdf562cd4e5da5bffa90f6efcc
+  evaluation/qat_metrics.json: 239b536b8f47a5e50c82e9f131a934185567cb122c63f62d6e158f32f1ce110c
+  evaluation/tilecnn_metrics.json: 767a0c18f46e73a5b1494ee7427b2427bcea18e3aa494489532c43670f3414b4
+  evaluation/validation_report.json: 879611f596c7511a66e0ad01b0d9c58318512e391a810012a49c74a1c57b0910
+  metrics.json: ec06c80697de29b3d36791ce28e24690eb0f963f357a87e0f7cd0dd36b91b7e1
+  model_card.md: e5a1df9402dd89d5eccfb30e837336e7dc0ec6ff14b75133e28c6a5cf38ef6e5
+  qat/calibration_report.csv: cebb06888d56c39ebcdfdffe120dd798b4f9510d12a549aff715f70100eb6a9e
+  qat/model_best.pth.tar: ea0be88498e150090b2ecc32c8dbcd9d405641a60e74bfb326a99712949b4b8c
+  qat/quant_thresholds.csv: 2ebd784083090fde3695e42aad400ccfc4c455019d425af4bfa18f64e3b3dc09
+  run_manifest.yaml: 537f36e945b62be4a59b203cdeb1bd278209b62df00db9bca7f4f3d5f20b4528
+downloads:
+  qat/model_best.pth.tar:
+    provider: github-release
+    repository: mokweri/FixQuantTool
+    tag: model-zoo-vgg16_tilecnn-imagenet1k-int8-tqt-v1.0.0
+    asset: model_best.pth.tar
+    urls:
+    - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-vgg16_tilecnn-imagenet1k-int8-tqt-v1.0.0/model_best.pth.tar
+    size_bytes: 653982851
