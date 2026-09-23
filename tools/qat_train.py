@@ -67,6 +67,10 @@ parser.add_argument('--dynamic_batch_size', default=1,
 # Model / quantization options
 parser.add_argument("--model", type=str, default="mobilenet_v2",
                     help="Model to quantize (resnet18|resnet50|vgg16|mobilenet_v2)")
+parser.add_argument("--fp32_checkpoint", type=str, default=None,
+                    help="Converged float checkpoint to quantize. Required for models "
+                         "whose float weights do not come from torchvision "
+                         "(e.g. vgg16_tilecnn, whose head is trained in this repo).")
 parser.add_argument("--calib_batches", type=int, default=20,
                     help="Number of calibration batches (batch size = train_batch_size).")
 parser.add_argument("--calib_scope", type=int, default=5,
@@ -184,6 +188,16 @@ if __name__ == '__main__':
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
+
+    if args.fp32_checkpoint:
+        from fixquant.utils import load_float_checkpoint
+        loaded = load_float_checkpoint(model, args.fp32_checkpoint)
+        run_manifest["model"]["initialization"] = (
+            f"float checkpoint {os.path.abspath(args.fp32_checkpoint)}")
+        run_manifest["model"]["float_checkpoint_top1"] = loaded.get("val_top1")
+        write_yaml(manifest_path, run_manifest)
+        logging.info("Starting QAT from float checkpoint %s (epoch %s, val top1 %s)",
+                     args.fp32_checkpoint, loaded.get("epoch"), loaded.get("val_top1"))
 
     config_path = repo_root / "configs/quant_config.yaml"
     with open(config_path, "r") as f:

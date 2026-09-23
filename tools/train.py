@@ -40,6 +40,14 @@ parser.add_argument("--model", type=str, default="vgg16",
                     help="Model to train (resnet18|resnet50|vgg16|mobilenet_v2)")
 parser.add_argument("--pretrained", action="store_true", default=False,
                     help="Start from torchvision pretrained weights.")
+parser.add_argument("--resume", type=str, default=None,
+                    help="Float checkpoint to load before training (e.g. the head "
+                         "warm-up checkpoint, to continue into the full fine-tune).")
+parser.add_argument("--freeze_backbone", action="store_true", default=False,
+                    help="Train only the classifier head and hold the feature stack "
+                         "(weights and BN running statistics) fixed. Use for the first "
+                         "1-2 epochs after attaching a randomly initialized head; the "
+                         "backbone must be unfrozen afterwards so it can adapt.")
 parser.add_argument("--eval_only", action="store_true", default=False,
                     help="Skip training and only run validation.")
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
@@ -73,6 +81,22 @@ if __name__ == '__main__':
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=args.pretrained)
+
+    if args.resume:
+        from fixquant.utils import load_float_checkpoint
+        resumed = load_float_checkpoint(model, args.resume)
+        print(f"Resumed float weights from {args.resume} "
+              f"(epoch {resumed.get('epoch')}, val top1 {resumed.get('val_top1')})")
+
+    if args.freeze_backbone:
+        if not hasattr(model, "freeze_backbone"):
+            raise SystemExit(
+                f"--freeze_backbone is not supported by model '{args.model}'.")
+        model.freeze_backbone(True)
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        print(f"Backbone frozen: training {trainable}/{total} parameters "
+              f"({100.0 * trainable / total:.1f}%).")
 
     args.save_dir = os.path.join(args.save_dir, args.model)
 

@@ -30,6 +30,10 @@ parser.add_argument("--model", type=str, default="resnet50",
                     help="Model to evaluate (resnet18|resnet50|vgg16|mobilenet_v2). "
                          "Uses the same pretrained weights QAT starts from. CLE is "
                          "function-preserving in floating point, so it is not applied.")
+parser.add_argument("--checkpoint", default=None,
+                    help="Float checkpoint to evaluate instead of the torchvision "
+                         "pretrained weights. Required for models whose head is "
+                         "trained here (e.g. vgg16_tilecnn).")
 parser.add_argument("--zoo-model", default=None,
                     help="Released model ID: model/dataset/profile@version. Selects the "
                          "model and the dataset recorded for that release.")
@@ -79,6 +83,13 @@ if __name__ == '__main__':
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
+    weights_description = "torchvision pretrained (fixquant.models.get_model)"
+    if args.checkpoint:
+        from fixquant.utils import load_float_checkpoint
+        loaded = load_float_checkpoint(model, args.checkpoint)
+        weights_description = f"float checkpoint {args.checkpoint}"
+        logger.info("Loaded float checkpoint %s (epoch %s, val top1 %s)",
+                    args.checkpoint, loaded.get("epoch"), loaded.get("val_top1"))
 
     args_dict = args.__dict__.copy()
     if 'image_size' not in args_dict:
@@ -101,7 +112,7 @@ if __name__ == '__main__':
             "created_at": utc_now(),
             "representation": "fp32",
             "model": args.model,
-            "weights": "torchvision pretrained (fixquant.models.get_model)",
+            "weights": weights_description,
             "dataset": {"name": args.dataset, "path": args.dataroot},
             "validation_samples": len(run_config.val_loader.sampler),
             "metrics": {

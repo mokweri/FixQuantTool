@@ -97,7 +97,7 @@ def _tilecnn_conv2d(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
 
 def _tilecnn_linear(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
                     ifm_frac: int, weight_frac: int, bias_frac: int,
-                    out_frac: int) -> torch.Tensor:
+                    out_frac: int, post_ops: Optional[Dict[str, Any]] = None) -> torch.Tensor:
     x = ifm.reshape(1, -1).to(torch.float64)
     w = weight.to(torch.float64)
     y = torch.matmul(x, w.t()).to(torch.int64)
@@ -112,7 +112,15 @@ def _tilecnn_linear(ifm: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
 
     bias_adj = _bias_shift(bias, out_frac - bias_frac + 1).view(1, -1)
     out = (s1 + bias_adj + 1) >> 1
-    return _as_i8(out).reshape(weight.shape[0], 1, 1)
+    out = _as_i8(out)
+    # TileCNN lowers `linear` to a 1x1 convolution, so it carries the same
+    # activation post-op block as conv2d.
+    post_ops = post_ops or {}
+    if post_ops.get("relu6", False):
+        out = torch.clamp(out, 0, _relu6_max(out_frac))
+    elif post_ops.get("relu", False):
+        out = torch.clamp_min(out, 0)
+    return out.reshape(weight.shape[0], 1, 1)
 
 
 def _tilecnn_residual_add(main: torch.Tensor, residual: torch.Tensor,
@@ -196,7 +204,8 @@ def _write_tilecnn_bitexact_references(export_path: Path, graph_json: Dict[str, 
             values[ofm_id] = _tilecnn_linear(
                 values[ifm_id], values[weight_id], values[bias_id],
                 tensors[ifm_id]["frac"], tensors[weight_id]["frac"],
-                tensors[bias_id]["frac"], tensors[ofm_id]["frac"])
+                tensors[bias_id]["frac"], tensors[ofm_id]["frac"],
+                node.get("post_ops"))
 
         elif op == "maxpool2d":
             ifm_id = inputs["ifm"]
@@ -493,7 +502,8 @@ class TileCNNGraphExporter:
                     },
                     "outputs": {
                         "ofm": f"{node_id}_out"
-                    }
+                    },
+                    "post_ops": {}
                 }
                 built_nodes[node_id] = node
                 node_to_fused[name] = node_id

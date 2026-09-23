@@ -22,6 +22,7 @@ __all__ = [
     "build_optimizer",
     "calc_learning_rate",
     "save_checkpoint",
+    "load_float_checkpoint",
 ]
 
 
@@ -255,3 +256,16 @@ def save_checkpoint(state, is_best, directory):
         best_filepath = os.path.join(directory, "model_best.pth")
         shutil.copyfile(filepath, best_filepath)
     return best_filepath if is_best else filepath
+
+def load_float_checkpoint(net, checkpoint_path, strict=True):
+    """Load float weights saved by RunManager into `net`.
+
+    RunManager checkpoints wrap the weights in a "state_dict" entry alongside
+    bookkeeping (epoch, optimizer, metrics); a bare state dict is accepted too.
+    Used to chain the head warm-up into the full fine-tune, and to start QAT
+    from a converged float checkpoint instead of torchvision weights.
+    """
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+    net.load_state_dict(state_dict, strict=strict)
+    return checkpoint
