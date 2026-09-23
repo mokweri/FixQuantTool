@@ -112,7 +112,8 @@ fine-tune is expected to close further. Job 2859117.
 | 2 | 2858888 | Pooling ablation array: task 0 stock `vgg16_bn` FP32, task 1 `vgg16_bn_pool3` FP32 | done |
 | 3 | 2859117 | BatchNorm re-estimation on `vgg16_bn_pool3`, 400 batches x 64 images, no gradient steps | 48.534 -> 69.170 top-1 |
 | 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
-| 5 | 2884083 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0 | _pending_ |
+| 5 | 2884083 | `vgg16_tilecnn` QAT, first attempt | failed in 20s writing the run manifest: `torch.__version__` is a `TorchVersion`, a `str` subclass `yaml.safe_dump` refuses. Pre-existing, fixed |
+| 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | _pending_ |
 
 Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
 backbone parameters and their BatchNorm running statistics were held fixed, so
