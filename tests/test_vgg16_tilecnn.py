@@ -116,7 +116,7 @@ def test_freeze_backbone_holds_features_and_their_bn_statistics():
 
     bn = next(m for m in variant.features.modules() if isinstance(m, nn.BatchNorm2d))
     before = bn.running_mean.clone()
-    variant(torch.randn(2, 3, 64, 64))
+    variant(torch.randn(1, 3, 224, 224))
     assert torch.equal(bn.running_mean, before)
 
     variant.freeze_backbone(False).train()
