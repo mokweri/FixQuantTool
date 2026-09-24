@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: '2026-08-25T09:54:12+00:00'
+generated_at: '2026-09-24T08:30:07+00:00'
 zoo_root: .
 releases:
 - release_id: mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0
@@ -42,3 +42,13 @@ releases:
   tilecnn_top1: 71.0
   git_commit: null
   downloadable: false
+- release_id: vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0
+  status: released
+  model: vgg16_tilecnn
+  dataset: imagenet1k
+  profile: int8-tqt
+  version: v1.0.0
+  qat_top1: 72.25199890136719
+  tilecnn_top1: 72.20399475097656
+  git_commit: 3ab5e6672af8c7c94ff4bd479be750185b9d1ad1
+  downloadable: true
