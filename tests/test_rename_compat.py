@@ -24,8 +24,7 @@ def test_former_backend_name_selects_the_deeptile_backend():
     assert HardwareConv2d(weight, None).backend == "deeptile"
 
 
-def test_exported_identifiers_stay_frozen_until_the_next_target_generation():
-    # DeepTile hosts packaged in existing targets read only tilecnn.* IDs.
-    assert deeptile_exporter.GRAPH_SCHEMA == "tilecnn.graph.v1"
-    assert deeptile_exporter.MODEL_PACKAGE_SCHEMA == "tilecnn.model-package.v1"
+def test_exports_use_the_deeptile_identifiers():
+    assert deeptile_exporter.GRAPH_SCHEMA == "deeptile.graph.v1"
+    assert deeptile_exporter.MODEL_PACKAGE_SCHEMA == "deeptile.model-package.v1"
     assert set(deeptile_exporter.GRAPH_SCHEMAS) == {"tilecnn.graph.v1", "deeptile.graph.v1"}

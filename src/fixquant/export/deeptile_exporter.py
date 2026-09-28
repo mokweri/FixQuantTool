@@ -14,13 +14,13 @@ from fixquant.graph.inference_processor import AddWithMetadata
 
 GAP_SCALE_FRAC_BITS = 16
 
-# Written into every exported ModelPackage. These keep their TileCNN-era form
-# until DeepTile's next target generation, whose host is the first to read the
-# deeptile.* namespace (DeepTile docs/reference/naming.md). Readers accept both.
-GRAPH_SCHEMA = "tilecnn.graph.v1"
-MODEL_PACKAGE_SCHEMA = "tilecnn.model-package.v1"
-REFERENCE_IMPLEMENTATION = "FixQuant TileCNN bit-exact integer reference"
-REFERENCE_ARITHMETIC = "fused TileCNN graph semantics"
+# Written into every exported ModelPackage. Packages exported before the rename
+# carry the tilecnn.* form of the same formats, which readers still accept
+# (DeepTile docs/reference/naming.md).
+GRAPH_SCHEMA = "deeptile.graph.v1"
+MODEL_PACKAGE_SCHEMA = "deeptile.model-package.v1"
+REFERENCE_IMPLEMENTATION = "FixQuant DeepTile bit-exact integer reference"
+REFERENCE_ARITHMETIC = "fused DeepTile graph semantics"
 GRAPH_SCHEMAS = ("deeptile.graph.v1", "tilecnn.graph.v1")
 MODEL_PACKAGE_SCHEMAS = ("deeptile.model-package.v1", "tilecnn.model-package.v1")
 

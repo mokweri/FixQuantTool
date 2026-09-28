@@ -13,9 +13,8 @@ the same core assumptions: signed int8 tensors, file-backed weights, explicit
 fixed-point metadata, and canonical software tensor layouts.
 
 DeepTile was previously named TileCNN. The format's identifier is
-`tilecnn.graph.v1`, also accepted as `deeptile.graph.v1`. FixQuant writes
-`tilecnn.graph.v1` until DeepTile's next target generation, whose host is the
-first to read the new form.
+`deeptile.graph.v1`; packages exported before the rename carry
+`tilecnn.graph.v1`, the same format, which readers still accept.
 
 ## Ownership Boundary
 
@@ -84,7 +83,7 @@ per-layer comparison much easier than a single monolithic binary archive.
 ## Model Package Manifest
 
 Released-model exports include `manifest.json` with schema
-`tilecnn.model-package.v1`. This package-level record identifies the model-zoo
+`deeptile.model-package.v1`. This package-level record identifies the model-zoo
 release, FixQuant version and Git revision, checkpoint and configuration
 checksums, reference-image preprocessing, and checksums for `graph.json` and
 the exported validation inputs and references.
@@ -122,7 +121,7 @@ Top-level structure:
 
 ```json
 {
-  "schema": "tilecnn.graph.v1",
+  "schema": "deeptile.graph.v1",
   "model": {},
   "target": {},
   "graph": {},
@@ -133,7 +132,7 @@ Top-level structure:
 
 Required top-level fields:
 
-- `schema`: `"tilecnn.graph.v1"` or `"deeptile.graph.v1"`, the same format.
+- `schema`: `"deeptile.graph.v1"`; the former `"tilecnn.graph.v1"` is also accepted.
 - `model`: descriptive metadata.
 - `target`: global assumptions for the exported graph.
 - `graph`: names of graph inputs, outputs, and optional output references.
@@ -146,7 +145,7 @@ Example:
 
 ```json
 {
-  "schema": "tilecnn.graph.v1",
+  "schema": "deeptile.graph.v1",
   "model": {
     "name": "resnet18",
     "producer": "fixed_point_quantizer",
@@ -173,7 +172,7 @@ Example:
 }
 ```
 
-Target constraints for `tilecnn.graph.v1`:
+Target constraints for `deeptile.graph.v1`:
 
 - `bitwidth` must be `8`.
 - `signed` must be `true`.
@@ -657,7 +656,7 @@ path for end-to-end ResNet execution, not an optimized classifier backend.
 
 ```json
 {
-  "schema": "tilecnn.graph.v1",
+  "schema": "deeptile.graph.v1",
   "model": {
     "name": "tiny_residual_tail",
     "producer": "fixed_point_quantizer",
@@ -830,7 +829,7 @@ The DeepTile graph importer should:
 
 ## Versioning Notes
 
-This is schema version `tilecnn.graph.v1`.
+This is schema version `deeptile.graph.v1`.
 
 Future schema versions may add:
 
