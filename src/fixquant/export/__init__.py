@@ -1,3 +1,6 @@
-from .tilecnn_exporter import TileCNNGraphExporter
+from .deeptile_exporter import DeepTileGraphExporter
 
-__all__ = ['TileCNNGraphExporter']
+# Former name, kept for existing callers.
+TileCNNGraphExporter = DeepTileGraphExporter
+
+__all__ = ['DeepTileGraphExporter', 'TileCNNGraphExporter']

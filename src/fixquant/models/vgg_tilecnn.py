@@ -1,6 +1,6 @@
-"""VGG-16 variant that satisfies the TileCNN fabric constraints.
+"""VGG-16 variant that satisfies the DeepTile fabric constraints.
 
-Stock torchvision VGG-16 cannot be compiled for the TileCNN accelerator for two
+Stock torchvision VGG-16 cannot be compiled for the DeepTile accelerator for two
 independent reasons:
 
 1. Pooling geometry. The accelerator implements exactly one pooling post-op --
@@ -26,13 +26,15 @@ __all__ = [
     "VGGTileCNN",
     "vgg16_tilecnn",
     "vgg16_bn_pool3",
+    "DEEPTILE_MAXPOOL",
     "TILECNN_MAXPOOL",
     "WEIGHT_BUFFER_BUDGET",
 ]
 
 
 # The single pooling post-op the fabric implements.
-TILECNN_MAXPOOL = dict(kernel_size=3, stride=2, padding=1)
+DEEPTILE_MAXPOOL = dict(kernel_size=3, stride=2, padding=1)
+TILECNN_MAXPOOL = DEEPTILE_MAXPOOL  # former name
 
 # ceil(Cin / 16) * Kh * Kw must not exceed this for any conv or linear layer.
 WEIGHT_BUFFER_BUDGET = 512
@@ -43,7 +45,7 @@ VGG16_CFG = [64, 64, "M", 128, 128, "M", 256, 256, 256, "M",
 
 
 def make_features(cfg=VGG16_CFG, batch_norm=True, in_channels=3):
-    """Build the VGG feature stack with TileCNN-legal pooling.
+    """Build the VGG feature stack with DeepTile-legal pooling.
 
     Layer indices match torchvision's ``vgg16_bn.features`` exactly, so the
     pretrained convolution and batch-norm weights load without remapping.
@@ -51,7 +53,7 @@ def make_features(cfg=VGG16_CFG, batch_norm=True, in_channels=3):
     layers = []
     for v in cfg:
         if v == "M":
-            layers += [nn.MaxPool2d(**TILECNN_MAXPOOL)]
+            layers += [nn.MaxPool2d(**DEEPTILE_MAXPOOL)]
         else:
             conv = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             if batch_norm:
@@ -63,7 +65,7 @@ def make_features(cfg=VGG16_CFG, batch_norm=True, in_channels=3):
 
 
 class VGGTileCNN(nn.Module):
-    """VGG-16 with TileCNN-legal pooling and a convolutional classifier head.
+    """VGG-16 with DeepTile-legal pooling and a convolutional classifier head.
 
     The head replaces VGG's 25088 -> 4096 fully-connected layer with a strided
     3x3 convolution followed by global average pooling:
@@ -159,7 +161,7 @@ def _load_pretrained_features(model):
 
 
 def vgg16_tilecnn(pretrained: bool = True, num_classes: int = 1000, **kwargs):
-    """VGG-16 variant runnable on TileCNN, optionally with pretrained features."""
+    """VGG-16 variant runnable on DeepTile, optionally with pretrained features."""
     model = VGGTileCNN(num_classes=num_classes, **kwargs)
     if pretrained:
         if num_classes != 1000:
@@ -175,7 +177,7 @@ def vgg16_bn_pool3(pretrained: bool = True, **kwargs):
 
     Used for the free pooling ablation: pooling is parameter-free, so this
     isolates the cost of the pooling change from the cost of the new head. The
-    classifier is left untouched and is *not* TileCNN-legal -- this model is an
+    classifier is left untouched and is *not* DeepTile-legal -- this model is an
     evaluation probe, never an export target.
     """
     import torchvision.models as tvm
@@ -184,5 +186,5 @@ def vgg16_bn_pool3(pretrained: bool = True, **kwargs):
     model = tvm.vgg16_bn(weights=weights, **kwargs)
     for name, module in list(model.features.named_children()):
         if isinstance(module, nn.MaxPool2d):
-            setattr(model.features, name, nn.MaxPool2d(**TILECNN_MAXPOOL))
+            setattr(model.features, name, nn.MaxPool2d(**DEEPTILE_MAXPOOL))
     return model

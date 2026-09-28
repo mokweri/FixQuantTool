@@ -13,7 +13,7 @@
 #
 # The package carries the INT8 graph, every parameter, one preprocessed
 # validation input and the bit-exact integer reference output the accelerator
-# must reproduce. tools/check_tilecnn_legality.py then verifies the graph
+# must reproduce. tools/check_deeptile_legality.py then verifies the graph
 # against the fabric's rules and every manifest checksum against the files on
 # disk.
 #
@@ -29,7 +29,7 @@ TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
 MODEL=vgg16_tilecnn
 RELEASE_ID="${1:-${FIXQUANT_RELEASE_ID:-$MODEL/imagenet1k/int8-tqt@v1.0.0}}"
 IMAGE="${FIXQUANT_EXPORT_IMAGE:-$REPO/assets/new.JPEG}"
-OUT_DIR="${FIXQUANT_EXPORT_DIR:-$REPO/outputs/${MODEL}_int8_tilecnn}"
+OUT_DIR="${FIXQUANT_EXPORT_DIR:-$REPO/outputs/${MODEL}_int8_deeptile}"
 
 cd "$REPO"
 mkdir -p "$TORCH_CACHE"
@@ -48,7 +48,7 @@ printf 'Validation input: %s\n' "$IMAGE"
 printf 'Output: %s\n' "$OUT_DIR"
 
 srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
-    python tools/export_tilecnn_graph.py \
+    python tools/export_deeptile_graph.py \
     --zoo-model "$RELEASE_ID" \
     --zoo-root "$ZOO_ROOT" \
     --image "$IMAGE" \
@@ -56,6 +56,6 @@ srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
 
 printf '\n=== Acceptance check ===\n'
 srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
-    python tools/check_tilecnn_legality.py "$OUT_DIR"
+    python tools/check_deeptile_legality.py "$OUT_DIR"
 
 printf '\nModelPackage exported and accepted: %s\n' "$OUT_DIR"

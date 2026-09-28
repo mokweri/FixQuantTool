@@ -15,7 +15,7 @@ and a live status tracker. Findings are annotated **[FIXED]** / **[OPEN]** /
    (`scripts/jobscript_arrhenius.sh` for the new NAISS system).
 2. **Hardware-side (HLS) work** — grouped/depthwise conv and the `relu6`
    post-op exist in the exporter, twin and spec (v1.1) but not yet in the
-   TileCNN kernels; MobileNet cannot run on the FPGA until they do.
+   DeepTile kernels; MobileNet cannot run on the FPGA until they do.
 3. **Owner/hardware decisions** — per-channel `shift_out`, int16 bias lane,
    thesis dataset, legacy HWCM export path (§13).
 4. **Phase 6 optional items** — AdaQuant-style fast finetune, two-step-rounding-
@@ -27,8 +27,8 @@ and a live status tracker. Findings are annotated **[FIXED]** / **[OPEN]** /
 
 The tool implements a coherent and well-thought-out pipeline: TQT-based
 (trained-log2-threshold) fixed-point QAT with power-of-2 per-tensor scales, FX-graph
-Conv–BN fusion, conversion to an INT8 hardware-emulation model, a TileCNN digital
-twin, and a graph/binary exporter matching the TileCNN Graph Handoff Specification.
+Conv–BN fusion, conversion to an INT8 hardware-emulation model, a DeepTile digital
+twin, and a graph/binary exporter matching the DeepTile Graph Handoff Specification.
 For ResNet/VGG this works and produces near-hardware-accurate results.
 
 **The MobileNet QAT accuracy decay has one confirmed primary cause and two
@@ -69,11 +69,11 @@ noted per item):
    The full fix — per-output-channel `shift_out` in hardware — remains an open
    decision (§13 Q1).*
 
-3. **[FIXED in software / OPEN in HLS]** **(Structural) The TileCNN export path does not support MobileNet yet.**
-   The bit-exact reference generator raises `ValueError("TileCNN reference
-   supports groups=1 only")` (`tilecnn_exporter.py:69`), and the exporter fuses
+3. **[FIXED in software / OPEN in HLS]** **(Structural) The DeepTile export path does not support MobileNet yet.**
+   The bit-exact reference generator raises `ValueError("DeepTile reference
+   supports groups=1 only")` (`deeptile_exporter.py:69`), and the exporter fuses
    `HardwareRelu6` into predecessor nodes as a plain `relu` post-op
-   (`tilecnn_exporter.py:580-591`), silently dropping the 6-clamp. The handoff
+   (`deeptile_exporter.py:580-591`), silently dropping the 6-clamp. The handoff
    spec (`graph_handoff_spec.md`) has no `relu6` post-op or `groups` support on
    the hardware side.
    *Fix: grouped conv and true `relu6`/`post_add_relu6` post-ops implemented in
@@ -131,11 +131,11 @@ src/fixquant/
                         HWCM weight-export helpers still present (§13 Q7).
   diagnostics.py        NEW: quantizer_report, threshold logging, parity_sweep.
   emulation/
-    fxp_emu_modules.py  Hardware* modules — bit-exact TileCNN integer arithmetic
+    fxp_emu_modules.py  Hardware* modules — bit-exact DeepTile integer arithmetic
                         (two-step rounding restored; add uses _signed_shift).
     model_introspector.py  StdModelInspector (unchanged).
   export/
-    tilecnn_exporter.py Exporter + _tilecnn_* reference kernels: grouped conv,
+    deeptile_exporter.py Exporter + _deeptile_* reference kernels: grouped conv,
                         relu6 post-ops, maxpool attrs, shift-legality checks,
                         no silent frac defaults.
   models/               get_model() factory (torchvision-backed) + resnet.py,
@@ -147,7 +147,7 @@ tools/
                         qat_train adds --cle/--bias_corr/--calib_batches/
                         --threshold_freeze_frac; seeded.
   layer_sensitivity.py  NEW: one-layer-at-a-time quantization probes.
-  export_tilecnn_graph.py, export_hw_testcases.py, export_fixA_refactor_testcases.py,
+  export_deeptile_graph.py, export_hw_testcases.py, export_fixA_refactor_testcases.py,
   print_model_graph.py, train.py (working float baseline trainer)
   archive/              Retired: hw_layer_test_gen, gen_resnet18_fc_testdata,
                         train_cifar, ddp_train_hvd (see archive/README.md).
@@ -159,7 +159,7 @@ configs/quant_config.yaml       Layer map + freeze_bn_delay. (Note: bitwidths ar
                         still hardcoded at 8 in module constructors — open.)
 docs/                   This report, improvements_2026-07.md, baselines.md,
                         arrhenius_gpu_guide.md, tqt.md, conv_fused.md, qmodules.md,
-                        tilecnn_exporter_and_digital_twin.md, mobilenet roadmap.
+                        deeptile_exporter_and_digital_twin.md, mobilenet roadmap.
 graph_handoff_spec.md   Spec incl. v1.1 extensions (groups, relu6 post-ops).
 scripts/jobscript_arrhenius.sh  NEW: GH200 job template (old Alvis one deprecated).
 ```
@@ -239,13 +239,13 @@ comes from the learned QuantStub). Bit-exactness is asserted automatically:
 (committed integer golden), and `diagnostics.parity_sweep` (QAT ↔ hardware,
 first-layer diff ≤ 1 LSB enforced in `tests/test_qat_flow.py`).
 
-## 4. Current TileCNN Export Flow
+## 4. Current DeepTile Export Flow
 
 Pipeline: QAT checkpoint → `QatProcessor.quantize()+load_qat_weights()+freeze()` →
 `InferProcessor.convert_to_std_model()` / `convert_to_hardware_model()` →
-`StdModelInspector` (hooks capture int8 activations) → `TileCNNGraphExporter.export()`
+`StdModelInspector` (hooks capture int8 activations) → `DeepTileGraphExporter.export()`
 → `graph.json` + `inputs/ params/ refs/` int8 binaries → the exporter then
-**recomputes** all reference outputs with the bit-exact `_tilecnn_*` kernels so the
+**recomputes** all reference outputs with the bit-exact `_deeptile_*` kernels so the
 C-simulation testbench compares against true hardware arithmetic.
 
 Bit-exactness-critical facts (status vs `a30fc02`):
@@ -347,7 +347,7 @@ sensitive linear-bottleneck tensors.
 models by editing hardcoded lines; the emu path runs (HardwareConv2d passes
 `groups` through) but `HardwareRelu6` receives `frac_in` while clamping should use
 the *output* frac of the producing conv (they're equal in the current wiring, but
-the constructor semantics are fragile), and the TileCNN reference export rejects
+the constructor semantics are fragile), and the DeepTile reference export rejects
 depthwise entirely. So there is currently **no way to produce a MobileNet
 bit-exact golden reference**, meaning QAT results can't be validated against
 hardware semantics end to end.
@@ -363,22 +363,22 @@ adopted — multi-batch calibration, threshold freezing, bias correction
 sensitivity, legality checks. Remaining: full AdaQuant fast finetune (Phase 6)
 and the per-channel-weights hardware decision.*
 
-| Vitis AI concept | What it does | Worth adopting for TileCNN? |
+| Vitis AI concept | What it does | Worth adopting for DeepTile? |
 |---|---|---|
 | **Multi-batch calibration** | Forward 100–1000 images in "calib" mode; fix positions chosen from accumulated statistics via MSE ("diffs") search, then written to a config | **Yes — cheap.** Replace one-shot warmup with N-batch stat accumulation + `find_fix_pos(scope≈5)`; keep KL as an option. The search code already exists in `fix_ops.py`. |
 | **Freeze after calibration** | Calibrated fix positions are fixed for evaluation/deployment; QAT is a separate deliberate phase | **Yes.** Add explicit `freeze_thresholds()` (already exists per-quantizer as `freeze_quant`) called for the final K epochs and always before export. |
 | **Fast finetune (AdaQuant-style)** | Per-layer optimization of weights/bias to minimize layer-output MSE on ~1000 images, no labels/optimizer needed | **Yes, simplified.** Even a bias-correction-only pass (match per-channel output means float-vs-quant) is known to recover several % on MobileNet and is ~50 lines. Full AdaQuant later. |
 | **QAT with trained thresholds** | Same TQT; run *after* calibration init, few epochs, small lr | Already present — needs the schedule fixes from §5, not new machinery. |
 | **BN folding into QAT modules** | Fuse then train; BN stats frozen deliberately | Present, but Vitis controls freeze explicitly rather than via a step counter — adopt explicit control. |
-| **Per-channel weights** | Available in the general quantizer config (not for pow-2 DPU targets) | **Decide with hardware.** Per-output-channel *shift* (still pow-2) is cheap in an FPGA emit stage. If TileCNN won't add it, use CLE instead. |
+| **Per-channel weights** | Available in the general quantizer config (not for pow-2 DPU targets) | **Decide with hardware.** Per-output-channel *shift* (still pow-2) is cheap in an FPGA emit stage. If DeepTile won't add it, use CLE instead. |
 | **Cross-layer equalization (CLE)** | Rescale adjacent layers (Nagel et al.) to equalize per-channel weight ranges; standard fix for depthwise per-tensor quantization; requires ReLU6→ReLU conversion | **Yes if staying per-tensor.** Pure software pass before quantization; no hardware change. Pair with the `convert_relu6_to_relu` idea below. |
-| **ReLU6→ReLU conversion option** | DPU flow converts ReLU6 to ReLU when ranges allow (QAT clamps ranges anyway) | Partially — safer for TileCNN is a real `relu6` post-op in the spec **or** proving `6·2^frac ≥ 127` per layer and only then exporting `relu`. Don't silently degrade (current behavior). |
+| **ReLU6→ReLU conversion option** | DPU flow converts ReLU6 to ReLU when ranges allow (QAT clamps ranges anyway) | Partially — safer for DeepTile is a real `relu6` post-op in the spec **or** proving `6·2^frac ≥ 127` per layer and only then exporting `relu`. Don't silently degrade (current behavior). |
 | **Inspector** | Checks each op against target constraints before quantizing; produces a report | **Yes, tiny version:** a pre-flight pass that walks the FX graph and errors on unsupported ops (groups≠1, relu6-without-post-op, non-GAP avgpool…) instead of failing mid-export or silently defaulting. |
 | **Layer sensitivity / QuantAnalyzer** | Per-layer quantize-one-layer-at-a-time accuracy probes | **Yes, simplified:** one script, N≈200 images, report top-k most sensitive layers; drives "which layers get relaxed treatment". |
-| **Hardware legality checks** | DPU checks `shift_cut`/`shift_bias` legal ranges and adjusts fix pos | **Yes.** TileCNN has the same implicit constraints (`shift_out ≥ 0`? `fout - fb + 1` range, GAP `total_shift ≥ 0`) — validate at export, adjust frac or fail loudly. |
+| **Hardware legality checks** | DPU checks `shift_cut`/`shift_bias` legal ranges and adjusts fix pos | **Yes.** DeepTile has the same implicit constraints (`shift_out ≥ 0`? `fout - fb + 1` range, GAP `total_shift ≥ 0`) — validate at export, adjust frac or fail loudly. |
 | Full nndct graph IR, ONNX/XIR export, hard/soft fusion engine | Heavy infrastructure | **No** — unnecessary for this prototype. |
 
-Caveat: Vitis AI behavior is not automatically correct for TileCNN — e.g. DPU's
+Caveat: Vitis AI behavior is not automatically correct for DeepTile — e.g. DPU's
 bias handling, leaky-relu approximations, and avg-pool scale tricks are
 DPU-specific. Borrow the *process* (calibrate → check → finetune → freeze →
 export → verify), not the constants.
@@ -411,26 +411,26 @@ partially open — inline notes below.*
 
 | # | Risk | Where it appears | Why it matters | How to test | Recommended fix | Status (2026-07) |
 |---|---|---|---|---|---|---|
-| 1 | ReLU6 exported as plain `relu` | `tilecnn_exporter.py:580-591`; spec has no `relu6` post-op | Wrong results whenever `6·2^frac < 127` for that tensor | Layer testcase with inputs > 6.0 equivalent | Add `relu6`/`clip_max` post-op to spec + exporter + kernels, or export-time proof that clamp is unreachable | **Fixed (SW)**: relu6 post-op in exporter/twin/spec v1.1; HLS open |
-| 2 | Depthwise (`groups≠1`) unsupported in reference | `tilecnn_exporter.py:69` | MobileNet cannot get golden refs; HW behavior undefined | Attempt export of one dw block (currently raises) | Implement grouped conv in `_tilecnn_conv2d` + HW; add pre-flight inspector check | **Fixed (SW)**: grouped conv in reference/twin, tested; HLS open |
-| 3 | QAT rounding ≠ HW two-step emit rounding | `fix_ops.py` HALF_UP vs `_tilecnn_conv2d` truncate-then-round | ±1 LSB/layer systematic drift; compounds over 50+ layers | Compare std-model vs twin per-layer outputs, count mismatched elements | Either model two-step rounding in QAT fake-quant (exact), or accept and *measure* per layer (report) | **Open** (Phase 6): parity sweep now *measures* it per layer |
+| 1 | ReLU6 exported as plain `relu` | `deeptile_exporter.py:580-591`; spec has no `relu6` post-op | Wrong results whenever `6·2^frac < 127` for that tensor | Layer testcase with inputs > 6.0 equivalent | Add `relu6`/`clip_max` post-op to spec + exporter + kernels, or export-time proof that clamp is unreachable | **Fixed (SW)**: relu6 post-op in exporter/twin/spec v1.1; HLS open |
+| 2 | Depthwise (`groups≠1`) unsupported in reference | `deeptile_exporter.py:69` | MobileNet cannot get golden refs; HW behavior undefined | Attempt export of one dw block (currently raises) | Implement grouped conv in `_deeptile_conv2d` + HW; add pre-flight inspector check | **Fixed (SW)**: grouped conv in reference/twin, tested; HLS open |
+| 3 | QAT rounding ≠ HW two-step emit rounding | `fix_ops.py` HALF_UP vs `_deeptile_conv2d` truncate-then-round | ±1 LSB/layer systematic drift; compounds over 50+ layers | Compare std-model vs twin per-layer outputs, count mismatched elements | Either model two-step rounding in QAT fake-quant (exact), or accept and *measure* per layer (report) | **Open** (Phase 6): parity sweep now *measures* it per layer |
 | 4 | 8-bit bias resolution | spec `bias_dtype: int8`; TQT bias quantizer | Folded BN biases are large-range; error is a per-channel DC offset | Per-channel output-mean comparison float vs quant | Bias-correction pass post-fold; longer term consider int16 bias lane in HW | **Mitigated**: bias-correction pass available (`--bias_corr`); int16 lane = §13 Q4 |
-| 5 | Residual-add double rounding & pre-relu saturation | `HardwareElementwiseAdd`, `_tilecnn_residual_add` vs float QAT add | QAT never sees align-shift error or saturation-before-relu | Adversarial add testcase with frac mismatch of 2+ | Model align-shifts in `QElementwiseAdd` during QAT; constrain branch fracs (e.g. force equal frac on both add inputs) | **Fixed**: QAT add aligns inputs to output grid; kernels use `_signed_shift`, tested |
+| 5 | Residual-add double rounding & pre-relu saturation | `HardwareElementwiseAdd`, `_deeptile_residual_add` vs float QAT add | QAT never sees align-shift error or saturation-before-relu | Adversarial add testcase with frac mismatch of 2+ | Model align-shifts in `QElementwiseAdd` during QAT; constrain branch fracs (e.g. force equal frac on both add inputs) | **Fixed**: QAT add aligns inputs to output grid; kernels use `_signed_shift`, tested |
 | 6 | Silent default fracs (5/7) on qconfig miss | `inference_processor.py:413-417`, exporter fallbacks | A name-mapping bug produces plausible-but-wrong binaries | Export with an intentionally renamed layer; must fail | Replace defaults with hard errors | **Fixed**: hard errors, tested |
 | 7 | First-layer input frac hardcoded to 5 | `inference_processor.py:605-616`, `default_input_frac=5` everywhere | Wrong for CIFAR/other normalizations; input clipping (ImageNet-normalized range ±~2.64 fits, but only by luck) | Feed constant extreme images; compare quantized input | Derive from the input QuantStub's learned frac; single source of truth | **Fixed**: frac captured from input QuantStub |
-| 8 | MaxPool kernel hardcoded 3×3/s2/p1 in reference | `_tilecnn_maxpool:121-124` | Any other pool config silently produces wrong refs | Export a 2×2 pool testcase | Read attrs from node | **Fixed**: attrs read from node, tested |
+| 8 | MaxPool kernel hardcoded 3×3/s2/p1 in reference | `_deeptile_maxpool:121-124` | Any other pool config silently produces wrong refs | Export a 2×2 pool testcase | Read attrs from node | **Fixed**: attrs read from node, tested |
 | 9 | Maxpool re-quantization to a *different* frac | `QMaxPool2D` learns its own threshold; HW applies `post_pool_shift` | Max is grid-preserving; a learned frac change adds a pointless rounding step and a shift the HW must honor | Check exported `frac_in==frac_out` for pools | Remove pool output quantizers; inherit input frac | **Mitigated**: `post_pool_shift` wired from qconfig; pool quantizer kept for checkpoint compat |
 | 10 | Unfrozen model export | `convert_to_std_model` copies `conv_mod.weight` (unfolded) if `freeze()` wasn't called | Silently exports non-BN-folded weights | Export without freeze; outputs diverge grossly | Assert `frozen` in conversion | **Open** (minor): no `frozen` assert in conversion yet |
 | 11 | Weight layout OIHW vs HWCM | exporter vs `export_weights_to_file` | Wrong layout = garbage inference | Round-trip load test per artifact | Kill or clearly deprecate the legacy exporter | **Open**: legacy HWCM exporter still present (§13 Q7) |
 | 12 | `frac = 7 - ceil(log2 t)` off-by-one at pow-2 boundaries | `tqt_quantizer.export_quant_info` | Threshold drifting across a power of 2 at the last training step flips the whole layer grid | Log `log2 t` distance-to-boundary at export | Freeze thresholds before final epochs; warn when `log2 t` within ε of an integer | **Mitigated**: threshold freeze schedule (default last 30% of epochs) |
-| 13 | GAP reciprocal & shift constraints | `_tilecnn_gap` requires `total_shift ≥ 0` | Certain frac combinations crash or wrap | Sweep frac_in/out combos in a unit test | Export-time legality check (see Vitis `shift_bias`-style checks) | **Fixed**: `_check_shift_legality` at export |
+| 13 | GAP reciprocal & shift constraints | `_deeptile_gap` requires `total_shift ≥ 0` | Certain frac combinations crash or wrap | Sweep frac_in/out combos in a unit test | Export-time legality check (see Vitis `shift_bias`-style checks) | **Fixed**: `_check_shift_legality` at export |
 | 14 | Accumulator width unmodeled in QAT | float accumulation in QAT vs int32 HW | Large layers could overflow int32 in principle (unlikely at 8×8×k²·C) | Worst-case bound check per layer at export | Add static bound check `log2(C_in·k²·127·127) < 31` | **Open** (low risk): static bound check not implemented |
 | 15 | Padding count/stride conventions | QAT `F.conv2d` vs HW tiling | Classic source of off-by-one at borders | Boundary-activation testcases (already exported — keep) | Keep golden border tests in the standard suite | **Kept**: kernel tests + exported boundary testcases remain the guard |
 | 16 | Signed activation after ReLU wastes a bit; HW assumes signed | whole pipeline | Not a mismatch (consistent), but 1 bit of accuracy left on the table | — | Optional: unsigned activation mode for post-ReLU tensors (HW change — probably not worth it now) | **Open by design**: unsigned mode deferred (HW change) |
 
 **Validation strategy** (practical, ordered) — *items 1–3 implemented in `tests/`; item 4 open pending HLS v1.1*:
 1. **Kernel unit tests** (pure Python, seconds): exhaustive small-tensor tests of
-   `_tilecnn_conv2d`/`HardwareConv2d`/HLS kernel triples over all shift sign
+   `_deeptile_conv2d`/`HardwareConv2d`/HLS kernel triples over all shift sign
    combinations, including relu6, grouped conv, GAP, add alignment. These three
    implementations must agree bit-exactly with each other before touching the FPGA.
 2. **Golden model test** (minutes): for each supported architecture, one fixed
@@ -463,7 +463,7 @@ Target flow (each step explicit, scriptable, and logged):
    (groups, relu6, pool configs, avgpool type); fail with a report otherwise.
 4. **(MobileNet-class models) equalize** — optional CLE pass on
    conv→dw→pw chains before calibration; optional per-channel-shift weight mode if
-   TileCNN adopts it.
+   DeepTile adopts it.
 5. **Calibrate** — N batches (≥ 200–1000 images) in eval mode with BN folding in
    *frozen semantics*: accumulate stats, then set thresholds by MSE fix-pos search
    (weights: per-tensor minimum-MSE; activations: MSE or KL). Evaluate quantized
@@ -478,12 +478,12 @@ Target flow (each step explicit, scriptable, and logged):
    to `configs/qconfig_files/` with the checkpoint.
 9. **Golden tests** — std-model vs twin per-layer parity sweep + committed golden
    logits (§8) must pass.
-10. **Export** — TileCNN graph + binaries + bit-exact refs; export-time legality
+10. **Export** — DeepTile graph + binaries + bit-exact refs; export-time legality
     checks (shift ranges, GAP shift, bias shift).
 11. **Hardware verification** — C-sim testbench on exported refs; then FPGA.
 
 This is deliberately Vitis-shaped (calibrate → finetune → QAT → inspect → export →
-verify) but with only the pieces TileCNN needs.
+verify) but with only the pieces DeepTile needs.
 
 ## 10. MobileNet-Specific Roadmap
 
@@ -508,7 +508,7 @@ acceptance, **pending measurement**.*
    - QAT: for conv→ReLU6, use an unsigned/clipped activation quantizer whose
      threshold initializes at 6.0 (learnable below 6, hard-capped at 6) placed
      *after* the clamp semantics — i.e. quantize `min(max(y,0),6)`.
-   - Export: add `relu6` post-op (spec + exporter + `_tilecnn_conv2d` + HLS), or
+   - Export: add `relu6` post-op (spec + exporter + `_deeptile_conv2d` + HLS), or
      an export-time check that emits `relu` only when provably equivalent.
 3. **Depthwise weights** — CLE ✅ / per-channel shift ⬜ (§13 Q1)
    - Short term (no HW change): CLE across dw/pw pairs before calibration
@@ -516,7 +516,7 @@ acceptance, **pending measurement**.*
      equalization); plus bias correction after folding.
    - Medium term (small HW change): per-output-channel `shift_out` (per-channel
      pow-2 weight frac). Measured headroom: +12 dB median weight SQNR (§5.2). This
-     is the single biggest accuracy lever if TileCNN can take it.
+     is the single biggest accuracy lever if DeepTile can take it.
 4. **Depthwise/pointwise QAT hygiene** — sensitivity tool ✅ / decay exclusion ⬜
    - Exclude depthwise weights (and all BN-fold gammas/betas if kept) from weight
      decay.
@@ -530,7 +530,7 @@ acceptance, **pending measurement**.*
      thresholds frozen for the final 2–3 epochs, batch ≥ 64 if memory allows.
 6. **Residual adds** ✅: constrain both add inputs to the add's output frac during
    QAT (re-quantize the skip branch), matching hardware alignment exactly.
-7. **Export validation** — software ✅ / C-sim ⬜: extend `_tilecnn_conv2d` + HW kernels to grouped conv;
+7. **Export validation** — software ✅ / C-sim ⬜: extend `_deeptile_conv2d` + HW kernels to grouped conv;
    export one inverted-residual block (expand 1×1 → dw 3×3 → project 1×1 + add)
    as the canonical MobileNet testcase; per-layer parity sweep over the full net.
 8. **Acceptance for this track** ⬜ (pending measurement): quantized MobileNetV2 within ~1–2% top-1 of
@@ -570,9 +570,9 @@ per-phase details in `improvements_2026-07.md`.*
 - **Validation**: PTQ-after-CLE ≥ PTQ-baseline + several %; QAT hits target; ResNet/VGG regression suite unchanged.
 - **Benefit**: the headline deliverable.
 
-### Phase 4 — TileCNN export correctness & golden tests (risk: medium/high) — ✅ DONE (software) / ⬜ HLS v1.1 kernels + C-sim
+### Phase 4 — DeepTile export correctness & golden tests (risk: medium/high) — ✅ DONE (software) / ⬜ HLS v1.1 kernels + C-sim
 - **Goal**: MobileNet exportable; bit-exactness enforced by tests.
-- **Files**: `tilecnn_exporter.py`, `fxp_emu_modules.py`, `graph_handoff_spec.md`, new `tests/`.
+- **Files**: `deeptile_exporter.py`, `fxp_emu_modules.py`, `graph_handoff_spec.md`, new `tests/`.
 - **Tasks**: grouped conv + `relu6` post-op in reference/twin/spec (coordinate with HLS side); remove silent frac defaults → errors; pre-flight inspector; export-time shift-legality checks; kernel unit tests + golden logits tests (§8 strategy); fix maxpool attr hardcoding.
 - **Validation**: `pytest tests/` green; inverted-residual C-sim testcase matches bit-exactly; ResNet-50 twin accuracy unchanged.
 - **Benefit**: MobileNet on FPGA; refactors become safe.
@@ -618,13 +618,13 @@ and final bit-exactness sign-off requires the HLS v1.1 kernels + C-sim.*
 from QAT start; fold-then-QAT available via `--cle`). Q1–Q5, Q7, Q8 remain
 open and are now the main blockers outside GPU time.*
 
-1. ⬜ **Can TileCNN support a per-output-channel `shift_out`** (per-channel pow-2
+1. ⬜ **Can DeepTile support a per-output-channel `shift_out`** (per-channel pow-2
    weight scales)? This is the single biggest MobileNet accuracy lever; if no, CLE
    becomes mandatory rather than optional.
 2. ⬜ **Will the hardware add a `relu6`/`clip_max` post-op** *(exporter/spec/twin ready — HLS decision pending; note `--cle` sidesteps it for MobileNetV2 by training with plain ReLU)*, or should the flow
    guarantee `6·2^frac ≥ 127` per layer (train with that constraint) and export
    plain `relu`?
-3. ⬜ **Does TileCNN support grouped/depthwise convolution at all** in the current
+3. ⬜ **Does DeepTile support grouped/depthwise convolution at all** in the current
    HLS kernels, or is depthwise planned as channel-looped standard conv? The
    exporter reference must mirror the real dataflow.
 4. ⬜ **Is int8 bias a hard constraint** (URAM/format), or is an int16 bias lane

@@ -7,6 +7,8 @@ import yaml
 
 from fixquant.model_zoo import (
     ZooError,
+    deploy_metrics,
+    deploy_metrics_file,
     fetch_release,
     load_candidate,
     promote_candidate,
@@ -97,9 +99,9 @@ def test_candidate_validation_promotion_and_resolution(tmp_path):
         89.0,
     )
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.4,
         88.7,
     )
@@ -155,9 +157,9 @@ def test_candidate_rejected_when_checkpoint_hash_does_not_match(tmp_path):
     evaluation = candidate_path.parent / "evaluation"
     _metrics(evaluation / "qat_metrics.json", "wrong", "qat", 70.0, 89.0)
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.5,
         88.7,
     )
@@ -183,9 +185,9 @@ def test_release_verification_detects_tampering(tmp_path):
         89.0,
     )
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.5,
         88.7,
     )
@@ -214,9 +216,9 @@ def test_release_checkpoint_fetches_to_verified_cache(tmp_path):
         89.0,
     )
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.5,
         88.7,
     )
@@ -279,9 +281,9 @@ def test_release_fetch_rejects_wrong_checkpoint(tmp_path):
         89.0,
     )
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.5,
         88.7,
     )
@@ -315,9 +317,9 @@ def test_publish_dry_run_is_bound_to_release_and_commit(tmp_path):
         89.0,
     )
     _metrics(
-        evaluation / "tilecnn_metrics.json",
+        evaluation / "deeptile_metrics.json",
         candidate["checkpoint_sha256"],
-        "tilecnn",
+        "deeptile",
         69.5,
         88.7,
     )
@@ -338,3 +340,33 @@ def test_publish_dry_run_is_bound_to_release_and_commit(tmp_path):
     assert report["target_commit"] == "a" * 40
     assert "gh release create" in report["command"]
     assert "--draft" in report["command"]
+
+
+def test_candidates_and_policies_from_before_the_rename_still_validate(tmp_path):
+    zoo_root = tmp_path / "zoo"
+    run_dir, _ = _training_run(tmp_path)
+    candidate, candidate_path = register_candidate(run_dir, root=zoo_root)
+    evaluation = candidate_path.parent / "evaluation"
+    _metrics(evaluation / "qat_metrics.json", candidate["checkpoint_sha256"],
+             "qat", 70.0, 89.0)
+    _metrics(evaluation / "tilecnn_metrics.json", candidate["checkpoint_sha256"],
+             "tilecnn", 69.4, 88.7)
+    _write(evaluation / "qconfig.json", "{}")
+    assert deploy_metrics_file(evaluation).name == "tilecnn_metrics.json"
+
+    # A policy file written with the old key is honoured, not silently ignored.
+    legacy_policy = tmp_path / "legacy_policy.yaml"
+    _write(legacy_policy, yaml.safe_dump({"maximum_tilecnn_top1_drop": 0.1}))
+    report = validate_candidate(zoo_root, candidate["candidate_id"],
+                                policy_path=legacy_policy)
+    drop = next(c for c in report["checks"] if c["name"] == "deeptile_top1_drop")
+    assert drop["maximum"] == 0.1 and not drop["passed"]
+
+    report = validate_candidate(zoo_root, candidate["candidate_id"])
+    assert report["passed"]
+    assert deploy_metrics(report["metrics"])["top1"] == 69.4
+
+
+def test_release_metrics_are_read_under_either_name():
+    assert deploy_metrics({"tilecnn": {"top1": 1.0}}) == {"top1": 1.0}
+    assert deploy_metrics({"deeptile": {"top1": 2.0}, "tilecnn": {"top1": 1.0}}) == {"top1": 2.0}

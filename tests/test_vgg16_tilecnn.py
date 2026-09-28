@@ -1,4 +1,4 @@
-"""TileCNN legality of the vgg16_tilecnn variant, end to end.
+"""DeepTile legality of the vgg16_tilecnn variant, end to end.
 
 The structural tests assert the two fabric limits that forced the architecture
 change (pooling geometry, weight-buffer footprint) directly on the float model.
@@ -19,7 +19,7 @@ import yaml
 
 from fixquant.models import get_model
 from fixquant.models.vgg_tilecnn import (
-    TILECNN_MAXPOOL,
+    DEEPTILE_MAXPOOL,
     WEIGHT_BUFFER_BUDGET,
     VGGTileCNN,
 )
@@ -47,9 +47,9 @@ def test_every_maxpool_uses_the_single_legal_geometry(model):
     pools = [m for m in model.modules() if isinstance(m, nn.MaxPool2d)]
     assert len(pools) == 5
     for pool in pools:
-        assert pool.kernel_size == TILECNN_MAXPOOL["kernel_size"]
-        assert pool.stride == TILECNN_MAXPOOL["stride"]
-        assert pool.padding == TILECNN_MAXPOOL["padding"]
+        assert pool.kernel_size == DEEPTILE_MAXPOOL["kernel_size"]
+        assert pool.stride == DEEPTILE_MAXPOOL["stride"]
+        assert pool.padding == DEEPTILE_MAXPOOL["padding"]
 
 
 def test_every_weight_layer_fits_the_weight_buffer(model):
@@ -136,29 +136,29 @@ def test_pooling_ablation_model_keeps_stock_classifier():
 
 
 def test_linear_relu_is_fused_as_a_post_op_not_dropped():
-    """TileCNN lowers `linear` to a 1x1 conv, so it carries the same post-op
+    """DeepTile lowers `linear` to a 1x1 conv, so it carries the same post-op
     block as conv2d. A ReLU after a Linear must survive the export."""
-    from fixquant.export.tilecnn_exporter import _tilecnn_linear
+    from fixquant.export.deeptile_exporter import _deeptile_linear
 
     ifm = torch.full((4, 1, 1), 1, dtype=torch.int8)
     weight = torch.tensor([[1, 1, 1, 1], [-1, -1, -1, -1]], dtype=torch.int8)
     bias = torch.zeros(2, dtype=torch.int8)
     kwargs = dict(ifm_frac=0, weight_frac=0, bias_frac=0, out_frac=0)
 
-    plain = _tilecnn_linear(ifm, weight, bias, **kwargs)
-    relued = _tilecnn_linear(ifm, weight, bias, post_ops={"relu": True}, **kwargs)
+    plain = _deeptile_linear(ifm, weight, bias, **kwargs)
+    relued = _deeptile_linear(ifm, weight, bias, post_ops={"relu": True}, **kwargs)
     assert plain[1].item() < 0
     assert relued[1].item() == 0
     assert relued[0].item() == plain[0].item()
 
 
 @pytest.mark.slow
-def test_export_produces_a_legal_tilecnn_package(tmp_path):
+def test_export_produces_a_legal_deeptile_package(tmp_path):
     """Full pipeline on random weights: the graph the FPGA would be handed."""
     from fixquant.graph.qat_processor import QatProcessor
     from fixquant.graph.inference_processor import InferProcessor
     from fixquant.emulation.model_introspector import StdModelInspector
-    from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
+    from fixquant.export.deeptile_exporter import DeepTileGraphExporter
 
     torch.manual_seed(0)
     proc = QatProcessor(VGGTileCNN(num_classes=10), CONFIG)
@@ -173,7 +173,7 @@ def test_export_produces_a_legal_tilecnn_package(tmp_path):
     inspector.collect_all_shapes(torch.randn(1, 3, 224, 224))
 
     out_dir = tmp_path / "package"
-    TileCNNGraphExporter(inspector, model_name="vgg16_tilecnn",
+    DeepTileGraphExporter(inspector, model_name="vgg16_tilecnn",
                          default_input_frac=infer.input_frac or 5).export(str(out_dir))
 
     graph = json.loads((out_dir / "graph.json").read_text())
@@ -185,7 +185,7 @@ def test_export_produces_a_legal_tilecnn_package(tmp_path):
 
     # The acceptance checker must pass on the emitted graph. It also validates
     # manifest checksums, so write the manifest the export tool would write.
-    from tools.export_tilecnn_graph import write_package_manifest
+    from tools.export_deeptile_graph import write_package_manifest
 
     class _Args:
         model = "vgg16_tilecnn"
@@ -194,7 +194,7 @@ def test_export_produces_a_legal_tilecnn_package(tmp_path):
                            out_dir / "absent.JPEG")
 
     check = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "tools/check_tilecnn_legality.py"),
+        [sys.executable, str(REPO_ROOT / "tools/check_deeptile_legality.py"),
          str(out_dir)],
         capture_output=True, text=True)
     assert check.returncode == 0, check.stdout + check.stderr

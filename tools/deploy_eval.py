@@ -69,10 +69,10 @@ parser.add_argument('--manual_seed',
                     default=0, type=int, help='Seed.')
 
 parser.add_argument("--model_type", type=str, default="emu",
-                    choices=["emu", "tilecnn"],
+                    choices=["emu", "deeptile", "tilecnn"],
                     help=(
                         "'emu'     → HLS sequential emulation (convert_to_hardware_model) — fast to build.\n"
-                        "'tilecnn' → TileCNN digital-twin with fused residual add and hardware-exact\n"
+                        "'deeptile' → DeepTile digital-twin with fused residual add and hardware-exact\n"
                         "            GAP / MaxPool kernels (convert_to_hardware_model) — bit-identical\n"
                         "            to the real FPGA hardware accuracy."
                     ))
@@ -133,7 +133,10 @@ if __name__ == '__main__':
     """ ---- INFERENCE PROCESSING -----"""
     infer_processor = InferProcessor(model, config)
 
-    backend = "tilecnn" if args.model_type == "tilecnn" else "hls"
+    # "tilecnn" is the former name of the "deeptile" backend.
+    if args.model_type == "tilecnn":
+        args.model_type = "deeptile"
+    backend = "deeptile" if args.model_type == "deeptile" else "hls"
     logger.info("Building %s hardware model...", backend)
     eval_model = infer_processor.convert_to_hardware_model(backend=backend)
 

@@ -98,7 +98,7 @@ A quantized version of `AdaptiveAvgPool2d`. Also substituted for *functional*
 Residual addition followed by activation quantization. Since 2026-07 it models
 the hardware alignment: when `align_inputs=True` (default), both inputs are
 first rounded onto the *output* frac grid (STE, no clamp — the hardware aligns
-in int32 and only saturates after the add), matching the TileCNN residual
+in int32 and only saturates after the add), matching the DeepTile residual
 `_signed_shift`.
 
 - **Key Methods:**

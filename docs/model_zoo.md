@@ -32,7 +32,7 @@ node through `scripts/model_zoo.sh`; they do not require a GPU allocation.
 QAT training
     -> candidate registration
     -> QAT evaluation on the full validation set
-    -> TileCNN digital-twin evaluation
+    -> DeepTile digital-twin evaluation
     -> checksum, sample-count, accuracy-delta, and artifact gates
     -> validated candidate
     -> explicit human promotion
@@ -75,7 +75,7 @@ model_zoo/releases/mobilenet_v2/imagenet1k/int8-tqt-cle/v1.0.0/
 │   └── quant_thresholds.csv
 ├── evaluation/
 │   ├── qat_metrics.json
-│   ├── tilecnn_metrics.json
+│   ├── deeptile_metrics.json    (tilecnn_metrics.json in releases made before the rename)
 │   └── validation_report.json
 └── deployment/
     └── qconfig.json
@@ -123,16 +123,16 @@ Submit validation from the login node:
 sbatch scripts/jobs/validate_zoo_candidate.sbatch resnet18-run-1234
 ```
 
-The job runs `qat_test.py` and `deploy_eval.py --model_type tilecnn` over the
+The job runs `qat_test.py` and `deploy_eval.py --model_type deeptile` over the
 complete validation set, writes machine-readable metrics and qconfig files,
 then applies `configs/model_zoo_policy.yaml`.
 
 Default gates require:
 
-- the QAT and TileCNN results to reference the candidate checkpoint SHA-256;
+- the QAT and DeepTile results to reference the candidate checkpoint SHA-256;
 - 50,000 validation samples;
-- no more than 1.0 percentage point TileCNN top-1 loss;
-- no more than 0.5 percentage point TileCNN top-5 loss;
+- no more than 1.0 percentage point DeepTile top-1 loss;
+- no more than 0.5 percentage point DeepTile top-5 loss;
 - the genuine-best checkpoint, calibration report, threshold log, and qconfig.
 
 A failed gate marks the candidate `rejected` and records every actual and
@@ -242,11 +242,11 @@ python tools/qat_test.py \
 
 python tools/deploy_eval.py \
     --zoo-model mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0 \
-    --model_type tilecnn
+    --model_type deeptile
 
-python tools/export_tilecnn_graph.py \
+python tools/export_deeptile_graph.py \
     --zoo-model mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0 \
-    --out_dir outputs/mobilenet_v2_int8_tilecnn
+    --out_dir outputs/mobilenet_v2_int8_deeptile
 ```
 
 This prevents incompatible combinations such as loading CLE-trained weights
@@ -269,7 +269,7 @@ For example, after pulling the repository onto an accelerator PC:
 export FIXQUANT_DATA_DIR=/home/obed/datasets/imagenet
 python tools/deploy_eval.py \
     --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
-    --model_type tilecnn
+    --model_type deeptile
 ```
 
 An explicit `--dataroot` overrides the environment for one invocation.
@@ -277,6 +277,6 @@ An explicit `--dataroot` overrides the environment for one invocation.
 ## Current scope
 
 Version 1 of the registry releases the genuine-best QAT checkpoint, structured
-metrics, calibration and threshold diagnostics, and TileCNN qconfig. Full
-TileCNN graph bundles and board-measured latency/power can be added as further
+metrics, calibration and threshold diagnostics, and DeepTile qconfig. Full
+DeepTile graph bundles and board-measured latency/power can be added as further
 required promotion artifacts without changing existing releases.

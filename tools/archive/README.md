@@ -9,8 +9,8 @@ reworked APIs.
   per-layer handoff format (`weights.data` / `qparams.json` / `details.txt`
   under `outputs/hw_data_files`). Superseded by the graph.json bundles of
   `graph_handoff_spec.md` (`tools/export_hw_testcases.py`,
-  `tools/export_tilecnn_graph.py`).
-- `train_cifar.py` — standalone CIFAR float trainer; the TileCNN flow targets
+  `tools/export_deeptile_graph.py`).
+- `train_cifar.py` — standalone CIFAR float trainer; the DeepTile flow targets
   ImageNet, and CIFAR is not part of the baselines.
 - `ddp_train_hvd.py` — standalone Horovod ImageNet trainer for the Alvis
   cluster. `scripts/jobscript.sh` references a `run_dist2.py` that no longer

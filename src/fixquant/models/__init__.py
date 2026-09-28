@@ -11,7 +11,7 @@ def get_model(name: str, pretrained: bool = True):
     instead of by editing the scripts.
 
     ``vgg16_tilecnn`` is FixQuant's own VGG-16 variant: the ``vgg16_bn`` feature
-    stack with TileCNN-legal 3x3/s2/p1 pooling and a convolutional head that
+    stack with DeepTile-legal 3x3/s2/p1 pooling and a convolutional head that
     fits the accelerator's weight buffer. ``pretrained=True`` transfers the
     torchvision convolution stack; its head is always randomly initialized and
     has to be trained (see docs/vgg16_tilecnn.md).

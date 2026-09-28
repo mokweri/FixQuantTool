@@ -10,6 +10,7 @@ from fixquant.model_zoo import (
     ZooError,
     build_catalog,
     configure_release_download,
+    deploy_metrics,
     fetch_release,
     get_zoo_root,
     list_candidates,
@@ -121,7 +122,7 @@ def main():
                 print(
                     f"{release['release_id']}  "
                     f"QAT={metrics['qat']['top1']:.4f}  "
-                    f"TileCNN={metrics['tilecnn']['top1']:.4f}"
+                    f"DeepTile={deploy_metrics(metrics)['top1']:.4f}"
                 )
     elif args.command == "show":
         value = (

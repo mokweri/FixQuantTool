@@ -6,7 +6,7 @@ datapath refactor.  Each case packages:
 
   inputs/   – INT8 boundary input activation
   params/   – INT8 weight + bias
-  refs/     – bit-exact reference output (TileCNN hardware arithmetic)
+  refs/     – bit-exact reference output (DeepTile hardware arithmetic)
   graph.json
 
 Target layers
@@ -37,7 +37,7 @@ import torchvision.models as models
 from fixquant.graph.qat_processor import QatProcessor
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
+from fixquant.export.deeptile_exporter import DeepTileGraphExporter
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +220,7 @@ def main():
     # ------------------------------------------------------------------
     # Exporter (shared across all cases)
     # ------------------------------------------------------------------
-    exporter = TileCNNGraphExporter(
+    exporter = DeepTileGraphExporter(
         inspector=inspector,
         model_name="resnet50_uram_refactor",
         logger=logger,

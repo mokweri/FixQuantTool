@@ -1,9 +1,9 @@
-# TileCNN Quantized Graph Handoff Specification
+# DeepTile Quantized Graph Handoff Specification
 
-This document defines the file and metadata contract between FixQuantTool export tool and TileCNN(FPGA Accelerator).
+This document defines the file and metadata contract between FixQuantTool export tool and DeepTile(FPGA Accelerator).
 
 The goal is to let the quantization tool export a complete quantized ResNet-like
-graph in a simple, inspectable format. TileCNN then imports that graph, packs
+graph in a simple, inspectable format. DeepTile then imports that graph, packs
 tensors into accelerator layouts, generates per-layer schedules and descriptors,
 allocates runtime buffers, and launches the existing `tile_conv` kernel.
 
@@ -11,6 +11,11 @@ This specification is intentionally graph-level. It replaces the current
 single-layer `details.txt` fixture style for end-to-end models, while preserving
 the same core assumptions: signed int8 tensors, file-backed weights, explicit
 fixed-point metadata, and canonical software tensor layouts.
+
+DeepTile was previously named TileCNN. The format's identifier is
+`tilecnn.graph.v1`, also accepted as `deeptile.graph.v1`. FixQuant writes
+`tilecnn.graph.v1` until DeepTile's next target generation, whose host is the
+first to read the new form.
 
 ## Ownership Boundary
 
@@ -24,19 +29,19 @@ The quantization/export tool must provide:
 - signed int8 activation, weight, and bias files
 - optional file-backed validation inputs and references
 
-TileCNN is responsible for:
+DeepTile is responsible for:
 
 - converting activations from `CHW` into the packed accelerator layout
 - converting convolution weights from `OIHW` into the bank-friendly URAM layout
 - converting linear weights from `OI` into a `1x1` convolution-compatible layout
 - widening int8 biases to int32 internally
-- applying TileCNN's hardware bias pre-shift internally
+- applying DeepTile's hardware bias pre-shift internally
 - deriving `shift_out`, `shift_bias`, `gap_mul`, and residual alignment shifts
 - generating URAM transfer descriptors and compute descriptors
 - allocating and reusing device buffers
 - lowering graph nodes into one or more `tile_conv` launches
 
-The quantization tool must not pre-pack tensors for TileCNN unless a future
+The quantization tool must not pre-pack tensors for DeepTile unless a future
 schema version explicitly adds a packed export mode.
 
 ## Recommended Directory Layout
@@ -45,7 +50,7 @@ Each exported model should be a directory with one graph JSON file and separate
 binary tensor files.
 
 ```text
-resnet18_int8_tilecnn/
+resnet18_int8_deeptile/
   manifest.json
   graph.json
 
@@ -104,13 +109,13 @@ int8 files, this is just byte order.
 | Biases | signed int8 | `O` | `Cout` bytes |
 | References | signed int8 | `CHW` or `C` | output tensor bytes |
 
-Biases must be exported as signed int8. TileCNN will widen each bias lane to
+Biases must be exported as signed int8. DeepTile will widen each bias lane to
 int32 and apply the hardware bias alignment shift internally before writing the
 bias buffer consumed by the kernel.
 
 ## Graph JSON Overview
 
-The model handoff file must be named `graph.json` unless the TileCNN importer is
+The model handoff file must be named `graph.json` unless the DeepTile importer is
 given another path explicitly.
 
 Top-level structure:
@@ -128,7 +133,7 @@ Top-level structure:
 
 Required top-level fields:
 
-- `schema`: must be `"tilecnn.graph.v1"` for this version.
+- `schema`: `"tilecnn.graph.v1"` or `"deeptile.graph.v1"`, the same format.
 - `model`: descriptive metadata.
 - `target`: global assumptions for the exported graph.
 - `graph`: names of graph inputs, outputs, and optional output references.
@@ -244,7 +249,7 @@ Shape is `[Cout, Cin, Kh, Kw]`.
 }
 ```
 
-Shape is `[Cout, Cin]`. TileCNN lowers this to a `1x1` convolution with input
+Shape is `[Cout, Cin]`. DeepTile lowers this to a `1x1` convolution with input
 shape `[Cin, 1, 1]` and output shape `[Cout, 1, 1]`.
 
 ### Bias Tensor
@@ -260,15 +265,15 @@ shape `[Cin, 1, 1]` and output shape `[Cout, 1, 1]`.
 }
 ```
 
-Biases are exported as signed int8. TileCNN widens to int32 and computes the
+Biases are exported as signed int8. DeepTile widens to int32 and computes the
 hardware-aligned bias value using:
 
 ```text
 shift_bias = frac_out - frac_b + 1
 ```
 
-If `shift_bias >= 0`, TileCNN left-shifts the widened bias. If `shift_bias < 0`,
-TileCNN right-shifts it.
+If `shift_bias >= 0`, DeepTile left-shifts the widened bias. If `shift_bias < 0`,
+DeepTile right-shifts it.
 
 ### Reference Tensor
 
@@ -303,17 +308,17 @@ Rules:
   tensors are available.
 - Projection shortcut convolutions must appear before the conv node that uses
   their output as a residual input.
-- The first TileCNN graph runtime will execute nodes sequentially in this order.
+- The first DeepTile graph runtime will execute nodes sequentially in this order.
 
 Parallel branch scheduling may be added later, but this schema does not require
 the exporter to encode parallelism.
 
-## Graph Nodes vs TileCNN Launches
+## Graph Nodes vs DeepTile Launches
 
-The JSON file describes the model as a semantic graph. TileCNN then lowers that
+The JSON file describes the model as a semantic graph. DeepTile then lowers that
 semantic graph into one or more hardware launches.
 
-Do not use the JSON `nodes` array to describe TileCNN's final fused launch plan.
+Do not use the JSON `nodes` array to describe DeepTile's final fused launch plan.
 For example, a ResNet stem should be exported as:
 
 ```text
@@ -322,7 +327,7 @@ conv2d -> maxpool2d
 
 not as a single pre-fused `conv2d_maxpool2d` node.
 
-TileCNN's graph compiler is responsible for recognizing legal patterns and
+DeepTile's graph compiler is responsible for recognizing legal patterns and
 fusing them into a single `tile_conv` launch when the current hardware supports
 that fusion.
 
@@ -335,13 +340,13 @@ This distinction gives us three benefits:
 In this document:
 
 - **graph node** means an operation exported in `graph.json`
-- **TileCNN launch** means one invocation of the `tile_conv` hardware kernel
-- **fusion** means TileCNN combines multiple graph nodes into one launch
+- **DeepTile launch** means one invocation of the `tile_conv` hardware kernel
+- **fusion** means DeepTile combines multiple graph nodes into one launch
 
 Residual add is the deliberate v1 exception. Instead of exporting a standalone
 `add` graph node, the exporter should attach the residual input and residual
 post-op flags to the terminal `conv2d` node of a residual block. This matches
-the current TileCNN kernel contract, where residual loading and addition are
+the current DeepTile kernel contract, where residual loading and addition are
 part of the convolution epilogue.
 
 ## Supported Ops in Schema v1
@@ -353,9 +358,9 @@ The initial graph importer should support:
 - `gap2d`
 - `linear`
 
-TileCNN lowering rules:
+DeepTile lowering rules:
 
-| Graph pattern | TileCNN lowering |
+| Graph pattern | DeepTile lowering |
 | --- | --- |
 | `conv2d` | one `tile_conv` launch |
 | `conv2d` with ReLU | `tile_conv` with `RELU_ON` |
@@ -366,7 +371,7 @@ TileCNN lowering rules:
 | `linear` | one `tile_conv` launch as `1x1` convolution |
 
 For v1, standalone non-fused maxpool and standalone non-fused GAP may be rejected
-by the TileCNN importer unless a software or hardware fallback is implemented.
+by the DeepTile importer unless a software or hardware fallback is implemented.
 
 ## Conv2D Node
 
@@ -407,14 +412,14 @@ frac_b   = tensors[inputs.bias].frac
 frac_out = tensors[outputs.ofm].frac
 ```
 
-TileCNN derives:
+DeepTile derives:
 
 ```text
 shift_out  = (frac_in + frac_w) - frac_out
 shift_bias = frac_out - frac_b + 1
 ```
 
-Current TileCNN constraints:
+Current DeepTile constraints:
 
 - `groups` must be `1` (schema v1 hardware; see the v1.1 extension below).
 - `dilation` must be `[1, 1]`.
@@ -474,7 +479,7 @@ Example identity block terminal conv:
 }
 ```
 
-TileCNN derives residual alignment from tensor fractional bits:
+DeepTile derives residual alignment from tensor fractional bits:
 
 ```text
 residual_shift = frac_out - frac_residual
@@ -498,7 +503,7 @@ optionally provide an explicit override:
 }
 ```
 
-If present, TileCNN should verify that the override is consistent with the
+If present, DeepTile should verify that the override is consistent with the
 tensor fractional bits or emit a warning.
 
 Residual shape requirements:
@@ -563,7 +568,7 @@ Example:
 }
 ```
 
-Current TileCNN maxpool support is specialized for:
+Current DeepTile maxpool support is specialized for:
 
 - kernel `[3, 3]`
 - stride `[2, 2]`
@@ -581,7 +586,7 @@ can be fused into the preceding `conv2d` if:
 - no other node consumes the intermediate conv output
 - quantization format is unchanged or representable by `post_pool_shift`
 
-If a maxpool cannot be fused, the v1 TileCNN runtime may reject the graph.
+If a maxpool cannot be fused, the v1 DeepTile runtime may reject the graph.
 
 ## GAP2D Node
 
@@ -600,10 +605,10 @@ Example:
 }
 ```
 
-Current TileCNN GAP support is intended to be fused with the preceding
+Current DeepTile GAP support is intended to be fused with the preceding
 convolution when the full convolution output fits in one spatial tile.
 
-TileCNN derives:
+DeepTile derives:
 
 ```text
 gap_mul = round(2^(GAP_SCALE_FRAC_BITS + frac_out_gap - frac_out_conv) / (H * W))
@@ -617,7 +622,7 @@ frac_out_gap  = tensors[outputs.ofm].frac
 H * W         = spatial size of the GAP input
 ```
 
-For schema v1, a non-fused `gap2d` may be rejected unless a TileCNN fallback is
+For schema v1, a non-fused `gap2d` may be rejected unless a DeepTile fallback is
 implemented.
 
 ## Linear Node
@@ -645,7 +650,7 @@ Weight tensor shape should be `[Cout, Cin]` with layout `OI`.
 
 Output tensor shape should be `[Cout, 1, 1]`.
 
-TileCNN lowers `linear` into a `1x1` convolution. This path is a compatibility
+DeepTile lowers `linear` into a `1x1` convolution. This path is a compatibility
 path for end-to-end ResNet execution, not an optimized classifier backend.
 
 ## Full Minimal Example
@@ -794,7 +799,7 @@ The exporter should validate before writing files:
 - residual input shape matches node output shape
 - all `frac` values are present
 - all dtypes are supported by this schema
-- all current TileCNN constraints are respected, or explicitly marked as
+- all current DeepTile constraints are respected, or explicitly marked as
   requiring a future fallback
 
 Expected byte counts:
@@ -807,9 +812,9 @@ bias O int8: Cout
 reference CHW int8: C * H * W
 ```
 
-## Importer Behavior Expected in TileCNN
+## Importer Behavior Expected in DeepTile
 
-The TileCNN graph importer should:
+The DeepTile graph importer should:
 
 1. Parse `graph.json`.
 2. Validate schema, tensor records, node order, and file sizes.
@@ -840,6 +845,6 @@ Future schema versions may add:
 - multiple graph inputs
 - dynamic runtime inputs without file-backed activation data
 
-For v1, keep the contract small, explicit, and close to the current TileCNN
+For v1, keep the contract small, explicit, and close to the current DeepTile
 engine so that end-to-end ResNet support can be built without destabilizing the
 working per-layer accelerator.

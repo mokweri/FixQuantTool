@@ -15,7 +15,7 @@ STORAGE_BASE="${FIXQUANT_STORAGE_BASE:-/nobackup/proj/disk/naiss2024-22-1352/per
 REPO="${FIXQUANT_REPO:-$STORAGE_BASE/projects/FixQuantTool}"
 DATASET="${FIXQUANT_DATA_DIR:-/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b}"
 CHECKPOINT="${FIXQUANT_CHECKPOINT:-$STORAGE_BASE/results/qat/mobilenet_v2/904116/mobilenet_v2/checkpoint/model_best.pth.tar}"
-DEPLOY_BACKEND="${FIXQUANT_DEPLOY_BACKEND:-tilecnn}"
+DEPLOY_BACKEND="${FIXQUANT_DEPLOY_BACKEND:-deeptile}"
 RUN_DIR="${FIXQUANT_EVAL_DIR:-$STORAGE_BASE/results/eval/mobilenet_v2/$SLURM_JOB_ID}"
 TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
 WORKERS="${FIXQUANT_WORKERS:-12}"
@@ -28,8 +28,10 @@ if [[ ! -f "$DATASET/dataset_dict.json" ]]; then
     printf 'Error: ImageNet dataset not found: %s\n' "$DATASET" >&2
     exit 1
 fi
-if [[ "$DEPLOY_BACKEND" != "emu" && "$DEPLOY_BACKEND" != "tilecnn" ]]; then
-    printf 'Error: FIXQUANT_DEPLOY_BACKEND must be emu or tilecnn.\n' >&2
+# "tilecnn" is the former name of the "deeptile" backend.
+[[ "$DEPLOY_BACKEND" == "tilecnn" ]] && DEPLOY_BACKEND=deeptile
+if [[ "$DEPLOY_BACKEND" != "emu" && "$DEPLOY_BACKEND" != "deeptile" ]]; then
+    printf 'Error: FIXQUANT_DEPLOY_BACKEND must be emu or deeptile.\n' >&2
     exit 1
 fi
 if ((WORKERS > SLURM_CPUS_PER_TASK)); then
@@ -79,7 +81,7 @@ srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
     --n_worker "$WORKERS" \
     --gpus 0 \
     --save_dir "$RUN_DIR/deploy" \
-    --metrics-output "$RUN_DIR/tilecnn_metrics.json" \
+    --metrics-output "$RUN_DIR/deeptile_metrics.json" \
     --qconfig-output "$RUN_DIR/qconfig.json"
 
 printf '\nCheckpoint evaluations completed successfully.\n'

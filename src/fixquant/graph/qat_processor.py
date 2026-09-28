@@ -410,7 +410,7 @@ class QatProcessor:
 
 
 def preflight_check(model: nn.Module, raise_on_error: bool = True):
-    """Verify that a float model only contains ops the QAT + TileCNN export
+    """Verify that a float model only contains ops the QAT + DeepTile export
     pipeline supports. Returns a list of issue strings (empty = clean).
     """
     SUPPORTED_MODULES = (nn.Conv2d, nn.BatchNorm2d, nn.Linear, nn.ReLU, nn.ReLU6,
@@ -428,7 +428,7 @@ def preflight_check(model: nn.Module, raise_on_error: bool = True):
                 issues.append(f"unsupported module '{node.target}' ({type(mod).__name__})")
             elif isinstance(mod, nn.AdaptiveAvgPool2d) and mod.output_size not in (1, (1, 1)):
                 issues.append(f"'{node.target}': AdaptiveAvgPool2d output_size {mod.output_size} "
-                              "(TileCNN only supports global average pooling)")
+                              "(DeepTile only supports global average pooling)")
         elif node.op == "call_function":
             fname = getattr(node.target, "__name__", str(node.target))
             if fname not in SUPPORTED_FUNCTIONS:

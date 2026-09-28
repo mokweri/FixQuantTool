@@ -11,7 +11,7 @@
 #SBATCH --output=/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/%x-%A_%a.out
 
 # FP32 reference accuracy for every released model, on the same ImageNet
-# validation set and preprocessing as the released QAT and TileCNN metrics.
+# validation set and preprocessing as the released QAT and DeepTile metrics.
 # Writes <model>_fp32_metrics.json beneath results/eval/fp32/<array-job-id>/.
 
 set -euo pipefail

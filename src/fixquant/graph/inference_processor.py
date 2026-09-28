@@ -360,7 +360,7 @@ class InferProcessor:
         self.std_model = new_gm
         return new_gm
 
-    def convert_to_hardware_model(self, backend: str = "tilecnn") -> fx.GraphModule:
+    def convert_to_hardware_model(self, backend: str = "deeptile") -> fx.GraphModule:
         """
         Transforms a standard inference model into a bit-exact emulation model
         using HardwareConv2d with pattern-matched fusions.

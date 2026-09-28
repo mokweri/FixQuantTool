@@ -326,7 +326,7 @@ class QAdaptiveAvgPool2d(torch.nn.modules.AdaptiveAvgPool2d):
 
 
 class QElementwiseAdd(nn.Module):
-    """Residual add. The TileCNN hardware shifts both int8 inputs onto the
+    """Residual add. The DeepTile hardware shifts both int8 inputs onto the
     output frac grid *before* the add, so (when align_inputs is True) the QAT
     forward rounds both inputs onto the output grid first — the same rounding
     the hardware alignment shift performs."""

@@ -11,7 +11,7 @@ import torchvision.models as models
 from fixquant.graph.qat_processor import QatProcessor
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
+from fixquant.export.deeptile_exporter import DeepTileGraphExporter
 
 def preprocess_image(image_path: str):
     t = transforms.Compose([
@@ -59,7 +59,7 @@ TEST_CASES["conv_stem"] = {
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export TileCNN subgraph testcases")
+    parser = argparse.ArgumentParser(description="Export DeepTile subgraph testcases")
     parser.add_argument("--checkpoint", default=None, help="Path to best QAT checkpoint")
     parser.add_argument("--cle", action="store_true", default=False,
                         help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
@@ -114,7 +114,7 @@ def main():
     with torch.no_grad():
         inspector.run_and_capture(inp)
 
-    exporter = TileCNNGraphExporter(
+    exporter = DeepTileGraphExporter(
         inspector=inspector,
         model_name="resnet50_subgraph",
         logger=logger

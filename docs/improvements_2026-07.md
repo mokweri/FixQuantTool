@@ -84,7 +84,7 @@ before the add (matching the hardware alignment shift).
 
 ## Export correctness (Phase 4)
 
-- `_tilecnn_conv2d` supports `groups` (depthwise); `relu6` /
+- `_deeptile_conv2d` supports `groups` (depthwise); `relu6` /
   `post_add_relu6` post-ops clamp at `min(127, round(6·2^frac_out))`;
   maxpool reference reads kernel/stride/padding from node attrs (was hardcoded
   3×3/s2/p1). Spec: `graph_handoff_spec.md` §"Schema v1.1 extensions" —
@@ -135,7 +135,7 @@ before the add (matching the hardware alignment shift).
   root smoke scripts (superseded by `tests/`).
 - Retired to `tools/archive/` (see its README): `hw_layer_test_gen.py` +
   `gen_resnet18_fc_testdata.py` (pre-spec per-layer handoff format),
-  `train_cifar.py` (CIFAR not in the TileCNN flow), `ddp_train_hvd.py`
+  `train_cifar.py` (CIFAR not in the DeepTile flow), `ddp_train_hvd.py`
   (Horovod trainer; the HPC jobscript entry point is stale).
 - Remaining tools updated to current conventions: `print_model_graph.py` and
   the two testcase exporters take `--model`/new checkpoint paths, load weights
@@ -144,7 +144,7 @@ before the add (matching the hardware alignment shift).
   `--eval_only`; its `train()` call had been commented out).
 - Legacy docs brought in line with the code: `conv_fused.md` rewritten (it
   documented a long-deleted module), `DEPLOY.md` rewritten (deploy_eval is an
-  evaluation script, not a parameter extractor), `tilecnn_exporter_and_digital_twin.md`
+  evaluation script, not a parameter extractor), `deeptile_exporter_and_digital_twin.md`
   updated to the `convert_to_hardware_model` / `Hardware*` APIs, `tqt.md` /
   `qmodules.md` / `QAT.md` updated for calibration, bounded ranges, add
   alignment and the current CLI; `mobilenet_support_roadmap.md` carries a
@@ -155,7 +155,7 @@ before the add (matching the hardware alignment shift).
 - **`--cle` now propagates to the eval/export tools.** A checkpoint trained with
   `qat_train.py --cle` is BN-free (`QuantizedConv2d`, no `conv_mod`/`bn_mod`) and
   would not load into the default Conv-BN-fused model. `qat_test.py`,
-  `deploy_eval.py`, `export_tilecnn_graph.py`, `print_model_graph.py`, and the two
+  `deploy_eval.py`, `export_deeptile_graph.py`, `print_model_graph.py`, and the two
   hw-testcase exporters all take `--cle`, applying `equalize_model` before
   `quantize()` so the architecture matches. `load_qat_weights` detects the
   BN-free vs BN-fused mismatch and raises a one-line hint instead of a wall of
@@ -168,7 +168,7 @@ before the add (matching the hardware alignment shift).
 - **`FusedConvBN.to_qconv` fixed** (`NameError: QuantizedConv2d`) — it now imports
   the class lazily, so the compact-model path (`ModuleReplacementPass("compact")`)
   works.
-- **Requant rounding-bias fix (hardware + twin + exporter).** The TileCNN two-step
+- **Requant rounding-bias fix (hardware + twin + exporter).** The DeepTile two-step
   requant applied *two* `+1`s (`s1 = (acc>>(shift-1))+1` and `out=(s1+bias+1)>>1`)
   where correct round-half-up needs only the second one. The extra `+1` added a
   constant **+0.5/layer** output bias that compounded with depth — negligible for
@@ -177,7 +177,7 @@ before the add (matching the hardware alignment shift).
   lockstep across: the HLS kernel (`output_postproc.cpp` acc_quantize + emit_tile,
   `dw_stage.cpp`), the HLS runtime reference (`tilecnn_utils/runtime_reference.cpp`
   conv + dw), the digital twin (`fxp_emu_modules.py` HardwareConv2d/HardwareLinear),
-  and the exporter reference (`tilecnn_exporter.py` conv + linear). Golden
+  and the exporter reference (`deeptile_exporter.py` conv + linear). Golden
   regenerated (`tests/test_golden.py`). Result: twin now matches QAT — MobileNet-V2
   56.0→**69.7** (QAT 69.9), ResNet-50 69.5→**72.5** (QAT 72.6). The HLS change needs
   a bitstream re-synthesis (trivial logic, removes an adder input). Residual-add /

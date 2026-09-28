@@ -1,15 +1,15 @@
-"""Export real MobileNet-V2 inverted-residual subgraphs as TileCNN hardware test cases.
+"""Export real MobileNet-V2 inverted-residual subgraphs as DeepTile hardware test cases.
 
 Companion to ``export_hw_testcases.py`` (which exports ResNet-50 subgraphs). The
-TileCNN accelerator fuses a pointwise conv into the following depthwise conv
+DeepTile accelerator fuses a pointwise conv into the following depthwise conv
 (pw -> dw); the *graph* we hand off is the plain sequential order (expand pw,
-depthwise, project pw, optional residual add) and the TileCNN graph compiler does
+depthwise, project pw, optional residual add) and the DeepTile graph compiler does
 the pw->dw fusion. So here we simply select the block's nodes in normal order and
 let the exporter emit them; each case exercises a different layer setting.
 
 The checkpoint is CLE-trained (BN-free, ReLU6->ReLU), so the model is equalized
 before quantization — same as ``qat_train.py --cle``. Subgraph inputs and golden
-references come from a real forward pass on an image, using the bit-exact TileCNN
+references come from a real forward pass on an image, using the bit-exact DeepTile
 integer kernels (post 2026-07 round-half-up fix).
 
     python tools/export_mobilenet_testcases.py            # all 5 cases
@@ -28,7 +28,7 @@ from PIL import Image
 from fixquant.graph.qat_processor import QatProcessor
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
+from fixquant.export.deeptile_exporter import DeepTileGraphExporter
 from fixquant.models import get_model
 
 
@@ -79,7 +79,7 @@ def preprocess_image(image_path: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export MobileNet-V2 TileCNN subgraph testcases")
+    parser = argparse.ArgumentParser(description="Export MobileNet-V2 DeepTile subgraph testcases")
     parser.add_argument("--checkpoint", default=None, help="Path to MobileNet-V2 QAT checkpoint")
     parser.add_argument("--no_cle", action="store_true", default=False,
                         help="Skip cross-layer equalization (only for a non-CLE checkpoint; "
@@ -136,7 +136,7 @@ def main():
     with torch.no_grad():
         inspector.run_and_capture(inp)
 
-    exporter = TileCNNGraphExporter(
+    exporter = DeepTileGraphExporter(
         inspector=inspector,
         model_name="mobilenet_v2_subgraph",
         logger=logger,

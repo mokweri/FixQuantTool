@@ -11,7 +11,7 @@
 
 # Structural and end-to-end legality checks for the vgg16_tilecnn variant.
 # Runs the full QAT -> hardware-model -> ModelPackage export on random weights
-# and applies tools/check_tilecnn_legality.py, so the architecture is proven
+# and applies tools/check_deeptile_legality.py, so the architecture is proven
 # exportable before any GPU hours go into training it.
 
 set -euo pipefail

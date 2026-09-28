@@ -12,16 +12,16 @@ Deployment has two independent steps:
    model, load the trained checkpoint, convert it to the bit-exact integer
    digital twin, and measure Top-1/Top-5 on the validation set. This is the
    accuracy the FPGA will deliver (see
-   [docs/tilecnn_exporter_and_digital_twin.md](docs/tilecnn_exporter_and_digital_twin.md)).
+   [docs/deeptile_exporter_and_digital_twin.md](docs/deeptile_exporter_and_digital_twin.md)).
 2. **Export hardware artifacts** — produce `graph.json` + int8 binaries per the
-   [TileCNN Graph Handoff Specification](graph_handoff_spec.md):
-   * `tools/export_tilecnn_graph.py` — full-model graph bundle (`--model`).
+   [DeepTile Graph Handoff Specification](graph_handoff_spec.md):
+   * `tools/export_deeptile_graph.py` — full-model graph bundle (`--model`).
    * `tools/export_hw_testcases.py` — predefined ResNet-50 subgraph test cases
      for the C-simulation testbench.
    * `tools/export_mobilenet_testcases.py` — 5 real MobileNet-V2 inverted-residual
      blocks (varying stride, channel width, residual add) for the depthwise /
      pw→dw fusion path. Exports the plain sequential order (expand pw, depthwise,
-     project pw, optional residual add); the TileCNN graph compiler does the
+     project pw, optional residual add); the DeepTile graph compiler does the
      pw→dw fusion. Uses the CLE checkpoint by default.
 
 ## Evaluating a trained model
@@ -30,7 +30,7 @@ Deployment has two independent steps:
 python tools/deploy_eval.py \
     --model resnet50 \
     --dataroot /path/to/imagenet \
-    --model_type tilecnn        # or "emu" (identical arithmetic, different
+    --model_type deeptile        # or "emu" (identical arithmetic, different
                                 # exporter classification)
 ```
 
@@ -46,7 +46,7 @@ What it does: `QatProcessor.quantize()` → `load_qat_weights()` → `freeze()`
 (BN folding must be frozen before conversion) →
 `InferProcessor.convert_to_hardware_model(backend=...)` → `RunManager.validate()`.
 The hardware model takes float32 images and returns float32 logits; everything
-in between is int8 with TileCNN's exact two-step rounding.
+in between is int8 with DeepTile's exact two-step rounding.
 
 ## Exporting a graph bundle
 
@@ -54,23 +54,23 @@ For a validated model-zoo release, the exporter resolves the model,
 checkpoint, and CLE setting from the release ID:
 
 ```bash
-python tools/export_tilecnn_graph.py \
+python tools/export_deeptile_graph.py \
     --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
-    --out_dir outputs/resnet50_int8_tilecnn
+    --out_dir outputs/resnet50_int8_deeptile
 ```
 
 Use the explicit options when exporting an unreleased checkpoint:
 
 ```bash
-python tools/export_tilecnn_graph.py --model resnet50 \
+python tools/export_deeptile_graph.py --model resnet50 \
     --checkpoint qat_models/resnet50/checkpoint/model_best.pth.tar \
-    --out_dir outputs/resnet50_int8_tilecnn
+    --out_dir outputs/resnet50_int8_deeptile
 ```
 
 Produces `manifest.json`, `graph.json`, `inputs/`, `params/`, and `refs/`.
 The manifest records release identity, source checksums, the FixQuant revision,
 reference preprocessing, and validation-artifact checksums. References are
-recomputed using the fused bit-exact TileCNN arithmetic, with export-time
+recomputed using the fused bit-exact DeepTile arithmetic, with export-time
 legality checks on all derived shifts. Missing quantization parameters raise
 errors; nothing falls back to silent defaults.
 

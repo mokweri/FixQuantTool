@@ -1,4 +1,4 @@
-# TileCNN Graph Exporter & Digital Twin
+# DeepTile Graph Exporter & Digital Twin
 
 *Updated 2026-07: the `convert_to_emu_model()` / `convert_to_tilecnn_model()`
 APIs and `TileCNNConv2d`/`HLSConv2d` classes described in earlier versions were
@@ -9,7 +9,7 @@ enforced by `tests/test_kernels.py` and `tests/test_golden.py`.*
 
 This document explains the two hardware-verification systems in FixQuantTool:
 
-1. **`TileCNNGraphExporter`** — exports a quantized model as a hardware-ready binary artifact bundle (weights, inputs, and bit-exact reference outputs) for use in TileCNN C-simulation and host-side verification.
+1. **`DeepTileGraphExporter`** — exports a quantized model as a hardware-ready binary artifact bundle (weights, inputs, and bit-exact reference outputs) for use in DeepTile C-simulation and host-side verification.
 2. **`convert_to_hardware_model()`** — builds a PyTorch model from bit-exact integer `Hardware*` modules (the **digital twin**), enabling full-dataset accuracy evaluation without synthesizing the bitstream.
 
 ---
@@ -18,26 +18,26 @@ This document explains the two hardware-verification systems in FixQuantTool:
 
 The hardware model built in PyTorch is **sequential**: convs, residual adds
 (`HardwareElementwiseAdd`), ReLU/ReLU6 and pools are separate int8 nodes. The
-real TileCNN hardware *fuses* the residual add (and post-add activation) into
+real DeepTile hardware *fuses* the residual add (and post-add activation) into
 the convolution write-back stage. Because integer arithmetic is not
 associative, the sequential and fused orderings can differ by ±1 LSB per
 residual block.
 
 That fusion is applied at **export level**: the exporter folds Add/ReLU nodes
 into the preceding conv's `post_ops` in `graph.json`, and
-`_write_tilecnn_bitexact_references()` recomputes all reference outputs with
+`_write_deeptile_bitexact_references()` recomputes all reference outputs with
 the fused arithmetic — so the shipped references are exactly what the FPGA
 computes, even where the sequential PyTorch model differs by an LSB.
-The `backend` argument (`"tilecnn"` default, `"hls"`) is metadata the exporter
+The `backend` argument (`"deeptile"` default, `"hls"`; `"tilecnn"` is accepted as its former name) is metadata the exporter
 uses to classify modules; the integer arithmetic is identical.
 
 ---
 
-## 1. TileCNN Graph Exporter
+## 1. DeepTile Graph Exporter
 
 ### Purpose
 
-`TileCNNGraphExporter` (in `src/fixquant/export/tilecnn_exporter.py`) translates a quantized PyTorch model into the [TileCNN Graph Handoff Specification](../graph_handoff_spec.md) format. It produces a self-contained directory containing:
+`DeepTileGraphExporter` (in `src/fixquant/export/deeptile_exporter.py`) translates a quantized PyTorch model into the [DeepTile Graph Handoff Specification](../graph_handoff_spec.md) format. It produces a self-contained directory containing:
 
 ```
 <export_dir>/
@@ -62,7 +62,7 @@ Or programmatically:
 ```python
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter
+from fixquant.export.deeptile_exporter import DeepTileGraphExporter
 
 infer_proc = InferProcessor(qat_model, config)
 hw_model   = infer_proc.convert_to_hardware_model()
@@ -73,7 +73,7 @@ inspector.register_activation_hooks(inspector.topological_order(),
 with torch.no_grad():
     inspector.run_and_capture(input_image)
 
-exporter = TileCNNGraphExporter(inspector, model_name="resnet50")
+exporter = DeepTileGraphExporter(inspector, model_name="resnet50")
 exporter.export("outputs/hw_testcases/my_subgraph",
                 subgraph_nodes=["conv1", "maxpool", "layer1_0_conv1"])
 ```
@@ -84,11 +84,11 @@ exporter.export("outputs/hw_testcases/my_subgraph",
 2. **Parameter extraction** — Writes the already-INT8-quantized `w_int8` and `b_int8` buffers directly to `.int8.bin` files, along with their fractional metadata. No double-quantization occurs.
 3. **Boundary input extraction** — Captures live activations via `torch.fx` hooks during a single forward pass and saves them at the correct fractional scale.
 4. **Legality checks** — `_check_shift_legality()` verifies every derived `shift_out`, `bias_shift`, residual shift and GAP shift is in range before anything is written; missing quantization params raise instead of falling back to defaults.
-5. **Bit-exact reference generation** — After writing `graph.json`, calls `_write_tilecnn_bitexact_references()` which **re-simulates the entire subgraph** using the exported binary files and TileCNN's exact integer arithmetic (fused residual add, grouped/depthwise conv, ReLU6 clamp, fixed-point GAP reciprocal). The resulting reference outputs **exactly match** what the TileCNN C++ kernel produces, eliminating false mismatches in C-simulation. (Grouped conv and the `relu6` post-op are schema **v1.1 extensions** — see `graph_handoff_spec.md`; the HLS kernels must implement them before MobileNet graphs run on the FPGA.)
+5. **Bit-exact reference generation** — After writing `graph.json`, calls `_write_deeptile_bitexact_references()` which **re-simulates the entire subgraph** using the exported binary files and DeepTile's exact integer arithmetic (fused residual add, grouped/depthwise conv, ReLU6 clamp, fixed-point GAP reciprocal). The resulting reference outputs **exactly match** what the DeepTile C++ kernel produces, eliminating false mismatches in C-simulation. (Grouped conv and the `relu6` post-op are schema **v1.1 extensions** — see `graph_handoff_spec.md`; the HLS kernels must implement them before MobileNet graphs run on the FPGA.)
 
 ### Why bit-exact references matter
 
-The PyTorch emulation model runs operations sequentially. TileCNN fuses the residual add into the convolution write-back stage. Because integer arithmetic is not associative, the sequential and fused orderings can differ by ±1 LSB. If you export the sequential PyTorch output as the hardware reference, every residual block will show a mismatch in C-simulation even when the hardware is correct.
+The PyTorch emulation model runs operations sequentially. DeepTile fuses the residual add into the convolution write-back stage. Because integer arithmetic is not associative, the sequential and fused orderings can differ by ±1 LSB. If you export the sequential PyTorch output as the hardware reference, every residual block will show a mismatch in C-simulation even when the hardware is correct.
 
 The exporter's reference rewrite step avoids this by computing references with the same fused arithmetic the hardware uses.
 
@@ -96,7 +96,7 @@ The exporter's reference rewrite step avoids this by computing references with t
 
 The core bit-exact functions used by both the exporter and the digital twin are:
 
-#### Convolution (`_tilecnn_conv2d`)
+#### Convolution (`_deeptile_conv2d`)
 ```
 acc = int64_matmul(weight, unfold(ifm))
 shift_out = frac_w + frac_in - frac_out
@@ -106,14 +106,14 @@ out = (s1 + bias_adj + 1) >> 1              # single round-half-up to frac_out
 out = clamp(out, -128, 127)
 ```
 
-#### Global Average Pooling (`_tilecnn_gap`)
+#### Global Average Pooling (`_deeptile_gap`)
 Uses a fixed-point reciprocal with `GAP_SCALE_FRAC_BITS = 16` of precision:
 ```
 gap_mul = round((1 << (16 + frac_out - frac_in)) / num_pixels)
 out = clamp((sum * gap_mul + (1 << 15)) >> 16, -128, 127)
 ```
 
-#### Residual Add (`_tilecnn_residual_add`)
+#### Residual Add (`_deeptile_residual_add`)
 ```
 residual_shift = frac_out - frac_residual
 out = clamp(main + signed_shift(residual, residual_shift), -128, 127)
@@ -126,12 +126,12 @@ out = relu(out)  # if post_add_relu
 
 ### Purpose
 
-`InferProcessor.convert_to_hardware_model(backend="tilecnn")` builds a runnable PyTorch model from bit-exact integer modules — the same arithmetic the TileCNN FPGA hardware performs per kernel. Running this through `deploy_eval.py` gives the FPGA-level Top-1 / Top-5 accuracy before any synthesis or board bring-up (up to the ±1 LSB residual-fusion difference described in the Background section).
+`InferProcessor.convert_to_hardware_model(backend="deeptile")` builds a runnable PyTorch model from bit-exact integer modules — the same arithmetic the DeepTile FPGA hardware performs per kernel. Running this through `deploy_eval.py` gives the FPGA-level Top-1 / Top-5 accuracy before any synthesis or board bring-up (up to the ±1 LSB residual-fusion difference described in the Background section).
 
 ### Usage
 
 ```bash
-python tools/deploy_eval.py --model resnet50 --model_type tilecnn   # or emu
+python tools/deploy_eval.py --model resnet50 --model_type deeptile   # or emu
 ```
 
 Or programmatically:
@@ -140,7 +140,7 @@ Or programmatically:
 from fixquant.graph.inference_processor import InferProcessor
 
 infer_proc = InferProcessor(qat_model, config)
-hw_model   = infer_proc.convert_to_hardware_model(backend="tilecnn")
+hw_model   = infer_proc.convert_to_hardware_model(backend="deeptile")
 
 hw_model.eval()
 with torch.no_grad():
@@ -194,8 +194,8 @@ model: MobileNet-V2 twin 56.0→**69.7** (QAT 69.9), ResNet-50 twin 69.5→**72.
 
 The following invariants are enforced:
 
-1. **Kernel bit-exactness under test** — `tests/test_kernels.py` asserts the `Hardware*` modules and the exporter's `_tilecnn_*` reference kernels agree bit-exactly (all shift signs, groups, relu/relu6, residual adds); `tests/test_golden.py` pins the arithmetic to a committed integer golden file.
+1. **Kernel bit-exactness under test** — `tests/test_kernels.py` asserts the `Hardware*` modules and the exporter's `_deeptile_*` reference kernels agree bit-exactly (all shift signs, groups, relu/relu6, residual adds); `tests/test_golden.py` pins the arithmetic to a committed integer golden file.
 2. **No double-quantization** — `save_activation()` in `StdModelInspector` detects if a tensor is already an integer dtype and writes it directly without calling `to_int_tensor()` again.
 3. **Correct fractional scales** — `get_quant_params()` in `StdModelInspector` reads `fin`, `fout`, `fw`, `fb` directly from `HardwareConv2d`-family attributes, so boundary inputs are always saved at the correct scale.
-4. **Bit-exact references** — `_write_tilecnn_bitexact_references()` runs after every export and overwrites initial references with fused-hardware-accurate values; `_check_shift_legality()` rejects out-of-range shifts first.
+4. **Bit-exact references** — `_write_deeptile_bitexact_references()` runs after every export and overwrites initial references with fused-hardware-accurate values; `_check_shift_legality()` rejects out-of-range shifts first.
 5. **Topological validity** — The converted graph passes `torch.fx.Graph.lint()` before being returned.

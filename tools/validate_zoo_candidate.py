@@ -63,15 +63,15 @@ def main():
         "--metrics-output", str(qat_metrics),
     ])
 
-    deploy_metrics = evaluation / "tilecnn_metrics.json"
+    deploy_metrics = evaluation / "deeptile_metrics.json"
     qconfig = evaluation / "qconfig.json"
     _run([
         sys.executable,
         str(repo_root / "tools" / "deploy_eval.py"),
         *common,
-        "--model_type", "tilecnn",
+        "--model_type", "deeptile",
         "--test_batch_size", str(args.deploy_batch_size),
-        "--save_dir", str(evaluation / "tilecnn-runtime"),
+        "--save_dir", str(evaluation / "deeptile-runtime"),
         "--metrics-output", str(deploy_metrics),
         "--qconfig-output", str(qconfig),
     ])

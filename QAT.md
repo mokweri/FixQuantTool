@@ -68,7 +68,7 @@ per-epoch threshold/frac logs under `<save_dir>/<model>/logs/quant_thresholds.cs
 > `--cle` the model is BN-folded and equalized (ReLU6→ReLU) *before* quantization,
 > producing a BN-free `QuantizedConv2d` graph. A checkpoint trained this way only
 > loads into an equally-equalized model, so every downstream tool that rebuilds
-> the model — `qat_test.py`, `deploy_eval.py`, `export_tilecnn_graph.py`,
+> the model — `qat_test.py`, `deploy_eval.py`, `export_deeptile_graph.py`,
 > `print_model_graph.py` — must be given the same `--cle` flag. Loading a CLE
 > checkpoint without `--cle` (or vice-versa) now raises an explanatory error
 > instead of a wall of missing/unexpected keys.

@@ -16,7 +16,7 @@ STORAGE_BASE="${FIXQUANT_STORAGE_BASE:-/nobackup/proj/disk/naiss2024-22-1352/per
 REPO="${FIXQUANT_REPO:-$STORAGE_BASE/projects/FixQuantTool}"
 DATASET="${FIXQUANT_DATA_DIR:-/dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b}"
 TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
-DEPLOY_BACKEND="${FIXQUANT_DEPLOY_BACKEND:-tilecnn}"
+DEPLOY_BACKEND="${FIXQUANT_DEPLOY_BACKEND:-deeptile}"
 WORKERS="${FIXQUANT_WORKERS:-12}"
 
 MODELS=(vgg16 resnet18 resnet50)
@@ -45,8 +45,10 @@ if [[ ! -f "$DATASET/dataset_dict.json" ]]; then
     printf 'Error: ImageNet dataset not found: %s\n' "$DATASET" >&2
     exit 1
 fi
-if [[ "$DEPLOY_BACKEND" != "emu" && "$DEPLOY_BACKEND" != "tilecnn" ]]; then
-    printf 'Error: FIXQUANT_DEPLOY_BACKEND must be emu or tilecnn.\n' >&2
+# "tilecnn" is the former name of the "deeptile" backend.
+[[ "$DEPLOY_BACKEND" == "tilecnn" ]] && DEPLOY_BACKEND=deeptile
+if [[ "$DEPLOY_BACKEND" != "emu" && "$DEPLOY_BACKEND" != "deeptile" ]]; then
+    printf 'Error: FIXQUANT_DEPLOY_BACKEND must be emu or deeptile.\n' >&2
     exit 1
 fi
 if ((WORKERS > SLURM_CPUS_PER_TASK)); then

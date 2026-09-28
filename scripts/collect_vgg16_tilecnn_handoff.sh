@@ -23,7 +23,7 @@ DEST="${1:-$STORAGE_BASE/handoff/vgg16_tilecnn-$VERSION}"
 FLOAT_RUN="${FIXQUANT_FLOAT_RUN:-$STORAGE_BASE/results/float/vgg16_tilecnn/2859325}"
 QAT_RUN="${FIXQUANT_QAT_RUN:-$STORAGE_BASE/results/qat/vgg16_tilecnn/2884234/vgg16_tilecnn}"
 ABLATION="${FIXQUANT_ABLATION:-$STORAGE_BASE/results/eval/pool_ablation}"
-PACKAGE="${FIXQUANT_EXPORT_DIR:-$REPO/outputs/vgg16_tilecnn_int8_tilecnn}"
+PACKAGE="${FIXQUANT_EXPORT_DIR:-$REPO/outputs/vgg16_tilecnn_int8_deeptile}"
 RELEASE_DIR="$REPO/model_zoo/releases/vgg16_tilecnn/imagenet1k/int8-tqt/$VERSION"
 
 # Hard-link when we can (same filesystem, zero extra bytes), copy when we cannot.
@@ -71,7 +71,7 @@ cat > "$DEST/README.md" <<README
 Release \`$RELEASE_ID\`, collected $(date -u +%Y-%m-%dT%H:%M:%SZ) from
 FixQuant commit \`$(git -C "$REPO" rev-parse HEAD)\`.
 
-VGG-16 rebuilt to satisfy the TileCNN fabric: 3x3/s2/p1 pooling throughout and
+VGG-16 rebuilt to satisfy the DeepTile fabric: 3x3/s2/p1 pooling throughout and
 a convolutional classifier head that fits the weight buffer. See
 \`docs/vgg16_tilecnn.md\` in the repository for the full run log.
 
@@ -81,7 +81,7 @@ a convolutional classifier head that fits the weight buffer. See
 | stock + pooling swap, no retraining | 48.534 | 73.508 |
 | vgg16_tilecnn FP32, fine-tuned | 71.978 | 90.662 |
 | vgg16_tilecnn INT8 QAT | 72.252 | 90.762 |
-| vgg16_tilecnn INT8 TileCNN deploy | 72.204 | 90.706 |
+| vgg16_tilecnn INT8 DeepTile deploy | 72.204 | 90.706 |
 
 ## What to take where
 
@@ -102,7 +102,7 @@ cost. Needed for float evaluation and to re-run QAT from scratch.
 
 \`\`\`bash
 sha256sum -c SHA256SUMS
-python tools/check_tilecnn_legality.py int8/modelpackage
+python tools/check_deeptile_legality.py int8/modelpackage
 \`\`\`
 
 The legality checker re-reads every artifact and recomputes every manifest

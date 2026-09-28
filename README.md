@@ -23,7 +23,7 @@
 FixQuant trains 8-bit fixed-point CNNs, proves their integer arithmetic in
 software before any hardware is involved, and ships them as versioned,
 checksum-verified packages that an FPGA accelerator can compile directly. It is
-the model-preparation component of the [TileCNN](https://github.com/mokweri/TileCNN)
+the model-preparation component of the [DeepTile](https://github.com/mokweri/DeepTile)
 framework.
 
 ## Why FixQuant
@@ -61,7 +61,7 @@ and the validation reports are also recorded. FP32 values were measured with
 [`model_zoo/fp32_reference/`](model_zoo/fp32_reference/). MobileNetV2 uses cross-layer equalization, so every consumer of that
 checkpoint rebuilds the same transformed model.
 
-`vgg16_tilecnn` is FixQuant's own VGG-16 variant, the one the TileCNN fabric can
+`vgg16_tilecnn` is FixQuant's own VGG-16 variant, the one the DeepTile fabric can
 actually run: legal 3x3/s2/p1 pooling and a convolutional classifier head that
 fits the accelerator's weight buffer. Its FP32 column is the fine-tuned variant,
 not a torchvision checkpoint, and its positive delta reflects that QAT ran five
@@ -91,19 +91,19 @@ Evaluate it with the integer digital twin:
 python tools/deploy_eval.py \
     --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
     --dataroot /path/to/imagenet \
-    --model_type tilecnn
+    --model_type deeptile
 ```
 
 Export a deployment package:
 
 ```bash
-python tools/export_tilecnn_graph.py \
+python tools/export_deeptile_graph.py \
     --zoo-model resnet50/imagenet1k/int8-tqt@v1.0.0 \
-    --out_dir outputs/resnet50_int8_tilecnn
+    --out_dir outputs/resnet50_int8_deeptile
 ```
 
 ```text
-outputs/resnet50_int8_tilecnn/
+outputs/resnet50_int8_deeptile/
 ├── manifest.json   release identity, producer revision, preprocessing, SHA-256 inventory
 ├── graph.json      network graph
 ├── params/         integer weights and biases
@@ -112,7 +112,7 @@ outputs/resnet50_int8_tilecnn/
 ```
 
 The package format is defined by the
-[TileCNN Graph Handoff Specification](graph_handoff_spec.md).
+[DeepTile Graph Handoff Specification](graph_handoff_spec.md).
 
 ## Train and release a model
 
@@ -162,7 +162,7 @@ QAT conversion, golden arithmetic, model-zoo integrity, and export.
 | `src/fixquant/quantization/` | Quantizers, QAT modules, fixed-point operations, fusion, and equalization |
 | `src/fixquant/graph/` | FX graph transformation for QAT and integer inference |
 | `src/fixquant/emulation/` | Hardware-faithful integer modules and model inspection |
-| `src/fixquant/export/` | TileCNN graph and binary-artifact export |
+| `src/fixquant/export/` | DeepTile graph and binary-artifact export |
 | `src/fixquant/training/` | Training configuration, checkpoints, and run management |
 | `tools/` | Training, evaluation, inspection, model-zoo, and export commands |
 | `model_zoo/` | Tracked release metadata and ignored checkpoint payloads |
@@ -188,8 +188,8 @@ live in [configs/model_zoo_policy.yaml](configs/model_zoo_policy.yaml).
 | Releases and the model-zoo lifecycle | [docs/model_zoo.md](docs/model_zoo.md) |
 | Quantization-aware training | [QAT.md](QAT.md) |
 | Deployment and graph export | [DEPLOY.md](DEPLOY.md) |
-| Integer digital twin and exporter | [docs/tilecnn_exporter_and_digital_twin.md](docs/tilecnn_exporter_and_digital_twin.md) |
-| Using FixQuant inside TileCNN | [docs/tilecnn_integration.md](docs/tilecnn_integration.md) |
+| Integer digital twin and exporter | [docs/deeptile_exporter_and_digital_twin.md](docs/deeptile_exporter_and_digital_twin.md) |
+| Using FixQuant inside DeepTile | [docs/deeptile_integration.md](docs/deeptile_integration.md) |
 | TQT quantization | [docs/tqt.md](docs/tqt.md) |
 | Quantized modules and fused Conv-BN | [docs/qmodules.md](docs/qmodules.md), [docs/conv_fused.md](docs/conv_fused.md) |
 | Accuracy baselines | [docs/baselines.md](docs/baselines.md) |

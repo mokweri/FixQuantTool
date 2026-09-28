@@ -21,7 +21,7 @@ python tools/qat_test.py --model <name>
 #   model must be equalized the same way or the state dict will not load.
 
 # Hardware-model evaluation (digital twin, bit-exact integer kernels)
-python tools/deploy_eval.py --model <name> --model_type tilecnn
+python tools/deploy_eval.py --model <name> --model_type deeptile
 
 # Per-layer sensitivity (diagnostic, no training)
 python tools/layer_sensitivity.py --model <name> --eval_batches 4
@@ -37,11 +37,11 @@ experiment record. "PTQ" = after calibration, before any QAT epoch.
 
 | Model | Float | PTQ (calibrated) | QAT | Digital twin | Commit / date | Notes |
 |---|---|---|---|---|---|---|
-| resnet50 | | | 72.6 / 91.7 | 72.5 / 91.6 | 2026-07-13, post rounding-fix | pre-rework checkpoint (`qat_models/checkpoint/resnet50_best.pth.tar`); twin via `deploy_eval.py --model resnet50 --model_type tilecnn`. Twin now matches QAT (was 69.5/89.8 before the rounding-bias fix). |
+| resnet50 | | | 72.6 / 91.7 | 72.5 / 91.6 | 2026-07-13, post rounding-fix | pre-rework checkpoint (`qat_models/checkpoint/resnet50_best.pth.tar`); twin via `deploy_eval.py --model resnet50 --model_type deeptile`. Twin now matches QAT (was 69.5/89.8 before the rounding-bias fix). |
 | resnet18 | | | 69.5 / 88.7 | 68.9 / 88.5 | 2026-07-13 regression | pre-rework checkpoint (`qat_models/checkpoint/resnet18_best.pth.tar`), unfrozen/bias-free; loads after the `conv_mod.bias` loader fix. Twin tracks QAT (−0.6 top-1). |
 | vgg16 | | | 69.6 / 90.3 | 69.9 / 90.3 | 2026-07-13 regression | pre-rework checkpoint (`qat_models/checkpoint/vgg16_best.pth.tar`), no BatchNorm. Twin matches QAT. |
 | resnet50 | *TBD* | *TBD* | *TBD* | *TBD* | | (retrain post-rework) |
-| mobilenet_v2 | 77.3 (subset) | 54.3 (subset, no CLE) | 69.9 / 89.2 | 69.7 / 89.2 | 2026-07-10 train, 2026-07-13 eval | trained with `--cle`; QAT via `qat_test.py --cle`, twin via `deploy_eval.py --cle --model_type tilecnn`. Twin now matches QAT (was 56.0/79.7 before the rounding-bias fix). Float/PTQ are quick non-CLE subset probes, not final. |
+| mobilenet_v2 | 77.3 (subset) | 54.3 (subset, no CLE) | 69.9 / 89.2 | 69.7 / 89.2 | 2026-07-10 train, 2026-07-13 eval | trained with `--cle`; QAT via `qat_test.py --cle`, twin via `deploy_eval.py --cle --model_type deeptile`. Twin now matches QAT (was 56.0/79.7 before the rounding-bias fix). Float/PTQ are quick non-CLE subset probes, not final. |
 | mobilenet_v2 | 72.014 / 90.614 | *TBD* | **71.568 / 90.352** | **70.954 / 90.002** | `cdaffe8`, 2026-08-05 train / 2026-08-07 eval | Full ImageNet-1k validation set; Arrhenius GH200; CLE; final epoch-10 checkpoint. Twin delta: −0.614 top-1 / −0.350 top-5 percentage points. |
 
 > The 2026-07 rework (see `docs/improvements_2026-07.md`) fixed a bug that froze
@@ -62,7 +62,7 @@ released QAT and integer-twin metrics.
 | vgg16 | 71.580 / 90.394 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
 | mobilenet_v2 | 72.014 / 90.614 | 2026-09-22 | `sbatch scripts/jobs/eval_fp32_imagenet.sbatch` (`tools/fp32_eval.py`); weights from `fixquant.models.get_model(pretrained=True)`. |
 | vgg16_bn | 73.378 / 91.500 | 2026-09-23 | `sbatch scripts/jobs/vgg16_pooling_ablation.sbatch` task 0; weights from `fixquant.models.get_model(pretrained=True)`. |
-| vgg16_bn_pool3 | 48.534 / 73.508 | 2026-09-23 | Same weights, TileCNN pooling geometry, no retraining. 69.170 / 89.204 after BatchNorm re-estimation alone (`tools/bn_recalibrate.py`, job 2859117). Evaluation probe, not an export target. |
+| vgg16_bn_pool3 | 48.534 / 73.508 | 2026-09-23 | Same weights, DeepTile pooling geometry, no retraining. 69.170 / 89.204 after BatchNorm re-estimation alone (`tools/bn_recalibrate.py`, job 2859117). Evaluation probe, not an export target. |
 | vgg16_tilecnn | 71.978 / 90.662 | 2026-09-23 | Fine-tuned in this repo, not a torchvision checkpoint: `sbatch scripts/jobs/vgg16_tilecnn_finetune.sbatch` (job 2859325). See [vgg16_tilecnn.md](vgg16_tilecnn.md). |
 
 The metrics files are in [`model_zoo/fp32_reference/`](../model_zoo/fp32_reference/).
@@ -112,7 +112,7 @@ completed in 1 minute 43 seconds.
 | Representation | Loss | Top-1 | Top-5 |
 |---|---:|---:|---:|
 | QAT fake-quant model | 1.150242 | 71.568% | 90.352% |
-| TileCNN hardware-exact digital twin | 1.175469 | 70.954% | 90.002% |
+| DeepTile hardware-exact digital twin | 1.175469 | 70.954% | 90.002% |
 | Digital-twin delta | +0.025227 | −0.614 pp | −0.350 pp |
 
 The evaluation used:

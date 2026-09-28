@@ -22,7 +22,7 @@
 
 ## 1. Executive Summary
 
-The `FixQuantTool` currently provides robust Quantization-Aware Training (QAT) and bit-exact fixed-point inference emulation for ResNet-style architectures. While the ultimate hardware exporter (`TileCNN`) has its own limitations, enabling the **Fixed-Point Quantization and Emulation** pass for the MobileNet family (MobileNetV1, V2, and V3) requires specific developments in our QAT library, FX graph processing, and bit-exact emulation layers.
+The `FixQuantTool` currently provides robust Quantization-Aware Training (QAT) and bit-exact fixed-point inference emulation for ResNet-style architectures. While the ultimate hardware exporter (`DeepTile`) has its own limitations, enabling the **Fixed-Point Quantization and Emulation** pass for the MobileNet family (MobileNetV1, V2, and V3) requires specific developments in our QAT library, FX graph processing, and bit-exact emulation layers.
 
 This roadmap details the necessary upgrades to the `QatProcessor`, `InferProcessor`, and the underlying fixed-point operators to successfully quantize and emulate MobileNets before any hardware export considerations.
 

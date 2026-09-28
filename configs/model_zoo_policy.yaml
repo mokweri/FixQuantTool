@@ -1,6 +1,6 @@
 minimum_validation_samples: 50000
-maximum_tilecnn_top1_drop: 1.0
-maximum_tilecnn_top5_drop: 0.5
+maximum_deeptile_top1_drop: 1.0
+maximum_deeptile_top5_drop: 0.5
 required_artifacts:
   - best_checkpoint
   - calibration_report

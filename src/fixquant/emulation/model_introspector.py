@@ -75,7 +75,7 @@ class StdModelInspector:
         # We intentionally restrict this to modules that are actually referenced
         # by a call_module node in the FX graph.  Modules that are registered in
         # the model's module dict but have been erased from the graph (e.g.
-        # AddWithMetadata nodes after TileCNN fusion) must NOT be included —
+        # AddWithMetadata nodes after DeepTile fusion) must NOT be included —
         # they have no predecessors/successors and will confuse topological_order()
         # and downstream exporters.
         live_targets = {

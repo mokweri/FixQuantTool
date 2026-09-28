@@ -1,4 +1,4 @@
-"""TileCNN exporter tests: full-graph export of a depthwise/ReLU6 model,
+"""DeepTile exporter tests: full-graph export of a depthwise/ReLU6 model,
 relu6/groups in graph.json, legality checks, and CLE numerics."""
 
 import json
@@ -11,8 +11,10 @@ from pathlib import Path
 from fixquant.graph.qat_processor import QatProcessor
 from fixquant.graph.inference_processor import InferProcessor
 from fixquant.emulation.model_introspector import StdModelInspector
-from fixquant.export.tilecnn_exporter import TileCNNGraphExporter, _check_shift_legality
-from tools.export_tilecnn_graph import (
+from fixquant.export.deeptile_exporter import (
+    GRAPH_SCHEMA, MODEL_PACKAGE_SCHEMA, DeepTileGraphExporter, _check_shift_legality,
+)
+from tools.export_deeptile_graph import (
     PREPROCESSING,
     build_parser,
     resolve_export_model,
@@ -43,7 +45,7 @@ def exported(tmp_path_factory):
         inspector.run_and_capture(torch.randn(1, 3, 32, 32))
 
     out_dir = tmp_path_factory.mktemp("export")
-    exporter = TileCNNGraphExporter(inspector, model_name="tiny_mobile_block",
+    exporter = DeepTileGraphExporter(inspector, model_name="tiny_mobile_block",
                                     default_input_frac=infer.input_frac or 5)
     exporter.export(str(out_dir))
     return out_dir, json.load(open(out_dir / "graph.json"))
@@ -51,7 +53,7 @@ def exported(tmp_path_factory):
 
 def test_export_writes_graph_and_artifacts(exported):
     out_dir, graph = exported
-    assert graph["schema"] == "tilecnn.graph.v1"
+    assert graph["schema"] == GRAPH_SCHEMA
     assert (out_dir / "graph.json").exists()
     for ref_id in graph["graph"]["references"].values():
         f = out_dir / graph["tensors"][ref_id]["file"]
@@ -208,7 +210,7 @@ def test_package_manifest_records_release_and_artifact_provenance(tmp_path):
         quant_config, image, release,
     )
 
-    assert manifest["schema"] == "tilecnn.model-package.v1"
+    assert manifest["schema"] == MODEL_PACKAGE_SCHEMA
     assert manifest["model"]["release_id"] == release["release_id"]
     assert manifest["producer"]["git_revision"]
     assert manifest["sources"]["checkpoint"]["sha256"] == release[

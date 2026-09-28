@@ -1,12 +1,12 @@
-# vgg16_tilecnn: a VGG-16 variant the TileCNN fabric can run
+# vgg16_tilecnn: a VGG-16 variant the DeepTile fabric can run
 
-Run log and results for the TileCNN-runnable VGG-16 variant. Every job ID,
+Run log and results for the DeepTile-runnable VGG-16 variant. Every job ID,
 hyperparameter, checkpoint path and accuracy number in this document was
 produced on Arrhenius from the `vgg16-tilecnn-variant` branch.
 
 ## Why the architecture had to change
 
-Stock torchvision VGG-16 is rejected by the TileCNN compiler for two
+Stock torchvision VGG-16 is rejected by the DeepTile compiler for two
 independent reasons, both fabric constraints rather than preferences:
 
 1. **Pooling geometry.** The accelerator has exactly one pooling post-op:
@@ -62,11 +62,11 @@ crop, the same pipeline `tools/qat_test.py` and `tools/deploy_eval.py` use.
 | stock + pooling swap, no retraining | FP32 | **48.534** | 73.508 | job 2858888_1 |
 | `vgg16_tilecnn` after fine-tuning | FP32 | **71.978** | 90.662 | job 2859325 |
 | `vgg16_tilecnn` | INT8 QAT | **72.252** | 90.762 | job 2884234 |
-| `vgg16_tilecnn` | INT8 TileCNN deploy | **72.204** | 90.706 | job 2892486 |
+| `vgg16_tilecnn` | INT8 DeepTile deploy | **72.204** | 90.706 | job 2892486 |
 
 The variant lands **1.400 top-1 points** below stock `vgg16_bn` (73.378 ->
 71.978). That is the full architectural cost of making VGG-16 runnable on
-TileCNN: legal pooling geometry plus a classifier head that fits the weight
+DeepTile: legal pooling geometry plus a classifier head that fits the weight
 buffer, at 54.5M parameters against the stock model's 138M.
 
 73.378 for stock `vgg16_bn` matches torchvision's published 73.360, so the
@@ -114,10 +114,10 @@ fine-tune is expected to close further. Job 2859117.
 | 4 | 2859325 | `vgg16_tilecnn` float training: stage 1 head warm-up (2 epochs, SGD lr 0.01 cosine, wd 1e-4, backbone frozen), stage 2 full fine-tune (12 epochs, SGD lr 0.005 cosine, wd 1e-4), then FP32 eval. Batch 64/64, 12 workers, seed 0 | done, 5h29m: stage 1 62.016 top-1, stage 2 71.978 top-1 / 90.662 top-5 |
 | 5 | 2884083 | `vgg16_tilecnn` QAT, first attempt | failed in 20s writing the run manifest: `torch.__version__` is a `TorchVersion`, a `str` subclass `yaml.safe_dump` refuses. Pre-existing, fixed |
 | 6 | 2884234 | `vgg16_tilecnn` INT8 TQT QAT from the fine-tuned float checkpoint: 5 epochs, Adam lr 1e-5, quantizer lr 1e-2, thresholds frozen at 70% of epochs, 20 calibration batches, MSE scope 5, batch 32/64, seed 0. 55 quantizers calibrated | best 72.252 top-1 / 90.762 top-5 at epoch 3; candidate `vgg16_tilecnn-run-2884234` |
-| 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact TileCNN deploy evaluation, then the policy gates | passed; promoted to `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` |
+| 7 | 2892486 | Zoo candidate validation: QAT runtime and bit-exact DeepTile deploy evaluation, then the policy gates | passed; promoted to `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` |
 | 8 | 2892584 | ModelPackage export from the release plus the legality acceptance check | passed: 14 conv2d, 5 maxpool2d, 1 gap2d, 2 linear; 32 parameters, 1 input, 1 reference, 35 checksums verified |
 
-The exported package is at `outputs/vgg16_tilecnn_int8_tilecnn/` (53 MB,
+The exported package is at `outputs/vgg16_tilecnn_int8_deeptile/` (53 MB,
 gitignored like every other binary artifact).
 
 ```
@@ -140,7 +140,7 @@ dropped from the handoff.
 QAT per-epoch validation top-1: 71.4, 71.9, 72.3, 72.2, 72.1. The INT8 model
 ends up **above** its own float starting point (71.978), because five epochs of
 TQT are also five more epochs of fine-tuning; the honest quantization cost is
-the QAT-to-TileCNN-deploy gap, not the FP32-to-QAT one.
+the QAT-to-DeepTile-deploy gap, not the FP32-to-QAT one.
 
 Stage 1 trained 39 756 776 of 54 479 912 parameters (the head); the 14 722 880
 backbone parameters and their BatchNorm running statistics were held fixed, so
@@ -162,8 +162,8 @@ results/float/vgg16_tilecnn/2859325/finetune/vgg16_tilecnn/checkpoint/model_best
 
 ## Acceptance check
 
-The TileCNN compiler is a separate repository and is not present on this
-cluster, so [`tools/check_tilecnn_legality.py`](../tools/check_tilecnn_legality.py)
+The DeepTile compiler is a separate repository and is not present on this
+cluster, so [`tools/check_deeptile_legality.py`](../tools/check_deeptile_legality.py)
 is the acceptance gate. It reads an exported package's `graph.json` and
 `manifest.json` and verifies:
 
@@ -176,5 +176,5 @@ is the acceptance gate. It reads an exported package's `graph.json` and
 - the manifest lists and checksums every parameter, input and reference.
 
 ```bash
-python tools/check_tilecnn_legality.py outputs/vgg16_tilecnn_int8_tilecnn
+python tools/check_deeptile_legality.py outputs/vgg16_tilecnn_int8_deeptile
 ```

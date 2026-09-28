@@ -1,4 +1,4 @@
-"""Bit-exactness of the digital-twin modules against the exporter's TileCNN
+"""Bit-exactness of the digital-twin modules against the exporter's DeepTile
 reference kernels. These two implementations (plus the HLS C code) must agree
 exactly — every shift-sign combination, grouped conv, relu/relu6, residual add.
 """
@@ -10,9 +10,9 @@ from fixquant.emulation.fxp_emu_modules import (
     HardwareConv2d, HardwareLinear, HardwareGAP, HardwareMaxPool2d,
     HardwareElementwiseAdd, HardwareRelu6,
 )
-from fixquant.export.tilecnn_exporter import (
-    _tilecnn_conv2d, _tilecnn_linear, _tilecnn_gap, _tilecnn_maxpool,
-    _tilecnn_residual_add, _relu6_max,
+from fixquant.export.deeptile_exporter import (
+    _deeptile_conv2d, _deeptile_linear, _deeptile_gap, _deeptile_maxpool,
+    _deeptile_residual_add, _relu6_max,
 )
 
 
@@ -49,7 +49,7 @@ def test_conv2d_twin_matches_reference(fin, fw, fb, fout, groups):
                           frac_w=fw, frac_b=fb, frac_din=fin, frac_dout=fout)
     out_twin = twin(x)
 
-    out_ref = _tilecnn_conv2d(x.squeeze(0), w, b, conv_node(groups=groups),
+    out_ref = _deeptile_conv2d(x.squeeze(0), w, b, conv_node(groups=groups),
                               fin, fw, fb, fout)
     assert torch.equal(out_twin.squeeze(0), out_ref)
 
@@ -67,7 +67,7 @@ def test_conv2d_activation_post_ops(act):
     out_twin = twin(x).squeeze(0)
 
     node = conv_node(relu=(act == "relu"), relu6=(act == "relu6"))
-    out_ref = _tilecnn_conv2d(x.squeeze(0), w, b, node, fin, fw, fb, fout)
+    out_ref = _deeptile_conv2d(x.squeeze(0), w, b, node, fin, fw, fb, fout)
     assert torch.equal(out_twin, out_ref)
     assert out_twin.min() >= 0
     if act == "relu6":
@@ -98,8 +98,8 @@ def test_conv_residual_add_twin_matches_reference(relu6):
 
     node = conv_node()
     node["post_ops"] = {"residual_add": True}
-    conv_out = _tilecnn_conv2d(x.squeeze(0), w, b, node, fin, fw, fb, fout)
-    out_ref = _tilecnn_residual_add(conv_out, res.squeeze(0), fout - fres,
+    conv_out = _deeptile_conv2d(x.squeeze(0), w, b, node, fin, fw, fb, fout)
+    out_ref = _deeptile_residual_add(conv_out, res.squeeze(0), fout - fres,
                                     relu=not relu6, relu6=relu6, out_frac=fout)
     assert torch.equal(out_twin, out_ref)
 
@@ -111,7 +111,7 @@ def test_linear_twin_matches_reference(fin, fw, fb, fout):
     b = rand_i8(10)
     twin = HardwareLinear(w, b, frac_w=fw, frac_b=fb, frac_din=fin, frac_dout=fout)
     out_twin = twin(x).reshape(-1)
-    out_ref = _tilecnn_linear(x.reshape(-1), w, b, fin, fw, fb, fout).reshape(-1)
+    out_ref = _deeptile_linear(x.reshape(-1), w, b, fin, fw, fb, fout).reshape(-1)
     assert torch.equal(out_twin, out_ref)
 
 
@@ -120,7 +120,7 @@ def test_gap_twin_matches_reference(fin, fout):
     x = rand_i8(1, 8, 7, 7)
     twin = HardwareGAP(frac_in=fin, frac_out=fout)
     out_twin = twin(x).reshape(-1)
-    out_ref = _tilecnn_gap(x.squeeze(0), fin, fout).reshape(-1)
+    out_ref = _deeptile_gap(x.squeeze(0), fin, fout).reshape(-1)
     assert torch.equal(out_twin, out_ref)
 
 
@@ -130,7 +130,7 @@ def test_maxpool_twin_matches_reference(shift):
     twin = HardwareMaxPool2d(3, 2, 1, post_pool_shift=shift)
     out_twin = twin(x).squeeze(0)
     node = {"attrs": {"kernel": [3, 3], "stride": [2, 2], "padding": [1, 1, 1, 1]}}
-    out_ref = _tilecnn_maxpool(x.squeeze(0), node, shift)
+    out_ref = _deeptile_maxpool(x.squeeze(0), node, shift)
     assert torch.equal(out_twin, out_ref)
 
 
@@ -138,7 +138,7 @@ def test_maxpool_reference_reads_attrs():
     """A 2x2/s2/p0 pool must not silently be computed as 3x3/s2/p1."""
     x = rand_i8(1, 2, 8, 8)
     node = {"attrs": {"kernel": [2, 2], "stride": [2, 2], "padding": [0, 0, 0, 0]}}
-    out = _tilecnn_maxpool(x.squeeze(0), node, 0)
+    out = _deeptile_maxpool(x.squeeze(0), node, 0)
     assert out.shape == (2, 4, 4)
 
 
@@ -150,5 +150,5 @@ def test_elementwise_add_matches_reference_when_main_at_fout():
     res = rand_i8(1, 4, 5, 5)
     emu = HardwareElementwiseAdd(frac_in1=fout, frac_in2=fres, frac_out=fout)
     out_emu = emu(main, res).squeeze(0)
-    out_ref = _tilecnn_residual_add(main.squeeze(0), res.squeeze(0), fout - fres, relu=False)
+    out_ref = _deeptile_residual_add(main.squeeze(0), res.squeeze(0), fout - fres, relu=False)
     assert torch.equal(out_emu, out_ref)

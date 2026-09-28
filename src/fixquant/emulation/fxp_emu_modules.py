@@ -33,7 +33,7 @@ class HardwareElementwiseAdd(torch.nn.Module):
         
     def forward(self, x1, x2):
         assert x1.dtype == torch.int8 and x2.dtype == torch.int8
-        # Align both inputs to fout with the same rounding shift the TileCNN
+        # Align both inputs to fout with the same rounding shift the DeepTile
         # residual path uses (_signed_shift), then add and saturate.
         y1 = _tc_signed_shift(x1, self.fout - self.f1)
         y2 = _tc_signed_shift(x2, self.fout - self.f2)
@@ -75,17 +75,17 @@ class OutputDequantizer(torch.nn.Module):
 
 
 # ===========================================================================
-#  TileCNN Digital-Twin Modules
+#  DeepTile Digital-Twin Modules
 #  These implement the EXACT same fused integer arithmetic as
-#  _tilecnn_conv2d / _tilecnn_linear / _tilecnn_gap in tilecnn_exporter.py.
+#  _deeptile_conv2d / _deeptile_linear / _deeptile_gap in deeptile_exporter.py.
 #  Use them when you want a PyTorch model whose accuracy == FPGA accuracy.
 # ===========================================================================
 
-GAP_SCALE_FRAC_BITS = 16   # must match tilecnn_exporter.py constant
+GAP_SCALE_FRAC_BITS = 16   # must match deeptile_exporter.py constant
 
 
 def _tc_bias_shift(values: torch.Tensor, shift: int) -> torch.Tensor:
-    """Align bias to the (out_frac+1) scale used inside the TileCNN pipeline."""
+    """Align bias to the (out_frac+1) scale used inside the DeepTile pipeline."""
     values = values.to(torch.int64)
     if shift >= 0:
         return values << shift
@@ -106,7 +106,7 @@ def _tc_signed_shift(values: torch.Tensor, shift: int) -> torch.Tensor:
 
 class HardwareConv2d(torch.nn.Module):
     """
-    Bit-exact digital-twin of the TileCNN conv2d hardware kernel.
+    Bit-exact digital-twin of the DeepTile conv2d hardware kernel.
 
     Reproduces the two-step round-half-up used in the HLS EMIT_LOOP:
         s1  = (acc >> (shift-1))
@@ -123,7 +123,7 @@ class HardwareConv2d(torch.nn.Module):
     def __init__(self, weight_int8, bias_int8,
                  stride=1, padding=0, dilation=1, groups=1,
                  frac_w=7, frac_b=7, frac_din=7, frac_dout=7,
-                 backend: str = 'tilecnn',
+                 backend: str = 'deeptile',
                  relu=False, relu6=False,
                  residual_frac=0, residual_add=False,
                  post_add_relu=False, post_add_relu6=False):
@@ -141,7 +141,8 @@ class HardwareConv2d(torch.nn.Module):
 
         self.fw, self.fb = frac_w, frac_b
         self.fin, self.fout = frac_din, frac_dout
-        self.backend = backend
+        # 'tilecnn' is the former name of the 'deeptile' backend.
+        self.backend = 'deeptile' if backend == 'tilecnn' else backend
         
         self.relu = relu
         self.relu6 = relu6
@@ -250,8 +251,8 @@ class HardwareConv2d(torch.nn.Module):
 
 class HardwareLinear(torch.nn.Module):
     """
-    Bit-exact digital-twin of the TileCNN fully-connected layer.
-    Mirrors _tilecnn_linear() in tilecnn_exporter.py.
+    Bit-exact digital-twin of the DeepTile fully-connected layer.
+    Mirrors _deeptile_linear() in deeptile_exporter.py.
     """
     def __init__(self, weight_int8, bias_int8, frac_w=7, frac_b=7, frac_din=7, frac_dout=7):
         super().__init__()
@@ -286,8 +287,8 @@ class HardwareLinear(torch.nn.Module):
 
 class HardwareGAP(torch.nn.Module):
     """
-    Bit-exact digital-twin of the TileCNN Global Average Pooling kernel.
-    Mirrors _tilecnn_gap() in tilecnn_exporter.py.
+    Bit-exact digital-twin of the DeepTile Global Average Pooling kernel.
+    Mirrors _deeptile_gap() in deeptile_exporter.py.
     Uses a fixed-point reciprocal with GAP_SCALE_FRAC_BITS precision.
     """
     def __init__(self, frac_in: int, frac_out: int):
@@ -318,7 +319,7 @@ class HardwareGAP(torch.nn.Module):
 class HardwareAdaptiveAvgPool2d(torch.nn.Module):
     """
     General AdaptiveAvgPool2d in int8 for emulation purposes.
-    (Note: TileCNN hardware typically only supports Global Average Pooling via gap2d).
+    (Note: DeepTile hardware typically only supports Global Average Pooling via gap2d).
     """
     def __init__(self, output_size, frac_in: int, frac_out: int):
         super().__init__()
@@ -335,8 +336,8 @@ class HardwareAdaptiveAvgPool2d(torch.nn.Module):
 
 class HardwareMaxPool2d(torch.nn.Module):
     """
-    Bit-exact max-pool matching TileCNN hardware (3×3, stride=2, padding=1).
-    The post_pool_shift is applied identically to _tilecnn_maxpool.
+    Bit-exact max-pool matching DeepTile hardware (3×3, stride=2, padding=1).
+    The post_pool_shift is applied identically to _deeptile_maxpool.
     """
     def __init__(self, kernel_size=3, stride=2, padding=1, dilation=1, return_indices=False, ceil_mode=False, post_pool_shift: int = 0):
         super().__init__()

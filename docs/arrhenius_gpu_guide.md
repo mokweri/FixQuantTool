@@ -237,7 +237,7 @@ allocation to run commands in the pinned container environment.
 
 `eval_fp32_imagenet.sbatch` evaluates the floating-point reference for every
 released model with [`tools/fp32_eval.py`](../tools/fp32_eval.py). It uses the
-same ImageNet validation set, loader, and preprocessing as the QAT and TileCNN
+same ImageNet validation set, loader, and preprocessing as the QAT and DeepTile
 evaluations, so its top-1 figures are directly comparable with the released
 metrics:
 

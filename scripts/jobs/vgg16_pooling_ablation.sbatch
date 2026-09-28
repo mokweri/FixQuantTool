@@ -14,7 +14,7 @@
 #
 # Task 0: stock torchvision vgg16_bn, the FP32 reference point.
 # Task 1: the same pretrained weights with all five MaxPool2d(2, 2) replaced by
-#         the one pooling geometry the TileCNN fabric implements (3x3/s2/p1).
+#         the one pooling geometry the DeepTile fabric implements (3x3/s2/p1).
 #
 # Pooling is parameter-free, so task 1 costs a single evaluation pass and
 # isolates the architectural cost of the pooling change from the cost of the

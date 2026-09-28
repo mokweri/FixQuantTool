@@ -24,8 +24,8 @@ DEFAULT_ZOO_ROOT = Path(__file__).resolve().parents[2] / "model_zoo"
 DEFAULT_RELEASE_REPOSITORY = "mokweri/FixQuantTool"
 DEFAULT_POLICY = {
     "minimum_validation_samples": 50000,
-    "maximum_tilecnn_top1_drop": 1.0,
-    "maximum_tilecnn_top5_drop": 0.5,
+    "maximum_deeptile_top1_drop": 1.0,
+    "maximum_deeptile_top5_drop": 0.5,
     "required_artifacts": [
         "best_checkpoint",
         "calibration_report",
@@ -37,6 +37,37 @@ DEFAULT_POLICY = {
 
 class ZooError(RuntimeError):
     """Raised when registry validation or an immutable operation fails."""
+
+
+# Releases, candidates and policy files created before TileCNN was renamed
+# DeepTile use the old names. They are read, never rewritten.
+DEPLOY_METRICS_FILE = "deeptile_metrics.json"
+LEGACY_DEPLOY_METRICS_FILE = "tilecnn_metrics.json"
+_LEGACY_POLICY_KEYS = {
+    "maximum_tilecnn_top1_drop": "maximum_deeptile_top1_drop",
+    "maximum_tilecnn_top5_drop": "maximum_deeptile_top5_drop",
+}
+
+
+def deploy_metrics_file(directory: os.PathLike | str) -> Path:
+    """The accelerator metrics file in an evaluation directory, under either name."""
+    current = Path(directory) / DEPLOY_METRICS_FILE
+    legacy = Path(directory) / LEGACY_DEPLOY_METRICS_FILE
+    return legacy if legacy.is_file() and not current.is_file() else current
+
+
+def deploy_metrics(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """Accelerator metrics from a validation report or manifest, under either key."""
+    return metrics["deeptile"] if "deeptile" in metrics else metrics["tilecnn"]
+
+
+def _normalize_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(policy)
+    for legacy, current in _LEGACY_POLICY_KEYS.items():
+        if legacy in normalized:
+            value = normalized.pop(legacy)
+            normalized.setdefault(current, value)
+    return normalized
 
 
 def utc_now() -> str:
@@ -301,15 +332,15 @@ def validate_candidate(
     directory = candidate_directory(root, candidate_id)
     evaluation_dir = directory / "evaluation"
     qat_path = Path(qat_metrics_path or evaluation_dir / "qat_metrics.json")
-    deploy_path = Path(deploy_metrics_path or evaluation_dir / "tilecnn_metrics.json")
+    deploy_path = Path(deploy_metrics_path) if deploy_metrics_path else deploy_metrics_file(evaluation_dir)
     if not qat_path.is_file() or not deploy_path.is_file():
-        raise ZooError("Both QAT and TileCNN metrics are required")
+        raise ZooError("Both QAT and DeepTile metrics are required")
 
     qat = load_json(qat_path)
     deploy = load_json(deploy_path)
     policy = dict(DEFAULT_POLICY)
     if policy_path:
-        policy.update(load_yaml(policy_path))
+        policy.update(_normalize_policy(load_yaml(policy_path)))
 
     expected_hash = candidate["checkpoint_sha256"]
     qat_hash = qat.get("checkpoint_sha256")
@@ -334,7 +365,7 @@ def validate_candidate(
             "expected": expected_hash,
         },
         {
-            "name": "tilecnn_checkpoint_hash",
+            "name": "deeptile_checkpoint_hash",
             "passed": deploy_hash == expected_hash,
             "actual": deploy_hash,
             "expected": expected_hash,
@@ -346,16 +377,16 @@ def validate_candidate(
             "minimum": int(policy["minimum_validation_samples"]),
         },
         {
-            "name": "tilecnn_top1_drop",
-            "passed": top1_drop <= float(policy["maximum_tilecnn_top1_drop"]),
+            "name": "deeptile_top1_drop",
+            "passed": top1_drop <= float(policy["maximum_deeptile_top1_drop"]),
             "actual": top1_drop,
-            "maximum": float(policy["maximum_tilecnn_top1_drop"]),
+            "maximum": float(policy["maximum_deeptile_top1_drop"]),
         },
         {
-            "name": "tilecnn_top5_drop",
-            "passed": top5_drop <= float(policy["maximum_tilecnn_top5_drop"]),
+            "name": "deeptile_top5_drop",
+            "passed": top5_drop <= float(policy["maximum_deeptile_top5_drop"]),
             "actual": top5_drop,
-            "maximum": float(policy["maximum_tilecnn_top5_drop"]),
+            "maximum": float(policy["maximum_deeptile_top5_drop"]),
         },
     ]
     artifact_paths = dict(candidate.get("artifacts", {}))
@@ -378,8 +409,8 @@ def validate_candidate(
         "checks": checks,
         "metrics": {
             "qat": qat["metrics"],
-            "tilecnn": deploy["metrics"],
-            "tilecnn_delta": {
+            "deeptile": deploy["metrics"],
+            "deeptile_delta": {
                 "top1": deploy_top1 - qat_top1,
                 "top5": deploy_top5 - qat_top5,
             },
@@ -389,7 +420,7 @@ def validate_candidate(
     }
     evaluation_dir.mkdir(parents=True, exist_ok=True)
     stored_qat = evaluation_dir / "qat_metrics.json"
-    stored_deploy = evaluation_dir / "tilecnn_metrics.json"
+    stored_deploy = evaluation_dir / DEPLOY_METRICS_FILE
     if qat_path.resolve() != stored_qat.resolve():
         shutil.copy2(qat_path, stored_qat)
     if deploy_path.resolve() != stored_deploy.resolve():
@@ -400,7 +431,7 @@ def validate_candidate(
     candidate["artifacts"] = artifact_paths
     candidate["evaluations"] = {
         "qat": str(stored_qat),
-        "tilecnn": str(stored_deploy),
+        "deeptile": str(stored_deploy),
         "report": str(evaluation_dir / "validation_report.json"),
     }
     candidate["updated_at"] = utc_now()
@@ -510,8 +541,8 @@ def _model_card(manifest: Dict[str, Any]) -> str:
         f"- Quantization profile: `{manifest['quantization']['profile']}`\n"
         f"- QAT top-1/top-5: {metrics['qat']['top1']:.4f}% / "
         f"{metrics['qat']['top5']:.4f}%\n"
-        f"- TileCNN top-1/top-5: {metrics['tilecnn']['top1']:.4f}% / "
-        f"{metrics['tilecnn']['top5']:.4f}%\n"
+        f"- DeepTile top-1/top-5: {deploy_metrics(metrics)['top1']:.4f}% / "
+        f"{deploy_metrics(metrics)['top5']:.4f}%\n"
         f"- Source commit: `{manifest['provenance'].get('git_commit')}`\n"
         f"- Source Slurm job: `{manifest['provenance'].get('slurm_job_id')}`\n"
     )
@@ -559,8 +590,13 @@ def promote_candidate(
             copied[name] = _copy_artifact(candidate["artifacts"].get(name), target)
 
         evaluation_dir = candidate_directory(root_path, candidate_id) / "evaluation"
-        for name in ("qat_metrics.json", "tilecnn_metrics.json", "validation_report.json"):
-            _copy_artifact(str(evaluation_dir / name), staging / "evaluation" / name)
+        # Candidates validated before the rename hold tilecnn_metrics.json;
+        # the release keeps whichever name the candidate has.
+        evaluation_files = [evaluation_dir / "qat_metrics.json",
+                            deploy_metrics_file(evaluation_dir),
+                            evaluation_dir / "validation_report.json"]
+        for path in evaluation_files:
+            _copy_artifact(str(path), staging / "evaluation" / path.name)
 
         report = load_json(evaluation_dir / "validation_report.json")
         manifest = {
@@ -889,7 +925,7 @@ def build_catalog(root: Optional[os.PathLike | str] = None) -> Dict[str, Any]:
             "profile": manifest["quantization"]["profile"],
             "version": manifest["version"],
             "qat_top1": manifest["metrics"]["qat"]["top1"],
-            "tilecnn_top1": manifest["metrics"]["tilecnn"]["top1"],
+            "deeptile_top1": deploy_metrics(manifest["metrics"])["top1"],
             "git_commit": manifest["provenance"].get("git_commit"),
             "downloadable": bool(download.get("urls")),
         })

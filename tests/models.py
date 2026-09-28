@@ -1,4 +1,4 @@
-"""Small test networks exercising every op the TileCNN pipeline supports."""
+"""Small test networks exercising every op the DeepTile pipeline supports."""
 
 import torch
 import torch.nn as nn
