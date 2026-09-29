@@ -1,0 +1,94 @@
+schema_version: 1
+status: completed
+created_at: '2026-09-29T07:10:22+00:00'
+model:
+  name: efficientnet_lite0
+  initialization: timm efficientnet_lite0.ra_in1k, converted (efficientnet_lite0_ra_in1k.pth)
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+  train_samples: 1281167
+  validation_samples: 50000
+quantization:
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: true
+  cle_keep_relu6: true
+  bias_correction: false
+  calibration_batches: 20
+  calibration_scope: 5
+  threshold_freeze_fraction: 0.7
+training:
+  epochs: 5
+  train_batch_size: 64
+  test_batch_size: 128
+  workers: 12
+  image_size: 224
+  initial_lr: 1.0e-05
+  quantizer_lr: 0.01
+  weight_decay: 0.0001
+  seed: 0
+provenance:
+  git_commit: 046d742d21c4bb2e25a8a0e0ad3f47e39ff89ec0
+  slurm_job_id: null
+  slurm_array_job_id: null
+  slurm_array_task_id: null
+  node: n199
+  python: 3.12.3
+  pytorch: 2.9.0a0+50eac811a6.nv25.09
+  command:
+  - /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/software/venvs/fixquant-ngc-25.09-py3/bin/python
+  - tools/qat_train.py
+  - --dataset
+  - imagenet
+  - --dataroot
+  - /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+  - --model
+  - efficientnet_lite0
+  - --train_batch_size
+  - '64'
+  - --test_batch_size
+  - '128'
+  - --n_worker
+  - '12'
+  - --n_epochs
+  - '5'
+  - --init_lr
+  - 1e-5
+  - --quantizer_lr
+  - 1e-2
+  - --threshold_freeze_frac
+  - '0.7'
+  - --calib_batches
+  - '20'
+  - --calib_scope
+  - '5'
+  - --cle
+  - --cle_keep_relu6
+  - --validation_frequency
+  - '1'
+  - --display_freq
+  - '200'
+  - --manual_seed
+  - '0'
+  - --gpus
+  - '0'
+  - --save_dir
+  - /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/efficientnet_lite0/3122656
+completed_at: '2026-09-29T10:36:30+00:00'
+best:
+  epoch: 3
+  metrics:
+    loss: 0.9861253686714172
+    top1: 75.05799865722656
+    top5: 92.4280014038086
+final_evaluation:
+  loss: 0.9871959711265564
+  top1: 74.98799896240234
+  top5: 92.43599700927734
+artifacts:
+  best_checkpoint: checkpoint/model_best.pth.tar
+  latest_checkpoint: checkpoint/latest.pth.tar
+  calibration_report: efficientnet_lite0_calib_report.csv
+  threshold_log: logs/quant_thresholds.csv

@@ -1,0 +1,59 @@
+schema_version: 1
+release_id: efficientnet_lite0/imagenet1k/int8-tqt-cle-relu6@v1.0.0
+status: released
+version: v1.0.0
+released_at: '2026-09-29T14:18:22+00:00'
+model: efficientnet_lite0
+dataset:
+  name: imagenet1k
+  path: /dataset/easybuild/data/ImageNet-1k-data/20250917-hf-2025b
+quantization:
+  profile: int8-tqt-cle-relu6
+  method: tqt
+  weight_bits: 8
+  activation_bits: 8
+  cle: true
+  cle_keep_relu6: true
+provenance:
+  run_dir: /nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/efficientnet_lite0/3122656/efficientnet_lite0
+  git_commit: 046d742d21c4bb2e25a8a0e0ad3f47e39ff89ec0
+  slurm_job_id: '3122656'
+metrics:
+  deeptile:
+    loss: 0.9872406588172913
+    top1: 75.00999450683594
+    top5: 92.447998046875
+  deeptile_delta:
+    top1: -0.048004150390625
+    top5: 0.01999664306640625
+  qat:
+    loss: 0.9861253686714172
+    top1: 75.05799865722656
+    top5: 92.4280014038086
+validation_samples: 50000
+artifacts:
+  best_checkpoint: qat/model_best.pth.tar
+  calibration_report: qat/calibration_report.csv
+  threshold_log: qat/quant_thresholds.csv
+  run_manifest: run_manifest.yaml
+  qconfig: deployment/qconfig.json
+checksums:
+  deployment/qconfig.json: b609a37efbde60e9f2f202894f7ab0e239588d9b70fcaef1a8950e5e89cafa08
+  evaluation/deeptile_metrics.json: 21040dba2a28b110ca69b7a659922737769c7c1916b1bf754ff4e9eb401f407f
+  evaluation/qat_metrics.json: 9712d3c754feb4984d469795c358b43a1f3e3ad77140116d51be738945cdab10
+  evaluation/validation_report.json: 54ae1b9e5cc281c29623d335aa959c5d84bd219f8e0a541978fe606e4adb4239
+  metrics.json: 7d44ec3daace028465284cdd5f7e680dc26ffa9762b3aeb839324f6ccf505abc
+  model_card.md: 9f72da675deb48330c027c8075d9070a2504cd268f8f6ee6e1926a8071313371
+  qat/calibration_report.csv: 7186cec943eb20580a10124f82c9f90472dc89ce90f5f81b46aab7edc8ec4d42
+  qat/model_best.pth.tar: ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635
+  qat/quant_thresholds.csv: f0d2963bca0ebb07f9af9ed621fef00d1c489b9b2d50e5f67d6c64b32da7a8e1
+  run_manifest.yaml: 4f2f7f4f4e0a9922c4c669141e51701180391dc21363f251ccfd148510d66146
+downloads:
+  qat/model_best.pth.tar:
+    provider: github-release
+    repository: mokweri/FixQuantTool
+    tag: model-zoo-efficientnet_lite0-imagenet1k-int8-tqt-cle-relu6-v1.0.0
+    asset: model_best.pth.tar
+    urls:
+    - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-efficientnet_lite0-imagenet1k-int8-tqt-cle-relu6-v1.0.0/model_best.pth.tar
+    size_bytes: 55797693

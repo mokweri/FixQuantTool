@@ -1,0 +1,91 @@
+{
+  "candidate_id": "efficientnet_lite0-run-3122656",
+  "checkpoint_sha256": "ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635",
+  "checks": [
+    {
+      "actual": "ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635",
+      "expected": "ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635",
+      "name": "qat_checkpoint_hash",
+      "passed": true
+    },
+    {
+      "actual": "ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635",
+      "expected": "ca0c08d3c3611de8ec1178ecdd261ba69c67a131703a10b80b33388cb2333635",
+      "name": "deeptile_checkpoint_hash",
+      "passed": true
+    },
+    {
+      "actual": 50000,
+      "minimum": 50000,
+      "name": "validation_samples",
+      "passed": true
+    },
+    {
+      "actual": 0.048004150390625,
+      "maximum": 1.0,
+      "name": "deeptile_top1_drop",
+      "passed": true
+    },
+    {
+      "actual": -0.01999664306640625,
+      "maximum": 0.5,
+      "name": "deeptile_top5_drop",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/efficientnet_lite0/3122656/efficientnet_lite0/checkpoint/model_best.pth.tar",
+      "expected": "existing file",
+      "name": "artifact_best_checkpoint",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/efficientnet_lite0/3122656/efficientnet_lite0/efficientnet_lite0_calib_report.csv",
+      "expected": "existing file",
+      "name": "artifact_calibration_report",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/results/qat/efficientnet_lite0/3122656/efficientnet_lite0/logs/quant_thresholds.csv",
+      "expected": "existing file",
+      "name": "artifact_threshold_log",
+      "passed": true
+    },
+    {
+      "actual": "/nobackup/proj/disk/naiss2024-22-1352/personal/mogaka/projects/FixQuantTool/model_zoo/.candidates/efficientnet_lite0-run-3122656/evaluation/qconfig.json",
+      "expected": "existing file",
+      "name": "artifact_qconfig",
+      "passed": true
+    }
+  ],
+  "metrics": {
+    "deeptile": {
+      "loss": 0.9872406588172913,
+      "top1": 75.00999450683594,
+      "top5": 92.447998046875
+    },
+    "deeptile_delta": {
+      "top1": -0.048004150390625,
+      "top5": 0.01999664306640625
+    },
+    "qat": {
+      "loss": 0.9861253686714172,
+      "top1": 75.05799865722656,
+      "top5": 92.4280014038086
+    }
+  },
+  "passed": true,
+  "policy": {
+    "maximum_deeptile_top1_drop": 1.0,
+    "maximum_deeptile_top5_drop": 0.5,
+    "minimum_validation_samples": 50000,
+    "required_artifacts": [
+      "best_checkpoint",
+      "calibration_report",
+      "threshold_log",
+      "qconfig"
+    ]
+  },
+  "schema_version": 1,
+  "validated_at": "2026-09-29T14:14:49+00:00",
+  "validation_samples": 50000
+}
