@@ -105,9 +105,21 @@ The best checkpoint exports to a ModelPackage of 51 nodes that DeepTile compiles
 into 45 launches with fusion. DeepTile's software reference reproduces the
 exported integer reference exactly, fused and unfused.
 
-## Status
+## Release
 
-A release needs QAT on full ImageNet and 50,000-sample validation, as for the
-other zoo models. The Arrhenius job is
-`scripts/jobs/qat_efficientnet_lite0_imagenet.sbatch`; see
-[arrhenius_environment.md](arrhenius_environment.md#efficientnet-lite0-qat-job).
+`efficientnet_lite0/imagenet1k/int8-tqt-cle-relu6@v1.0.0` was trained on full
+ImageNet by `scripts/jobs/qat_efficientnet_lite0_imagenet.sbatch` (Arrhenius job
+3122656): the recipe above, five epochs, best at epoch 3. On the 50,000-image
+validation set:
+
+| Point | Top-1 | Top-5 |
+|---|---:|---:|
+| FP32, converted timm weights | 75.40 | 92.50 |
+| QAT | 75.06 | 92.43 |
+| Integer digital twin | 75.01 | 92.45 |
+
+The checkpoint is published as a GitHub Release, so
+`scripts/model_zoo.sh fetch efficientnet_lite0/imagenet1k/int8-tqt-cle-relu6@v1.0.0`
+retrieves and verifies it. Its exported ModelPackage compiles in DeepTile to 36
+launches with fusion, the 5x5 depthwise layers included, and reproduces the
+exported reference in DeepTile's software reference and kernel C model.
