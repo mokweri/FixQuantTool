@@ -108,4 +108,6 @@ exported integer reference exactly, fused and unfused.
 ## Status
 
 A release needs QAT on full ImageNet and 50,000-sample validation, as for the
-other zoo models.
+other zoo models. The Arrhenius job is
+`scripts/jobs/qat_efficientnet_lite0_imagenet.sbatch`; see
+[arrhenius_environment.md](arrhenius_environment.md#efficientnet-lite0-qat-job).

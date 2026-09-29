@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --account=naiss2025-22-1409-gpu
 #SBATCH --partition=gpu
-#SBATCH --array=0-3%4
+#SBATCH --array=0-4%5
 #SBATCH --gpus=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
@@ -13,6 +13,7 @@
 # FP32 reference accuracy for every released model, on the same ImageNet
 # validation set and preprocessing as the released QAT and DeepTile metrics.
 # Writes <model>_fp32_metrics.json beneath results/eval/fp32/<array-job-id>/.
+# efficientnet_lite0 (task 4) needs checkpoints/efficientnet_lite0_ra_in1k.pth.
 
 set -euo pipefail
 
@@ -22,8 +23,8 @@ DATASET="${FIXQUANT_DATA_DIR:-/dataset/easybuild/data/ImageNet-1k-data/20250917-
 TORCH_CACHE="${FIXQUANT_TORCH_CACHE:-$STORAGE_BASE/software/torch-cache}"
 WORKERS="${FIXQUANT_WORKERS:-12}"
 
-MODELS=(resnet18 resnet50 vgg16 mobilenet_v2)
-BATCH_SIZES=(256 128 64 256)
+MODELS=(resnet18 resnet50 vgg16 mobilenet_v2 efficientnet_lite0)
+BATCH_SIZES=(256 128 64 256 256)
 
 TASK_ID="${SLURM_ARRAY_TASK_ID:?This script must run as a Slurm array job}"
 if ((TASK_ID < 0 || TASK_ID >= ${#MODELS[@]})); then

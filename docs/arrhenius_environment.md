@@ -136,6 +136,37 @@ sbatch --time=12:00:00 --cpus-per-task=8 \
     scripts/jobs/qat_mobilenet_imagenet.sbatch
 ```
 
+## EfficientNet-Lite0 QAT job
+
+EfficientNet-Lite0 starts from timm weights converted once into
+`checkpoints/efficientnet_lite0_ra_in1k.pth`. The file is not
+version-controlled and timm is not installed here, so copy it from the machine
+that converted it rather than converting again:
+
+```bash
+scp checkpoints/efficientnet_lite0_ra_in1k.pth \
+    <arrhenius>:~/work/projects/FixQuantTool/checkpoints/
+```
+
+The job refuses to start unless the file matches its recorded SHA-256. Submit
+it from the login node:
+
+```bash
+cd ~/work/projects/FixQuantTool
+sbatch scripts/jobs/qat_efficientnet_lite0_imagenet.sbatch
+```
+
+It trains with `--cle --cle_keep_relu6` for five epochs by default, with the
+same resources and overrides as the MobileNetV2 job, and registers the result
+as an `int8-tqt-cle-relu6` candidate. Results go to
+`~/work/results/qat/efficientnet_lite0/<job-id>/efficientnet_lite0/`.
+
+Its FP32 reference is task 4 of the FP32 evaluation array:
+
+```bash
+sbatch --array=4 scripts/jobs/eval_fp32_imagenet.sbatch
+```
+
 ## VGG16 and ResNet QAT sweep
 
 The model-sweep job trains VGG16, ResNet-18, and ResNet-50 as three Slurm
