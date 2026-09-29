@@ -78,6 +78,9 @@ parser.add_argument("--calib_scope", type=int, default=5,
 parser.add_argument("--cle", action="store_true", default=False,
                     help="Fold BN and apply cross-layer equalization before QAT "
                          "(replaces ReLU6 with ReLU; recommended for MobileNet).")
+parser.add_argument("--cle_keep_relu6", action="store_true", default=False,
+                    help="Keep ReLU6 through cross-layer equalization instead of replacing it "
+                         "with ReLU (requires --cle); for networks deployed with hardware ReLU6.")
 parser.add_argument("--bias_corr", action="store_true", default=False,
                     help="Apply empirical bias correction after calibration (requires --cle).")
 
@@ -124,7 +127,7 @@ if __name__ == '__main__':
         "created_at": utc_now(),
         "model": {
             "name": args.model,
-            "initialization": "torchvision pretrained weights",
+            "initialization": "pretrained weights",
         },
         "dataset": {
             "name": "imagenet1k" if args.dataset == "imagenet" else args.dataset,
@@ -135,6 +138,7 @@ if __name__ == '__main__':
             "weight_bits": 8,
             "activation_bits": 8,
             "cle": args.cle,
+            "cle_keep_relu6": args.cle_keep_relu6,
             "bias_correction": args.bias_corr,
             "calibration_batches": args.calib_batches,
             "calibration_scope": args.calib_scope,
@@ -190,6 +194,9 @@ if __name__ == '__main__':
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
+    run_manifest["model"]["initialization"] = getattr(
+        model, "pretrained_source", "torchvision pretrained weights")
+    write_yaml(manifest_path, run_manifest)
 
     if args.fp32_checkpoint:
         from fixquant.utils import load_float_checkpoint
@@ -206,9 +213,11 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
 
     float_ref = None
+    if args.cle_keep_relu6 and not args.cle:
+        raise SystemExit("--cle_keep_relu6 requires --cle.")
     if args.cle:
         from fixquant.quantization.equalization import equalize_model
-        model = equalize_model(model)
+        model = equalize_model(model, replace_relu6=not args.cle_keep_relu6)
         float_ref = model  # BN-free, equalized float reference for bias correction
 
     Qatprocessor = QatProcessor(model, config)

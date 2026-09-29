@@ -251,7 +251,10 @@ def register_candidate(
     quantization = run_manifest.get("quantization", {})
     if cle is None:
         cle = bool(quantization.get("cle", False))
-    profile = profile or ("int8-tqt-cle" if cle else "int8-tqt")
+    # Keeping ReLU6 through CLE builds a different network, so it is its own profile.
+    keep_relu6 = bool(cle and quantization.get("cle_keep_relu6", False))
+    profile = profile or ("int8-tqt-cle-relu6" if keep_relu6
+                          else "int8-tqt-cle" if cle else "int8-tqt")
     profile = _safe_name(profile, "quantization profile")
     dataset_name = _safe_name(dataset_name, "dataset")
 
@@ -298,6 +301,7 @@ def register_candidate(
             "weight_bits": 8,
             "activation_bits": 8,
             "cle": bool(cle),
+            "cle_keep_relu6": keep_relu6,
         },
         "source": {
             "run_dir": str(run_dir),
@@ -985,5 +989,6 @@ def resolve_release(
         "dataset": manifest["dataset"],
         "profile": manifest["quantization"]["profile"],
         "cle": bool(manifest["quantization"].get("cle", False)),
+        "cle_keep_relu6": bool(manifest["quantization"].get("cle_keep_relu6", False)),
         "metrics": manifest["metrics"],
     }

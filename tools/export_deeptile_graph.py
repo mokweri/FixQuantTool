@@ -171,6 +171,8 @@ def build_parser():
     parser.add_argument("--checkpoint", default=None, help="Path to best QAT checkpoint")
     parser.add_argument("--cle", action="store_true", default=False,
                         help="Apply cross-layer equalization before quantizing (match the checkpoint's training).")
+    parser.add_argument("--cle_keep_relu6", action="store_true", default=False,
+                        help="Keep ReLU6 through cross-layer equalization instead of replacing it with ReLU (requires --cle); must match how the checkpoint was trained.")
     parser.add_argument("--zoo-model", default=None,
                         help="Released model ID: model/dataset/profile@version")
     parser.add_argument("--zoo-root", default=None,
@@ -190,6 +192,7 @@ def resolve_export_model(args, repo_root: Path) -> Path:
         args.model = released["model"]
         args.checkpoint = released["checkpoint"]
         args.cle = released["cle"]
+        args.cle_keep_relu6 = released.get("cle_keep_relu6", False)
 
     return Path(args.checkpoint) if args.checkpoint else (
         repo_root / f"qat_models/{args.model}/checkpoint/model_best.pth.tar")
@@ -235,7 +238,7 @@ def main():
     model = get_model(args.model, pretrained=True)
     if args.cle:
         from fixquant.quantization.equalization import equalize_model
-        model = equalize_model(model)
+        model = equalize_model(model, replace_relu6=not args.cle_keep_relu6)
     qat_proc = QatProcessor(model, config)
     model = qat_proc.quantize()
 

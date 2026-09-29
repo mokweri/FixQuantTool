@@ -83,7 +83,8 @@ if __name__ == '__main__':
 
     from fixquant.models import get_model
     model = get_model(args.model, pretrained=True)
-    weights_description = "torchvision pretrained (fixquant.models.get_model)"
+    weights_description = getattr(model, "pretrained_source",
+                                  "torchvision pretrained (fixquant.models.get_model)")
     if args.checkpoint:
         from fixquant.utils import load_float_checkpoint
         loaded = load_float_checkpoint(model, args.checkpoint)

@@ -68,6 +68,11 @@ not a torchvision checkpoint, and its positive delta reflects that QAT ran five
 further epochs of fine-tuning on top of that float model. See
 [`docs/vgg16_tilecnn.md`](docs/vgg16_tilecnn.md).
 
+`efficientnet_lite0` is defined from plain torch modules, with timm's pretrained
+weights converted once, and is trained with cross-layer equalization that keeps
+its ReLU6 activations. It has no release yet. See
+[`docs/efficientnet_lite0.md`](docs/efficientnet_lite0.md).
+
 ## Quickstart
 
 FixQuant requires Python 3.9 or newer. A CUDA GPU is recommended for training and

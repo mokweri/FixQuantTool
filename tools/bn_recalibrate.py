@@ -127,7 +127,8 @@ def main():
             "representation": "fp32",
             "model": args.model,
             "weights": (f"float checkpoint {args.checkpoint}" if args.checkpoint
-                        else "torchvision pretrained (fixquant.models.get_model)"),
+                        else getattr(model, "pretrained_source",
+                                     "torchvision pretrained (fixquant.models.get_model)")),
             "dataset": {"name": args.dataset, "path": args.dataroot},
             "validation_samples": len(run_config.val_loader.sampler),
             "bn_recalibration": {

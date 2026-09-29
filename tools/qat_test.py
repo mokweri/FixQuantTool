@@ -39,6 +39,9 @@ parser.add_argument("--cle", action="store_true", default=False,
                     help="Apply cross-layer equalization before quantizing. Must match how "
                          "the checkpoint was trained (BN-free, ReLU6->ReLU). Required for "
                          "checkpoints produced by 'qat_train.py --cle'.")
+parser.add_argument("--cle_keep_relu6", action="store_true", default=False,
+                    help="Keep ReLU6 through cross-layer equalization instead of replacing it "
+                         "with ReLU (requires --cle); must match how the checkpoint was trained.")
 parser.add_argument("--zoo-model", default=None,
                     help="Released model ID: model/dataset/profile@version")
 parser.add_argument("--zoo-root", default=None,
@@ -83,6 +86,7 @@ if __name__ == '__main__':
         args.model = released["model"]
         args.checkpoint = released["checkpoint"]
         args.cle = released["cle"]
+        args.cle_keep_relu6 = released.get("cle_keep_relu6", False)
         release_dataset_path = released["dataset"].get("path")
     from fixquant.model_zoo import select_dataset_path
     args.dataroot = select_dataset_path(
@@ -100,7 +104,7 @@ if __name__ == '__main__':
 
     if args.cle:
         from fixquant.quantization.equalization import equalize_model
-        model = equalize_model(model)
+        model = equalize_model(model, replace_relu6=not args.cle_keep_relu6)
 
     from pathlib import Path
     repo_root = Path(__file__).resolve().parent.parent
@@ -142,6 +146,7 @@ if __name__ == '__main__':
             "checkpoint": os.path.abspath(checkpoint),
             "checkpoint_sha256": sha256_file(checkpoint),
             "cle": args.cle,
+            "cle_keep_relu6": args.cle_keep_relu6,
             "metrics": {
                 "loss": float(loss),
                 "top1": float(top1),

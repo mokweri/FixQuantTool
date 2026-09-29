@@ -1,7 +1,8 @@
-"""Model architectures (ResNet, VGG for ImageNet and CIFAR)."""
+"""Model architectures (ResNet, VGG, EfficientNet-Lite for ImageNet and CIFAR)."""
 
 from .resnet import resnet18, resnet34, resnet50, resnet101, resnet152
 from .vgg_tilecnn import VGGTileCNN, vgg16_tilecnn, vgg16_bn_pool3
+from .efficientnet_lite import EfficientNetLite, efficientnet_lite0
 
 
 def get_model(name: str, pretrained: bool = True):
@@ -15,6 +16,10 @@ def get_model(name: str, pretrained: bool = True):
     fits the accelerator's weight buffer. ``pretrained=True`` transfers the
     torchvision convolution stack; its head is always randomly initialized and
     has to be trained (see docs/vgg16_tilecnn.md).
+
+    ``efficientnet_lite0`` is defined from plain torch modules; its pretrained
+    weights are timm's ``efficientnet_lite0.ra_in1k``, converted once by
+    ``tools/convert_timm_efficientnet_lite.py``.
     """
     import torchvision.models as tvm
 
@@ -28,6 +33,7 @@ def get_model(name: str, pretrained: bool = True):
     local_zoo = {
         "vgg16_tilecnn": vgg16_tilecnn,
         "vgg16_bn_pool3": vgg16_bn_pool3,
+        "efficientnet_lite0": efficientnet_lite0,
     }
     if name in local_zoo:
         return local_zoo[name](pretrained=pretrained)
@@ -35,7 +41,10 @@ def get_model(name: str, pretrained: bool = True):
         raise ValueError(
             f"Unknown model '{name}'. Choices: {sorted(set(zoo) | set(local_zoo))}")
     ctor, weights = zoo[name]
-    return ctor(weights=weights if pretrained else None)
+    model = ctor(weights=weights if pretrained else None)
+    if pretrained:
+        model.pretrained_source = f"torchvision {weights}"
+    return model
 
 
 MODEL_CHOICES = [
@@ -46,4 +55,5 @@ MODEL_CHOICES = [
     "vgg16_bn_pool3",
     "vgg16_tilecnn",
     "mobilenet_v2",
+    "efficientnet_lite0",
 ]

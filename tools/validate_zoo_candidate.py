@@ -52,6 +52,8 @@ def main():
     ]
     if candidate["quantization"].get("cle"):
         common.append("--cle")
+    if candidate["quantization"].get("cle_keep_relu6"):
+        common.append("--cle_keep_relu6")
 
     qat_metrics = evaluation / "qat_metrics.json"
     _run([

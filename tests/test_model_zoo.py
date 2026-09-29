@@ -370,3 +370,13 @@ def test_candidates_and_policies_from_before_the_rename_still_validate(tmp_path)
 def test_release_metrics_are_read_under_either_name():
     assert deploy_metrics({"tilecnn": {"top1": 1.0}}) == {"top1": 1.0}
     assert deploy_metrics({"deeptile": {"top1": 2.0}, "tilecnn": {"top1": 1.0}}) == {"top1": 2.0}
+
+
+def test_cle_that_keeps_relu6_is_its_own_profile(tmp_path):
+    run_dir, _ = _training_run(tmp_path)
+    manifest = yaml.safe_load((run_dir / "run_manifest.yaml").read_text())
+    manifest["quantization"] = {"cle": True, "cle_keep_relu6": True}
+    _write(run_dir / "run_manifest.yaml", yaml.safe_dump(manifest))
+    candidate, _ = register_candidate(run_dir, root=tmp_path / "zoo")
+    assert candidate["quantization"]["profile"] == "int8-tqt-cle-relu6"
+    assert candidate["quantization"]["cle_keep_relu6"] is True

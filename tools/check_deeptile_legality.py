@@ -26,7 +26,8 @@ WEIGHT_BUFFER_BUDGET = 512
 # The accelerator implements exactly one pooling post-op.
 LEGAL_MAXPOOL = {"kernel": [3, 3], "stride": [2, 2], "padding": [1, 1, 1, 1]}
 
-LEGAL_KERNELS = {1, 3, 7}
+# Square kernels the fabric runs; 5x5 is validated from kernel ABI version 2.
+LEGAL_KERNELS = {1, 3, 5, 7}
 LEGAL_STRIDES = {1, 2}
 
 
