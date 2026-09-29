@@ -53,6 +53,7 @@ change from FP32 to the integer twin.
 | `vgg16/imagenet1k/int8-tqt@v1.0.0` | 71.58 | 71.24 | 71.00 | −0.58 | Not yet published |
 | `mobilenet_v2/imagenet1k/int8-tqt-cle@v1.0.0` | 72.01 | 71.57 | 70.95 | −1.06 | GitHub Release |
 | `vgg16_tilecnn/imagenet1k/int8-tqt@v1.0.0` | 71.98 | 72.25 | 72.20 | +0.23 | Not yet published |
+| `efficientnet_lite0/imagenet1k/int8-tqt-cle-relu6@v1.0.0` | 75.40 | 75.06 | 75.01 | −0.39 | Not yet published |
 
 QAT and integer-twin values are transcribed from each release's `metrics.json`
 under `model_zoo/releases/`, where top-5 accuracy, the QAT-to-twin difference,
@@ -70,7 +71,7 @@ further epochs of fine-tuning on top of that float model. See
 
 `efficientnet_lite0` is defined from plain torch modules, with timm's pretrained
 weights converted once, and is trained with cross-layer equalization that keeps
-its ReLU6 activations. It has no release yet. See
+its ReLU6 activations. Its FP32 column is those converted weights. See
 [`docs/efficientnet_lite0.md`](docs/efficientnet_lite0.md).
 
 ## Quickstart
