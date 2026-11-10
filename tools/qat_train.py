@@ -8,6 +8,7 @@ from torch.utils.checkpoint import checkpoint
 import platform
 import sys
 import yaml
+import json
 import logging
 
 from fixquant.data import Cifar10DataProvider
@@ -83,6 +84,18 @@ parser.add_argument("--cle_keep_relu6", action="store_true", default=False,
                          "with ReLU (requires --cle); for networks deployed with hardware ReLU6.")
 parser.add_argument("--bias_corr", action="store_true", default=False,
                     help="Apply empirical bias correction after calibration (requires --cle).")
+
+# N:M weight sparsity (fixed masks, held through QAT)
+parser.add_argument("--nm_pattern", type=str, default=None,
+                    help="Prune with a fixed N:M mask: filter24 | pair24 | oc_n16 | "
+                         "filter24+perm | pair24+perm (see fixquant.sparsity.nm).")
+parser.add_argument("--nm_layers", type=str, default=None,
+                    help="JSON file listing the layers to prune ({\"layers\": [...]} or a "
+                         "list); default every prunable layer. The others stay dense.")
+parser.add_argument("--nm_perm_iters", type=int, default=300,
+                    help="Iterations of the channel-permutation search (+perm patterns).")
+parser.add_argument("--nm_perm_seed", type=int, default=0,
+                    help="Seed of the channel-permutation search.")
 
 # Misc. options
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
@@ -208,6 +221,36 @@ if __name__ == '__main__':
         logging.info("Starting QAT from float checkpoint %s (epoch %s, val top1 %s)",
                      args.fp32_checkpoint, loaded.get("epoch"), loaded.get("val_top1"))
 
+    nm_art = None
+    if args.nm_pattern:
+        from fixquant.sparsity import nm
+        nm_layers = None
+        if args.nm_layers:
+            with open(args.nm_layers) as f:
+                spec = json.load(f)
+            nm_layers = spec["layers"] if isinstance(spec, dict) else spec
+        nm_art = nm.build_nm(model, args.nm_pattern, nm_layers,
+                             perm_iters=args.nm_perm_iters, perm_seed=args.nm_perm_seed,
+                             image_size=args.image_size, device=torch.device(device))
+        nm.apply_float(model, nm_art)
+        nm.save(nm_art, os.path.join(args.save_dir, "nm_masks.pt"))
+        with open(os.path.join(args.save_dir, "nm_report.json"), "w") as f:
+            json.dump({k: nm_art[k] for k in ("pattern", "layers", "perm_retained", "perm_iters",
+                                              "perm_seed", "report")}, f, indent=1)
+        run_manifest["sparsity"] = {
+            "pattern": args.nm_pattern,
+            "layers_file": os.path.abspath(args.nm_layers) if args.nm_layers else None,
+            "pruned_layers": len(nm_art["layers"]),
+            "permuted_classes": len(nm_art["perms"]),
+            "perm_iters": args.nm_perm_iters,
+            "perm_seed": args.nm_perm_seed,
+            "masks": "nm_masks.pt",
+            "report": "nm_report.json",
+        }
+        write_yaml(manifest_path, run_manifest)
+        logging.info("N:M %s: %d layers pruned, %d channel classes permuted",
+                     args.nm_pattern, len(nm_art["layers"]), len(nm_art["perms"]))
+
     config_path = repo_root / "configs/quant_config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -236,9 +279,16 @@ if __name__ == '__main__':
     write_report_csv(quantizer_report(model), report_path)
     print(f"Post-calibration quantizer report written to {report_path}")
 
+    masker = None
+    if nm_art is not None:
+        masker = nm.Masker(model, nm_art)   # fails if a masked weight is nonzero here
+        masker.apply()
+
     run_config = RunConfig(**args.__dict__, is_qat=True)
     run_config.print_config()
     run_manager = RunManager(args.save_dir, model, run_config)
+    if masker is not None:
+        masker.attach(run_manager.optimizer)
 
     """ NOTE:
         During QAT of VGG16 if you encounter CUDA out of Memory Issue,
@@ -247,6 +297,17 @@ if __name__ == '__main__':
     training_summary = run_manager.train()
 
     final_loss, final_top1, final_top5 = run_manager.validate(0)
+    if nm_art is not None:
+        best_path = os.path.join(args.save_dir, "checkpoint", "model_best.pth.tar")
+        state = torch.load(best_path, map_location="cpu", weights_only=False)["state_dict"]
+        state = {k[len("module."):] if k.startswith("module.") else k: v for k, v in state.items()}
+        check = nm.verify_state(state, nm_art)
+        run_manifest["sparsity"]["verification"] = check
+        write_yaml(manifest_path, run_manifest)
+        if not check["ok"]:
+            raise SystemExit(f"N:M check failed on {best_path}: {check['violations'][:5]}")
+        print(f"N:M check passed on {best_path}: nonzero fraction "
+              f"{check['nonzero_fraction']:.4f} of the pruned layers")
     run_manifest.update({
         "status": "completed",
         "completed_at": utc_now(),
