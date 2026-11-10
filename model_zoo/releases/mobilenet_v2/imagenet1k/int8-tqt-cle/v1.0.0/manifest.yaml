@@ -53,5 +53,6 @@ downloads:
     tag: model-zoo-mobilenet_v2-imagenet1k-int8-tqt-cle-v1.0.0
     asset: model_best.pth.tar
     urls:
+    - https://zenodo.org/records/24112625/files/mobilenet_v2-int8-tqt-cle-v1.0.0-qat.pth.tar?download=1
     - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-mobilenet_v2-imagenet1k-int8-tqt-cle-v1.0.0/model_best.pth.tar
     size_bytes: 42122201

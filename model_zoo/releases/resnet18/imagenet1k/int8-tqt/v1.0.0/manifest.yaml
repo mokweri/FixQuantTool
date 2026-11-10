@@ -46,3 +46,10 @@ checksums:
   qat/calibration_report.csv: cf7546eddd2c697367b2df24b064e92a3c82f94d1e5a4c623bf0a91aabf9ce2d
   qat/model_best.pth.tar: 7e40cecc7c57f104d8c95b9e0b9331833ff6cea240ee06e947660b1dd3ce9f58
   qat/quant_thresholds.csv: 104379796a3454f8d27ff1f53fc882319a2d97491e958a110c16dfa74cc95e1f
+downloads:
+  qat/model_best.pth.tar:
+    provider: zenodo
+    doi: 10.5281/zenodo.24112625
+    urls:
+    - https://zenodo.org/records/24112625/files/resnet18-int8-tqt-v1.0.0-qat.pth.tar?download=1
+    size_bytes: 140633727

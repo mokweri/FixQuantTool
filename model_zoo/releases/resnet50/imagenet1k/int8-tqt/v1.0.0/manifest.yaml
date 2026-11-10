@@ -53,5 +53,6 @@ downloads:
     tag: model-zoo-resnet50-imagenet1k-int8-tqt-v1.0.0
     asset: model_best.pth.tar
     urls:
+    - https://zenodo.org/records/24112625/files/resnet50-int8-tqt-v1.0.0-qat.pth.tar?download=1
     - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-resnet50-imagenet1k-int8-tqt-v1.0.0/model_best.pth.tar
     size_bytes: 307880725

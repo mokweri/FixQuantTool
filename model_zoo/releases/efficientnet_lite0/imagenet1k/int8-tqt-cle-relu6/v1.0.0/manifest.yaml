@@ -55,5 +55,6 @@ downloads:
     tag: model-zoo-efficientnet_lite0-imagenet1k-int8-tqt-cle-relu6-v1.0.0
     asset: model_best.pth.tar
     urls:
+    - https://zenodo.org/records/24112625/files/efficientnet_lite0-int8-tqt-cle-relu6-v1.0.0-qat.pth.tar?download=1
     - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-efficientnet_lite0-imagenet1k-int8-tqt-cle-relu6-v1.0.0/model_best.pth.tar
     size_bytes: 55797693

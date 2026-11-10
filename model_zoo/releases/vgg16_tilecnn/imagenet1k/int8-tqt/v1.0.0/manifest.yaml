@@ -49,10 +49,8 @@ checksums:
   run_manifest.yaml: 537f36e945b62be4a59b203cdeb1bd278209b62df00db9bca7f4f3d5f20b4528
 downloads:
   qat/model_best.pth.tar:
-    provider: github-release
-    repository: mokweri/FixQuantTool
-    tag: model-zoo-vgg16_tilecnn-imagenet1k-int8-tqt-v1.0.0
-    asset: model_best.pth.tar
+    provider: zenodo
+    doi: 10.5281/zenodo.24112625
     urls:
-    - https://github.com/mokweri/FixQuantTool/releases/download/model-zoo-vgg16_tilecnn-imagenet1k-int8-tqt-v1.0.0/model_best.pth.tar
+    - https://zenodo.org/records/24112625/files/vgg16_tilecnn-int8-tqt-v1.0.0-qat.pth.tar?download=1
     size_bytes: 653982851
