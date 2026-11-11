@@ -136,3 +136,41 @@ def test_verify_state_reports_nonzero_masked_weights(tmp_path):
     state["fc.weight"] = state["fc.weight"] + 1.0
     res = nm.verify_state(state, art)
     assert not res["ok"] and any(v.startswith("fc:") for v in res["violations"])
+
+
+def test_float_finetune_hands_its_masks_to_qat(tmp_path):
+    """The two-stage flow: masks held through float SGD steps, the checkpoint
+    reloaded, the same masks taken over (not chosen again) and held through
+    quantization."""
+    model = resnet18()
+    art = nm.prepare(model, "pair24+perm", perm_iters=10, image_size=SIZE, save_dir=tmp_path)
+    masker = nm.Masker(model, art)
+    model.train()
+    opt = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9, nesterov=True,
+                          weight_decay=1e-4)
+    masker.attach(opt)
+    for _ in range(3):
+        opt.zero_grad()
+        model(torch.randn(4, 3, SIZE, SIZE)).logsumexp(1).mean().backward()
+        opt.step()
+    torch.save({"state_dict": model.state_dict()}, tmp_path / "best.pth.tar")
+    assert nm.verify_checkpoint(tmp_path / "best.pth.tar", art)["ok"]
+
+    second = resnet18()
+    second.load_state_dict(torch.load(tmp_path / "best.pth.tar")["state_dict"])
+    (tmp_path / "qat").mkdir()
+    taken = nm.prepare(second, "pair24+perm", masks_path=tmp_path / "nm_masks.pt",
+                       image_size=SIZE, save_dir=tmp_path / "qat")
+    assert set(taken["masks"]) == set(art["masks"])
+    assert all(torch.equal(taken["masks"][k], art["masks"][k]) for k in art["masks"])
+    qat = QatProcessor(second, CONFIG).quantize()
+    nm.Masker(qat, taken)                                  # masked weights still zero
+    with pytest.raises(ValueError):
+        nm.prepare(resnet18(), "filter24", masks_path=tmp_path / "nm_masks.pt")
+
+
+def test_prepare_without_sparsity_is_a_no_op():
+    model = resnet18()
+    before = {k: v.clone() for k, v in model.state_dict().items()}
+    assert nm.prepare(model) is None
+    assert all(torch.equal(before[k], v) for k, v in model.state_dict().items())

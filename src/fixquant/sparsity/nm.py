@@ -514,3 +514,60 @@ def verify_state(state: Dict[str, torch.Tensor], art: dict) -> dict:
         tot += w.numel()
     return {"pattern": art["pattern"], "layers": len(art["layers"]), "ok": not bad,
             "violations": bad, "nonzero_fraction": nz / max(tot, 1)}
+
+
+# ------------------------------------------------------- training scripts
+def prepare(model: nn.Module, pattern: Optional[str] = None, layers_file=None,
+            masks_path=None, perm_iters: int = 300, perm_seed: int = 0,
+            image_size: int = 224, device=None, save_dir=None) -> Optional[dict]:
+    """The N:M step shared by the float and QAT training scripts: choose the
+    masks from the float model's weights (`pattern`, optionally restricted to
+    the layers in `layers_file`) or take those of an earlier run
+    (`masks_path`), zero the masked weights, and write `nm_masks.pt` and
+    `nm_report.json` to `save_dir`. Returns the artifact, or None when no
+    sparsity is asked for.
+
+    Taking the masks over is what chains a float fine-tune into QAT: choosing
+    them again from the fine-tuned weights could pick a different
+    permutation, and with it a different network."""
+    import json
+    import os
+    if masks_path:
+        art = load(masks_path)
+        if pattern and pattern != art["pattern"]:
+            raise ValueError(f"--nm_pattern {pattern} differs from the masks' {art['pattern']}")
+        if layers_file:
+            raise ValueError("--nm_layers cannot be combined with --nm_masks")
+    elif pattern:
+        layers = None
+        if layers_file:
+            with open(layers_file) as f:
+                spec = json.load(f)
+            layers = spec["layers"] if isinstance(spec, dict) else spec
+        art = build_nm(model, pattern, layers, perm_iters=perm_iters, perm_seed=perm_seed,
+                       image_size=image_size, device=device)
+    else:
+        return None
+    apply_float(model, art)
+    if save_dir is not None:
+        save(art, os.path.join(save_dir, "nm_masks.pt"))
+        with open(os.path.join(save_dir, "nm_report.json"), "w") as f:
+            json.dump({k: art[k] for k in ("pattern", "layers", "perm_retained", "perm_iters",
+                                           "perm_seed", "report")}, f, indent=1)
+    print(f"N:M {art['pattern']}: {len(art['layers'])} layers pruned, "
+          f"{len(art['perms'])} channel classes permuted"
+          + (f" (masks from {masks_path})" if masks_path else ""))
+    return art
+
+
+def verify_checkpoint(path, art: dict) -> dict:
+    """verify_state on a RunManager checkpoint; raises if the check fails."""
+    state = torch.load(path, map_location="cpu", weights_only=False)
+    state = state.get("state_dict", state)
+    state = {k[len("module."):] if k.startswith("module.") else k: v for k, v in state.items()}
+    check = verify_state(state, art)
+    if not check["ok"]:
+        raise RuntimeError(f"N:M check failed on {path}: {check['violations'][:5]}")
+    print(f"N:M check passed on {path}: nonzero fraction "
+          f"{check['nonzero_fraction']:.4f} of the pruned layers")
+    return check

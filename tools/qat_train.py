@@ -92,6 +92,9 @@ parser.add_argument("--nm_pattern", type=str, default=None,
 parser.add_argument("--nm_layers", type=str, default=None,
                     help="JSON file listing the layers to prune ({\"layers\": [...]} or a "
                          "list); default every prunable layer. The others stay dense.")
+parser.add_argument("--nm_masks", type=str, default=None,
+                    help="Use the masks of an earlier run (nm_masks.pt), e.g. of the float "
+                         "fine-tune that produced --fp32_checkpoint, instead of choosing them.")
 parser.add_argument("--nm_perm_iters", type=int, default=300,
                     help="Iterations of the channel-permutation search (+perm patterns).")
 parser.add_argument("--nm_perm_seed", type=int, default=0,
@@ -221,35 +224,24 @@ if __name__ == '__main__':
         logging.info("Starting QAT from float checkpoint %s (epoch %s, val top1 %s)",
                      args.fp32_checkpoint, loaded.get("epoch"), loaded.get("val_top1"))
 
-    nm_art = None
-    if args.nm_pattern:
-        from fixquant.sparsity import nm
-        nm_layers = None
-        if args.nm_layers:
-            with open(args.nm_layers) as f:
-                spec = json.load(f)
-            nm_layers = spec["layers"] if isinstance(spec, dict) else spec
-        nm_art = nm.build_nm(model, args.nm_pattern, nm_layers,
-                             perm_iters=args.nm_perm_iters, perm_seed=args.nm_perm_seed,
-                             image_size=args.image_size, device=torch.device(device))
-        nm.apply_float(model, nm_art)
-        nm.save(nm_art, os.path.join(args.save_dir, "nm_masks.pt"))
-        with open(os.path.join(args.save_dir, "nm_report.json"), "w") as f:
-            json.dump({k: nm_art[k] for k in ("pattern", "layers", "perm_retained", "perm_iters",
-                                              "perm_seed", "report")}, f, indent=1)
+    from fixquant.sparsity import nm
+    nm_art = nm.prepare(model, args.nm_pattern, args.nm_layers, args.nm_masks,
+                        perm_iters=args.nm_perm_iters, perm_seed=args.nm_perm_seed,
+                        image_size=args.image_size, device=torch.device(device),
+                        save_dir=args.save_dir)
+    if nm_art is not None:
         run_manifest["sparsity"] = {
-            "pattern": args.nm_pattern,
+            "pattern": nm_art["pattern"],
             "layers_file": os.path.abspath(args.nm_layers) if args.nm_layers else None,
+            "masks_from": os.path.abspath(args.nm_masks) if args.nm_masks else None,
             "pruned_layers": len(nm_art["layers"]),
             "permuted_classes": len(nm_art["perms"]),
-            "perm_iters": args.nm_perm_iters,
-            "perm_seed": args.nm_perm_seed,
+            "perm_iters": nm_art["perm_iters"],
+            "perm_seed": nm_art["perm_seed"],
             "masks": "nm_masks.pt",
             "report": "nm_report.json",
         }
         write_yaml(manifest_path, run_manifest)
-        logging.info("N:M %s: %d layers pruned, %d channel classes permuted",
-                     args.nm_pattern, len(nm_art["layers"]), len(nm_art["perms"]))
 
     config_path = repo_root / "configs/quant_config.yaml"
     with open(config_path, "r") as f:
@@ -299,15 +291,14 @@ if __name__ == '__main__':
     final_loss, final_top1, final_top5 = run_manager.validate(0)
     if nm_art is not None:
         best_path = os.path.join(args.save_dir, "checkpoint", "model_best.pth.tar")
-        state = torch.load(best_path, map_location="cpu", weights_only=False)["state_dict"]
-        state = {k[len("module."):] if k.startswith("module.") else k: v for k, v in state.items()}
-        check = nm.verify_state(state, nm_art)
+        try:
+            check = nm.verify_checkpoint(best_path, nm_art)
+        except RuntimeError as e:
+            run_manifest["sparsity"]["verification"] = {"ok": False, "error": str(e)}
+            write_yaml(manifest_path, run_manifest)
+            raise SystemExit(str(e))
         run_manifest["sparsity"]["verification"] = check
         write_yaml(manifest_path, run_manifest)
-        if not check["ok"]:
-            raise SystemExit(f"N:M check failed on {best_path}: {check['violations'][:5]}")
-        print(f"N:M check passed on {best_path}: nonzero fraction "
-              f"{check['nonzero_fraction']:.4f} of the pruned layers")
     run_manifest.update({
         "status": "completed",
         "completed_at": utc_now(),

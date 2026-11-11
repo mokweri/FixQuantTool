@@ -45,3 +45,30 @@ On Arrhenius, `scripts/nm_submit.sh MODEL PATTERN EPOCHS LR [SEED] [LAYERS.json]
 submits `scripts/jobs/qat_nm.sbatch`; `dense` as the pattern trains the
 reference with the same schedule. Runs land in
 `results/qat-nm/<model>/<pattern>-lr<lr>-e<epochs>-s<seed>/<job>/`.
+
+## Float fine-tune before QAT
+
+The QAT recipe trains with Adam at a small rate that falls in steps per
+optimizer step, so it gives a pruned network little room to recover. A float
+stage first trains the pruned network with SGD (Nesterov momentum 0.9) and a
+cosine schedule:
+
+```bash
+python tools/train.py --model resnet18 --pretrained --nm_pattern pair24+perm \
+    --n_epochs 5 --init_lr 1e-2 --weight_decay 1e-4 --save_dir runs/float ...
+python tools/qat_train.py --model resnet18 \
+    --fp32_checkpoint runs/float/resnet18/checkpoint/model_best.pth.tar \
+    --nm_masks runs/float/resnet18/nm_masks.pt ...
+```
+
+`--nm_masks` takes the float stage's masks over instead of choosing them
+again, since a new permutation search on the fine-tuned weights could pick a
+different order. Both stages check the best checkpoint against the masks.
+On Arrhenius, `NM_FT_EPOCHS` and `NM_FT_LR` (and `NM_FT_WD`, default 1e-4)
+add the float stage to a job; `dense` runs the reference through both stages:
+
+```bash
+NM_FT_EPOCHS=5 NM_FT_LR=1e-2 scripts/nm_submit.sh resnet18 pair24+perm 5 1e-5
+```
+
+The run directory then holds `float/` (the fine-tune) beside the QAT run.

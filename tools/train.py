@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import numpy as np
 import random
@@ -50,6 +51,21 @@ parser.add_argument("--freeze_backbone", action="store_true", default=False,
                          "backbone must be unfrozen afterwards so it can adapt.")
 parser.add_argument("--eval_only", action="store_true", default=False,
                     help="Skip training and only run validation.")
+# N:M weight sparsity: a fixed mask held through float fine-tuning; the QAT
+# stage then takes the same masks over (qat_train.py --nm_masks).
+parser.add_argument("--nm_pattern", type=str, default=None,
+                    help="Prune with a fixed N:M mask: filter24 | pair24 | oc_n16 | "
+                         "filter24+perm | pair24+perm (see fixquant.sparsity.nm).")
+parser.add_argument("--nm_layers", type=str, default=None,
+                    help="JSON file listing the layers to prune ({\"layers\": [...]} or a "
+                         "list); default every prunable layer.")
+parser.add_argument("--nm_masks", type=str, default=None,
+                    help="Use the masks of an earlier run (nm_masks.pt) instead of "
+                         "choosing them from this model's weights.")
+parser.add_argument("--nm_perm_iters", type=int, default=300,
+                    help="Iterations of the channel-permutation search (+perm patterns).")
+parser.add_argument("--nm_perm_seed", type=int, default=0,
+                    help="Seed of the channel-permutation search.")
 parser.add_argument("--dataset", type=str, default="imagenet", choices=["cifar10", "cifar100", "imagenet"])
 parser.add_argument("--dataroot", type=str,
                     default=os.environ.get("FIXQUANT_DATA_DIR", "/home/obed/Documents/data"),)
@@ -99,14 +115,29 @@ if __name__ == '__main__':
               f"({100.0 * trainable / total:.1f}%).")
 
     args.save_dir = os.path.join(args.save_dir, args.model)
+    os.makedirs(args.save_dir, exist_ok=True)
+
+    from fixquant.sparsity import Masker, prepare, verify_checkpoint
+    nm_art = prepare(model, args.nm_pattern, args.nm_layers, args.nm_masks,
+                     perm_iters=args.nm_perm_iters, perm_seed=args.nm_perm_seed,
+                     image_size=224, device=torch.device(device), save_dir=args.save_dir)
+    masker = Masker(model, nm_art) if nm_art is not None else None
 
     run_config = RunConfig(**args.__dict__, is_qat=False, image_size=224)
     run_config.print_config()
 
     run_manager = RunManager(args.save_dir, model, run_config)
+    if masker is not None:
+        masker.attach(run_manager.optimizer)
     if not args.eval_only:
         run_manager.train()
 
     run_manager.validate(0)
+
+    if nm_art is not None and not args.eval_only:
+        best_path = os.path.join(args.save_dir, "checkpoint", "model_best.pth.tar")
+        check = verify_checkpoint(best_path, nm_art)
+        with open(os.path.join(args.save_dir, "nm_verification.json"), "w") as f:
+            json.dump(check, f, indent=1)
 
 

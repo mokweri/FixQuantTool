@@ -7,6 +7,11 @@
 #   NM_PATTERN    dense | filter24 | pair24 | oc_n16 | filter24+perm | pair24+perm
 #   NM_LAYERS     optional JSON layer list (selective pruning); default all
 #   NM_EPOCHS, NM_LR, NM_SEED, NM_TAG (optional label for the run directory)
+#   NM_FT_EPOCHS  optional float fine-tune before QAT (default 0: none). The
+#                 pruned (or dense) float network trains with SGD, Nesterov
+#                 momentum 0.9 and a cosine schedule from NM_FT_LR, weight
+#                 decay NM_FT_WD (1e-4); QAT then starts from its best
+#                 checkpoint and takes its masks over unchanged.
 #
 # The flags per network are those of the v1.0.0 releases: CLE for
 # MobileNetV2, CLE keeping ReLU6 for EfficientNet-Lite0, none for the ResNets.
@@ -36,6 +41,9 @@ QUANTIZER_LR="${NM_QUANTIZER_LR:-1e-2}"
 WORKERS="${NM_WORKERS:-14}"
 CALIB_BATCHES="${NM_CALIB_BATCHES:-20}"
 CALIB_SCOPE="${NM_CALIB_SCOPE:-5}"
+FT_EPOCHS="${NM_FT_EPOCHS:-0}"
+FT_LR="${NM_FT_LR:-1e-2}"
+FT_WD="${NM_FT_WD:-1e-4}"
 
 case "$MODEL" in
     resnet18)           TRAIN_BS=128; TEST_BS=256; MODEL_FLAGS=() ;;
@@ -58,7 +66,9 @@ elif [[ -n "$LAYERS" ]]; then
     printf 'Error: NM_LAYERS given with the dense pattern\n' >&2; exit 1
 fi
 
-TAG="${NM_TAG:-${PATTERN/+/_}-lr${INIT_LR}-e${EPOCHS}-s${SEED}}"
+FT_TAG=""
+((FT_EPOCHS == 0)) || FT_TAG="-ft${FT_LR}x${FT_EPOCHS}"
+TAG="${NM_TAG:-${PATTERN/+/_}${FT_TAG}-lr${INIT_LR}-e${EPOCHS}-s${SEED}}"
 RUN_DIR="$STORAGE_BASE/results/qat-nm/$MODEL/$TAG/$SLURM_JOB_ID"
 
 [[ -d "$REPO/.git" ]] || { printf 'Error: repository not found: %s\n' "$REPO" >&2; exit 1; }
@@ -80,10 +90,40 @@ printf 'FixQuant N:M QAT\n'
 printf 'Job: %s on %s, account %s\n' "$SLURM_JOB_ID" "$SLURMD_NODENAME" "${SLURM_JOB_ACCOUNT:-?}"
 printf 'Git commit: %s (%s)\n' "$(git rev-parse HEAD)" "$(git rev-parse --abbrev-ref HEAD)"
 printf 'Model / pattern / layers: %s / %s / %s\n' "$MODEL" "$PATTERN" "${LAYERS:-all}"
+printf 'Float fine-tune epochs / lr / wd: %s / %s / %s\n' "$FT_EPOCHS" "$FT_LR" "$FT_WD"
 printf 'Epochs / lr / seed: %s / %s / %s\n' "$EPOCHS" "$INIT_LR" "$SEED"
 printf 'Train/test batch: %s/%s\n' "$TRAIN_BS" "$TEST_BS"
 printf 'Run directory: %s\n' "$RUN_DIR"
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+
+QAT_FLAGS=("${NM_FLAGS[@]}")
+if ((FT_EPOCHS > 0)); then
+    FT_DIR="$RUN_DIR/float"
+    FT_CKPT="$FT_DIR/$MODEL/checkpoint/model_best.pth.tar"
+    printf '\n== Stage 1: float fine-tune, %s epochs from lr %s\n' "$FT_EPOCHS" "$FT_LR"
+    srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
+        python tools/train.py \
+        --dataset imagenet \
+        --dataroot "$DATASET" \
+        --model "$MODEL" \
+        --pretrained \
+        "${NM_FLAGS[@]}" \
+        --train_batch_size "$TRAIN_BS" \
+        --test_batch_size "$TEST_BS" \
+        --n_worker "$WORKERS" \
+        --n_epochs "$FT_EPOCHS" \
+        --init_lr "$FT_LR" \
+        --weight_decay "$FT_WD" \
+        --validation_frequency 1 \
+        --display_freq 500 \
+        --manual_seed "$SEED" \
+        --gpus 0 \
+        --save_dir "$FT_DIR"
+    [[ -f "$FT_CKPT" ]] || { printf 'Error: float stage left no checkpoint: %s\n' "$FT_CKPT" >&2; exit 1; }
+    QAT_FLAGS=(--fp32_checkpoint "$FT_CKPT")
+    [[ "$PATTERN" == "dense" ]] || QAT_FLAGS+=(--nm_masks "$FT_DIR/$MODEL/nm_masks.pt")
+    printf '\n== Stage 2: QAT from %s\n' "$FT_CKPT"
+fi
 
 srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
     python tools/qat_train.py \
@@ -91,7 +131,7 @@ srun --kill-on-bad-exit=1 scripts/run_arrhenius.sh \
     --dataroot "$DATASET" \
     --model "$MODEL" \
     "${MODEL_FLAGS[@]}" \
-    "${NM_FLAGS[@]}" \
+    "${QAT_FLAGS[@]}" \
     --train_batch_size "$TRAIN_BS" \
     --test_batch_size "$TEST_BS" \
     --n_worker "$WORKERS" \
