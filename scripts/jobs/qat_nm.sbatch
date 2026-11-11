@@ -68,7 +68,9 @@ fi
 
 FT_TAG=""
 ((FT_EPOCHS == 0)) || FT_TAG="-ft${FT_LR}x${FT_EPOCHS}"
-TAG="${NM_TAG:-${PATTERN/+/_}${FT_TAG}-lr${INIT_LR}-e${EPOCHS}-s${SEED}}"
+SEL_TAG=""
+[[ -z "$LAYERS" ]] || SEL_TAG="-sel_$(basename "$LAYERS" .json)"
+TAG="${NM_TAG:-${PATTERN/+/_}${SEL_TAG}${FT_TAG}-lr${INIT_LR}-e${EPOCHS}-s${SEED}}"
 RUN_DIR="$STORAGE_BASE/results/qat-nm/$MODEL/$TAG/$SLURM_JOB_ID"
 
 [[ -d "$REPO/.git" ]] || { printf 'Error: repository not found: %s\n' "$REPO" >&2; exit 1; }

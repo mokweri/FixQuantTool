@@ -25,11 +25,12 @@ mkdir -p "$STORAGE_BASE/results/qat-nm/logs"
 LAYERS="${6:-}"
 FT=""
 ((${NM_FT_EPOCHS:-0} == 0)) || FT="-ft${NM_FT_LR:-1e-2}x${NM_FT_EPOCHS}"
-[[ -z "$LAYERS" ]] || LAYERS="$(realpath "$LAYERS")"
+SEL=""
+[[ -z "$LAYERS" ]] || { LAYERS="$(realpath "$LAYERS")"; SEL="-sel_$(basename "$LAYERS" .json)"; }
 
 # shellcheck disable=SC2086
 NM_MODEL="$1" NM_PATTERN="$2" NM_EPOCHS="$3" NM_LR="$4" NM_SEED="${5:-0}" NM_LAYERS="$LAYERS" \
     sbatch --account="$ACCOUNT" ${NM_SBATCH_OPTS:-} \
-    --job-name="nm-$1-${2/+/_}${FT}-s${5:-0}" \
+    --job-name="nm-$1-${2/+/_}${SEL}${FT}-s${5:-0}" \
     --export=ALL \
     "$HERE/jobs/qat_nm.sbatch"
